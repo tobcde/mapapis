@@ -18,27 +18,33 @@
 create extension if not exists "pgcrypto";
 
 -- Helper: rol del usuario actual (evita join a profiles en cada RLS check)
-create or replace function auth.user_role()
+create or replace function public.user_role()
 returns text
 language sql
 stable
 security definer
+set search_path = public
 as $$
   select role from public.profiles where id = auth.uid();
 $$;
 
 -- Helper: ¿soy miembro del grupo X?
-create or replace function auth.is_grupo_miembro(p_grupo uuid)
+create or replace function public.is_grupo_miembro(p_grupo uuid)
 returns boolean
 language sql
 stable
 security definer
+set search_path = public
 as $$
   select exists (
     select 1 from public.grupo_miembros
     where grupo_id = p_grupo and profile_id = auth.uid()
   );
 $$;
+
+-- Que cualquier usuario logueado pueda ejecutar las funciones helper
+grant execute on function public.user_role() to authenticated, anon;
+grant execute on function public.is_grupo_miembro(uuid) to authenticated;
 
 -- ─────────────────────────────────────────────────────────────────────────
 -- 2. Tablas
@@ -317,19 +323,19 @@ create policy "categorias_select_all" on public.categorias
 drop policy if exists "categorias_admin_all" on public.categorias;
 create policy "categorias_admin_all" on public.categorias
   for all to authenticated
-  using (auth.user_role() = 'admin')
-  with check (auth.user_role() = 'admin');
+  using (public.user_role() = 'admin')
+  with check (public.user_role() = 'admin');
 
 -- 5.2 grupos: miembros ven su grupo; cualquiera puede crear; creador edita
 drop policy if exists "grupos_select_miembros" on public.grupos;
 create policy "grupos_select_miembros" on public.grupos
   for select to authenticated
-  using (auth.is_grupo_miembro(id) or creado_por = auth.uid() or auth.user_role() = 'admin');
+  using (public.is_grupo_miembro(id) or creado_por = auth.uid() or public.user_role() = 'admin');
 
 drop policy if exists "grupos_insert_self" on public.grupos;
 create policy "grupos_insert_self" on public.grupos
   for insert to authenticated
-  with check (creado_por = auth.uid() and auth.user_role() in ('familia', 'institucion'));
+  with check (creado_por = auth.uid() and public.user_role() in ('familia', 'institucion'));
 
 drop policy if exists "grupos_update_creador" on public.grupos;
 create policy "grupos_update_creador" on public.grupos
@@ -341,7 +347,7 @@ create policy "grupos_update_creador" on public.grupos
 drop policy if exists "gm_select_self_o_miembros" on public.grupo_miembros;
 create policy "gm_select_self_o_miembros" on public.grupo_miembros
   for select to authenticated
-  using (profile_id = auth.uid() or auth.is_grupo_miembro(grupo_id) or auth.user_role() = 'admin');
+  using (profile_id = auth.uid() or public.is_grupo_miembro(grupo_id) or public.user_role() = 'admin');
 
 drop policy if exists "gm_insert_creador_grupo" on public.grupo_miembros;
 create policy "gm_insert_creador_grupo" on public.grupo_miembros
@@ -358,9 +364,9 @@ drop policy if exists "necesidades_select_miembros" on public.necesidades;
 create policy "necesidades_select_miembros" on public.necesidades
   for select to authenticated
   using (
-    auth.is_grupo_miembro(grupo_id)
+    public.is_grupo_miembro(grupo_id)
     or creador_id = auth.uid()
-    or auth.user_role() = 'admin'
+    or public.user_role() = 'admin'
   );
 
 -- Pymes leen necesidades recibiendo_ofertas via view necesidades_publicas (sin FK al grupo)
@@ -369,7 +375,7 @@ drop policy if exists "necesidades_select_pymes_activas" on public.necesidades;
 create policy "necesidades_select_pymes_activas" on public.necesidades
   for select to authenticated
   using (
-    auth.user_role() = 'pyme' and estado = 'recibiendo_ofertas'
+    public.user_role() = 'pyme' and estado = 'recibiendo_ofertas'
   );
 -- ^ Esto habilita que la view les devuelva data. No ven grupo_id porque la view no lo expone.
 
@@ -378,8 +384,8 @@ create policy "necesidades_insert_familia_o_inst" on public.necesidades
   for insert to authenticated
   with check (
     creador_id = auth.uid()
-    and auth.user_role() in ('familia', 'institucion')
-    and auth.is_grupo_miembro(grupo_id)
+    and public.user_role() in ('familia', 'institucion')
+    and public.is_grupo_miembro(grupo_id)
   );
 
 drop policy if exists "necesidades_update_creador" on public.necesidades;
@@ -398,9 +404,9 @@ create policy "ofertas_select_interesados" on public.ofertas
     or exists (
       select 1 from public.necesidades n
       where n.id = necesidad_id
-        and (auth.is_grupo_miembro(n.grupo_id) or n.creador_id = auth.uid())
+        and (public.is_grupo_miembro(n.grupo_id) or n.creador_id = auth.uid())
     )
-    or auth.user_role() = 'admin'
+    or public.user_role() = 'admin'
   );
 
 drop policy if exists "ofertas_insert_pyme" on public.ofertas;
@@ -408,7 +414,7 @@ create policy "ofertas_insert_pyme" on public.ofertas
   for insert to authenticated
   with check (
     pyme_id = auth.uid()
-    and auth.user_role() = 'pyme'
+    and public.user_role() = 'pyme'
   );
 
 drop policy if exists "ofertas_update_pyme_propia" on public.ofertas;
@@ -426,7 +432,7 @@ create policy "votos_select_miembros" on public.votos_oferta
     or exists (
       select 1 from public.ofertas o
       join public.necesidades n on n.id = o.necesidad_id
-      where o.id = oferta_id and auth.is_grupo_miembro(n.grupo_id)
+      where o.id = oferta_id and public.is_grupo_miembro(n.grupo_id)
     )
   );
 
@@ -439,7 +445,7 @@ create policy "votos_insert_miembro" on public.votos_oferta
       select 1 from public.ofertas o
       join public.necesidades n on n.id = o.necesidad_id
       where o.id = oferta_id
-        and auth.is_grupo_miembro(n.grupo_id)
+        and public.is_grupo_miembro(n.grupo_id)
         and n.estado in ('en_votacion', 'recibiendo_ofertas')
     )
   );
