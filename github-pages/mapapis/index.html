@@ -3,12 +3,16 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-<meta name="theme-color" content="#0284c7" />
-<title>MaPaPis — Prototipo</title>
+<meta name="theme-color" content="#FF5A4E" />
+<title>MaPaPis — coordinación + marketplace</title>
 <link rel="manifest" href="manifest.json" />
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
 <link rel="apple-touch-icon" href="icons/icon-192.png" />
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;0,9..144,800;0,9..144,900;1,9..144,600;1,9..144,800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
@@ -19,527 +23,277 @@
   window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFkcGJqc2xrc3d0bnFrbHplanV5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwNjg5NzIsImV4cCI6MjA5MjY0NDk3Mn0.LrzDO8CtW1FeJjdUH5unjaoAdOtMHnDd9T1E4q7X_uU';
   window.sb = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 </script>
+
 <style>
   :root {
-    --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-    --font-mono: 'JetBrains Mono', monospace;
+    --ink: #0E1525;
+    --cream: #FFF7EE;
+    --coral: #FF5A4E;
+    --sun: #FFC83D;
+    --sage: #2BC48A;
+    --mist: #EFE7DA;
+    --violet: #6E5BFF;
+    --font-display: 'Fraunces', Georgia, serif;
+    --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   }
-  html, body { margin: 0; padding: 0; font-family: var(--font-sans); background: #f1f5f9; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: var(--font-ui);
+    background: var(--cream);
+    color: var(--ink);
+    -webkit-tap-highlight-color: transparent;
+  }
   * { -webkit-font-smoothing: antialiased; }
+  .font-display { font-family: var(--font-display); font-feature-settings: "ss01", "ss02"; }
+  .font-display-italic { font-family: var(--font-display); font-style: italic; font-feature-settings: "ss01"; }
+
+  /* Hard-shadow brutalist button */
+  .btn-pop {
+    box-shadow: 4px 4px 0 var(--ink);
+    transition: transform .08s ease, box-shadow .08s ease;
+  }
+  .btn-pop:active {
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0 var(--ink);
+  }
+
+  /* Subtle dotted bg pattern */
+  .bg-dots {
+    background-image: radial-gradient(rgba(14,21,37,0.08) 1px, transparent 1px);
+    background-size: 18px 18px;
+  }
+
+  /* Sun highlighter behind text */
+  .hl-sun {
+    background: linear-gradient(180deg, transparent 60%, var(--sun) 60%);
+    padding: 0 0.1em;
+  }
+  .hl-coral {
+    background: linear-gradient(180deg, transparent 60%, rgba(255,90,78,0.35) 60%);
+    padding: 0 0.1em;
+  }
+
+  /* Squiggle divider */
+  .squiggle {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 8'><path d='M0 4 Q 10 0, 20 4 T 40 4 T 60 4 T 80 4' stroke='%230E1525' stroke-width='1.5' fill='none'/></svg>");
+    background-repeat: repeat-x; background-size: 80px 8px; height: 8px;
+  }
+
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-  .font-mono { font-family: var(--font-mono); }
-  @media (max-width: 430px) {
-    .phone-frame { border-radius: 0 !important; border: none !important; box-shadow: none !important; height: 100vh !important; max-width: 100% !important; }
-  }
+
+  /* Card hover lift */
+  .card-hover { transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease; }
+  .card-hover:hover { transform: translateY(-2px); border-color: var(--ink); }
+
+  /* Animated entry */
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .anim-in { animation: fadeUp .28s ease both; }
+
+  /* Marquee */
+  @keyframes marq { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+  .marq-track { animation: marq 22s linear infinite; }
+
   /* Version badge */
   .version-badge {
-    position: fixed; bottom: 12px; right: 12px; z-index: 9999;
-    background: rgba(15, 23, 42, 0.85); color: #fbbf24;
-    border: 1px solid rgba(251, 191, 36, 0.4);
-    padding: 3px 8px; border-radius: 6px;
-    font-family: 'Barlow Condensed', sans-serif; font-size: 11px; font-weight: 600;
-    backdrop-filter: blur(6px); letter-spacing: 0.5px;
+    position: fixed; bottom: 88px; right: 12px; z-index: 40;
+    background: var(--ink); color: var(--sun);
+    padding: 3px 10px; border-radius: 999px;
+    font-family: var(--font-ui); font-size: 10px; font-weight: 700;
+    letter-spacing: 0.08em; text-transform: uppercase;
   }
 </style>
 </head>
 <body>
 <div id="root"></div>
-<div class="version-badge">v0.1</div>
+<div class="version-badge">v0.2 · prototipo</div>
 
-<script type="text/babel">
-const { useState, useEffect } = React;
+<script type="text/babel" data-presets="env,react">
+const { useState, useEffect, useMemo } = React;
 const sb = window.sb;
 
 /* ===================== ICONS (inline SVG) ===================== */
 const Icon = ({ d, className = "w-5 h-5", stroke = 2 }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" className={className}>
-    {d}
-  </svg>
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" className={className}>{d}</svg>
 );
 const IconPlus = (p) => <Icon {...p} d={<><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>} />;
-const IconArrowLeft = (p) => <Icon {...p} d={<><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></>} />;
-const IconUsers = (p) => <Icon {...p} d={<><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>} />;
-const IconTrendingUp = (p) => <Icon {...p} d={<><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></>} />;
-const IconCheckCircle = (p) => <Icon {...p} d={<><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></>} />;
-const IconClock = (p) => <Icon {...p} d={<><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>} />;
 const IconHome = (p) => <Icon {...p} d={<><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></>} />;
-const IconRotateCcw = (p) => <Icon {...p} d={<><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></>} />;
-const IconBell = (p) => <Icon {...p} d={<><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></>} />;
-const IconCamera = (p) => <Icon {...p} d={<><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></>} />;
-const IconFileText = (p) => <Icon {...p} d={<><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></>} />;
-const IconChevronRight = (p) => <Icon {...p} d={<polyline points="9 18 15 12 9 6"/>} />;
-const IconCopy = (p) => <Icon {...p} d={<><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></>} />;
+const IconUser = (p) => <Icon {...p} d={<><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>} />;
+const IconArrowLeft = (p) => <Icon {...p} d={<><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></>} />;
+const IconArrowRight = (p) => <Icon {...p} d={<><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></>} />;
+const IconMapPin = (p) => <Icon {...p} d={<><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></>} />;
+const IconClock = (p) => <Icon {...p} d={<><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>} />;
+const IconUsers = (p) => <Icon {...p} d={<><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>} />;
+const IconBuilding = (p) => <Icon {...p} d={<><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01M16 6h.01M8 10h.01M16 10h.01M8 14h.01M16 14h.01"/></>} />;
+const IconBriefcase = (p) => <Icon {...p} d={<><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></>} />;
+const IconStar = (p) => <Icon {...p} d={<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>} />;
+const IconCheck = (p) => <Icon {...p} d={<polyline points="20 6 9 17 4 12"/>} />;
+const IconSparkles = (p) => <Icon {...p} d={<><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></>} />;
+const IconShield = (p) => <Icon {...p} d={<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>} />;
+const IconBolt = (p) => <Icon {...p} d={<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>} />;
+const IconLogout = (p) => <Icon {...p} d={<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></>} />;
 
-/* ===================== DATA (mock) ===================== */
-const NECESIDADES = [
-  { id: 1, titulo: "50 vasos descartables cierre sala amarilla", responsable: "Fam. García", estado: "En curso", deadline: "15/11", progreso: 72, tipo: "Compra", cuota: 500, pagaron: 18, total: 25, presupuestos: 3 },
-  { id: 2, titulo: "Regalo seño Laura fin de año", responsable: "Fam. Pérez", estado: "Votación", deadline: "20/11", progreso: 0, tipo: "Votación", opciones: 3 },
-  { id: 3, titulo: "Torta cumple de la sala", responsable: "Fam. Sosa", estado: "Abierta", deadline: "28/11", progreso: 0, tipo: "Tarea" },
+/* ===================== MOCK DATA (marketplace) ===================== */
+const ZONAS = ["Belgrano", "Caballito", "Palermo", "Núñez", "Villa Urquiza", "Saavedra", "Recoleta"];
+const CATEGORIAS = ["Materiales didácticos", "Indumentaria", "Servicios", "Alimentación", "Salidas / eventos", "Tecnología"];
+const RANGOS_FAMILIAS = ["10-20 familias", "15-30 familias", "25-40 familias"];
+
+const NECESIDADES_MOCK = [
+  {
+    id: "n1",
+    titulo: "25 mapas políticos de Argentina, plastificados A3",
+    categoria: "Materiales didácticos",
+    tipo: "compra",
+    zona: "Belgrano",
+    rango: "20-30 familias",
+    presupuesto_min: 30000,
+    presupuesto_max: 50000,
+    estado: "recibiendo_ofertas",
+    ofertas: 3,
+    creador_tipo: "institucion",
+    fecha_limite: "2026-05-15",
+    descripcion: "Necesitamos mapas políticos de Argentina A3 plastificados para la sala. Entrega antes del 15 de mayo."
+  },
+  {
+    id: "n2",
+    titulo: "Pelotas de fútbol nº4 para clase de educación física",
+    categoria: "Materiales didácticos",
+    tipo: "compra",
+    zona: "Caballito",
+    rango: "15-30 familias",
+    presupuesto_min: 80000,
+    presupuesto_max: 140000,
+    estado: "en_votacion",
+    ofertas: 5,
+    creador_tipo: "familia",
+    fecha_limite: "2026-05-08",
+    descripcion: "Pelotas resistentes para uso intensivo en horario de educación física."
+  },
+  {
+    id: "n3",
+    titulo: "Catering para fiesta de fin de trimestre (60 pers.)",
+    categoria: "Alimentación",
+    tipo: "servicio",
+    zona: "Palermo",
+    rango: "25-40 familias",
+    presupuesto_min: 350000,
+    presupuesto_max: 500000,
+    estado: "recibiendo_ofertas",
+    ofertas: 7,
+    creador_tipo: "familia",
+    fecha_limite: "2026-06-20",
+    descripcion: "Almuerzo informal para 60 personas (45 chicos + 15 adultos). Opciones celíacas."
+  },
+  {
+    id: "n4",
+    titulo: "Buzos de egresados con bordado",
+    categoria: "Indumentaria",
+    tipo: "compra",
+    zona: "Núñez",
+    rango: "20-30 familias",
+    presupuesto_min: 600000,
+    presupuesto_max: 950000,
+    estado: "adjudicada",
+    ofertas: 4,
+    creador_tipo: "familia",
+    fecha_limite: "2026-05-30",
+    descripcion: "Buzos talle XS a XL con bordado del logo del cole."
+  },
+  {
+    id: "n5",
+    titulo: "Salida didáctica al planetario",
+    categoria: "Salidas / eventos",
+    tipo: "servicio",
+    zona: "Recoleta",
+    rango: "15-30 familias",
+    presupuesto_min: 180000,
+    presupuesto_max: 280000,
+    estado: "recibiendo_ofertas",
+    ofertas: 2,
+    creador_tipo: "institucion",
+    fecha_limite: "2026-05-22",
+    descripcion: "Transporte ida y vuelta + entradas para grupo escolar."
+  },
 ];
-const ROTACION = [
-  { familia: "Fam. García", veces: 3, ultima: "02/11", tarea: "vasos", color: "bg-rose-100 text-rose-700" },
-  { familia: "Fam. Pérez", veces: 2, ultima: "15/09", tarea: "torta seño", color: "bg-amber-100 text-amber-700" },
-  { familia: "Fam. López", veces: 2, ultima: "20/08", tarea: "regalo día del niño", color: "bg-amber-100 text-amber-700" },
-  { familia: "Fam. Molina", veces: 1, ultima: "12/07", tarea: "guirnaldas", color: "bg-emerald-100 text-emerald-700" },
-  { familia: "Fam. Díaz", veces: 1, ultima: "03/06", tarea: "velitas", color: "bg-emerald-100 text-emerald-700" },
-  { familia: "Fam. Fernández", veces: 0, ultima: "—", tarea: "—", color: "bg-sky-100 text-sky-700" },
-  { familia: "Fam. Sosa", veces: 0, ultima: "—", tarea: "—", color: "bg-sky-100 text-sky-700" },
-  { familia: "Fam. Romero", veces: 0, ultima: "—", tarea: "—", color: "bg-sky-100 text-sky-700" },
-];
 
-/* ===================== APP ===================== */
-function App() {
-  const [screen, setScreen] = useState("home");
-  const [selectedNecesidad, setSelectedNecesidad] = useState(null);
+const OFERTAS_MOCK = {
+  n1: [
+    { id: "o1", pyme: "Imprenta Vega", monto: 45000, tiempo_dias: 7, rating: 4.7, reviews: 23, tier: 2, descripcion: "Mapas A3 papel ilustración 250g, plastificado mate, listos en 5-7 días." },
+    { id: "o2", pyme: "Editorial Pampa", monto: 38000, tiempo_dias: 10, rating: 4.9, reviews: 81, tier: 3, descripcion: "Edición educativa con leyenda actualizada 2025. Plastificado UV." },
+    { id: "o3", pyme: "Librería del Norte", monto: 42000, tiempo_dias: 5, rating: 4.5, reviews: 12, tier: 1, descripcion: "Mapas estándar, plastificado simple. Despacho 2 días." },
+  ],
+};
 
-  const openDetalle = (n) => { setSelectedNecesidad(n); setScreen("detalle"); };
+const ESTADO_LABEL = {
+  recibiendo_ofertas: { txt: "Recibiendo ofertas", bg: "bg-[var(--sun)]", fg: "text-[var(--ink)]" },
+  en_votacion: { txt: "En votación", bg: "bg-[var(--violet)]", fg: "text-white" },
+  adjudicada: { txt: "Adjudicada", bg: "bg-[var(--sage)]", fg: "text-white" },
+  en_curso: { txt: "En curso", bg: "bg-[var(--ink)]", fg: "text-[var(--sun)]" },
+  cumplida: { txt: "Cumplida", bg: "bg-[var(--mist)]", fg: "text-[var(--ink)]" },
+};
 
-  return (
-    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-0 sm:p-4">
-      <div className="phone-frame w-full max-w-[390px] h-[844px] bg-white rounded-[48px] shadow-2xl overflow-hidden relative border-8 border-slate-900 flex flex-col">
-        {/* Status bar */}
-        <div className="h-11 bg-white flex items-center justify-between px-8 pt-2 text-xs font-bold text-slate-900 shrink-0">
-          <span>9:41</span>
-          <div className="w-20 h-6 bg-slate-900 rounded-full"></div>
-          <div className="flex gap-1 items-center">
-            <div className="w-4 h-3 border border-slate-900 rounded-sm relative">
-              <div className="absolute inset-0.5 bg-slate-900 rounded-[1px]"></div>
-            </div>
-          </div>
-        </div>
+const TIER_LABEL = {
+  0: { txt: "Nueva", color: "bg-slate-100 text-slate-700" },
+  1: { txt: "Verificada", color: "bg-sky-100 text-sky-700" },
+  2: { txt: "Confiable", color: "bg-emerald-100 text-emerald-700" },
+  3: { txt: "Premium", color: "bg-amber-100 text-amber-800" },
+};
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto no-scrollbar">
-          {screen === "home" && <HomeScreen necesidades={NECESIDADES} onOpen={openDetalle} />}
-          {screen === "nueva" && <NuevaScreen onBack={() => setScreen("home")} />}
-          {screen === "detalle" && <DetalleScreen necesidad={selectedNecesidad} onBack={() => setScreen("home")} />}
-          {screen === "rotacion" && <RotacionScreen rotacion={ROTACION} />}
-        </div>
+const ROLES_INFO = {
+  familia: { label: "Familia", short: "Soy parte de un grupo de padres", icon: IconUsers, color: "var(--coral)" },
+  institucion: { label: "Institución", short: "Soy del jardín / colegio", icon: IconBuilding, color: "var(--violet)" },
+  pyme: { label: "Pyme", short: "Ofrezco productos / servicios", icon: IconBriefcase, color: "var(--sage)" },
+};
 
-        {/* Bottom nav */}
-        <div className="h-20 bg-white border-t border-slate-200 flex items-center justify-around px-4 shrink-0 pb-4">
-          <NavBtn IconCmp={IconHome} label="Inicio" active={screen === "home"} onClick={() => setScreen("home")} />
-          <NavBtn IconCmp={IconRotateCcw} label="Rotación" active={screen === "rotacion"} onClick={() => setScreen("rotacion")} />
-          <button
-            onClick={() => setScreen("nueva")}
-            className="w-14 h-14 bg-gradient-to-br from-sky-500 to-sky-600 rounded-2xl shadow-lg shadow-sky-500/40 flex items-center justify-center -mt-4 active:scale-95 transition-transform"
-          >
-            <IconPlus className="w-7 h-7 text-white" stroke={2.5} />
-          </button>
-          <NavBtn IconCmp={IconBell} label="Avisos" onClick={() => {}} />
-          <NavBtn IconCmp={IconUsers} label="Grupo" onClick={() => {}} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function NavBtn({ IconCmp, label, active, onClick }) {
-  return (
-    <button onClick={onClick} className="flex flex-col items-center gap-0.5 px-2 active:scale-95 transition-transform">
-      <IconCmp className={`w-5 h-5 ${active ? "text-sky-600" : "text-slate-400"}`} stroke={active ? 2.5 : 2} />
-      <span className={`text-[10px] font-semibold ${active ? "text-sky-600" : "text-slate-400"}`}>{label}</span>
-    </button>
-  );
-}
-
-/* ===================== HOME ===================== */
-function HomeScreen({ necesidades, onOpen }) {
-  return (
-    <div className="pb-4">
-      <div className="bg-gradient-to-br from-sky-500 via-sky-500 to-cyan-500 px-6 pt-4 pb-8 rounded-b-[32px]">
-        <div className="flex justify-between items-start mb-5">
-          <div>
-            <p className="text-sky-100 text-xs font-semibold">Hola, Carolina 👋</p>
-            <h1 className="text-white text-2xl font-extrabold tracking-tight">Sala Amarilla 🟡</h1>
-            <p className="text-sky-100 text-xs mt-0.5">25 familias · Jardín Delvalle</p>
-          </div>
-          <div className="w-10 h-10 bg-white/20 backdrop-blur rounded-full flex items-center justify-center text-white font-bold text-sm">CD</div>
-        </div>
-        <div className="grid grid-cols-3 gap-2">
-          <StatCard label="Activas" value="3" />
-          <StatCard label="Debés" value="$500" highlight />
-          <StatCard label="Cerradas" value="12" />
-        </div>
-      </div>
-
-      <div className="px-5 mt-5">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-slate-900 font-extrabold text-lg">Necesidades activas</h2>
-          <button className="text-sky-600 text-xs font-bold">Ver todas</button>
-        </div>
-        <div className="space-y-3">
-          {necesidades.map((n) => <NecesidadCard key={n.id} n={n} onClick={() => onOpen(n)} />)}
-        </div>
-
-        <div className="mt-6 bg-gradient-to-br from-violet-50 to-fuchsia-50 rounded-2xl p-4 border border-violet-100">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-8 h-8 bg-violet-500 rounded-lg flex items-center justify-center">
-              <IconTrendingUp className="w-4 h-4 text-white" stroke={2.5} />
-            </div>
-            <h3 className="font-extrabold text-slate-900 text-sm">Rotación del grupo</h3>
-          </div>
-          <p className="text-xs text-slate-600 mb-3">3 familias nunca se encargaron. Tocales el hombro 👋</p>
-          <div className="flex gap-2 flex-wrap">
-            {["Fam. Fernández", "Fam. Sosa", "Fam. Romero"].map(f => (
-              <span key={f} className="text-xs bg-white px-2.5 py-1 rounded-full font-semibold text-slate-700 border border-violet-100">{f}</span>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function StatCard({ label, value, highlight }) {
-  return (
-    <div className={`rounded-2xl p-3 ${highlight ? "bg-white" : "bg-white/15 backdrop-blur"}`}>
-      <p className={`text-[10px] font-semibold ${highlight ? "text-slate-500" : "text-sky-100"}`}>{label}</p>
-      <p className={`text-lg font-extrabold ${highlight ? "text-sky-600" : "text-white"}`}>{value}</p>
-    </div>
-  );
-}
-
-function NecesidadCard({ n, onClick }) {
-  const estadoColors = {
-    "En curso": "bg-amber-100 text-amber-700",
-    "Votación": "bg-violet-100 text-violet-700",
-    "Abierta": "bg-sky-100 text-sky-700",
-  };
-  const tipoIcons = { "Compra": "🛒", "Votación": "🗳️", "Tarea": "✋" };
-
-  return (
-    <button onClick={onClick} className="w-full bg-white rounded-2xl p-4 border border-slate-200 shadow-sm hover:shadow-md active:scale-[0.99] transition-all text-left">
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <div className="flex items-start gap-2 flex-1 min-w-0">
-          <span className="text-xl leading-none mt-0.5">{tipoIcons[n.tipo]}</span>
-          <div className="flex-1 min-w-0">
-            <h3 className="font-bold text-slate-900 text-sm leading-tight">{n.titulo}</h3>
-            <p className="text-xs text-slate-500 mt-1">Se encarga: <span className="font-semibold text-slate-700">{n.responsable}</span></p>
-          </div>
-        </div>
-        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${estadoColors[n.estado]}`}>{n.estado}</span>
-      </div>
-
-      {n.tipo === "Compra" && (
-        <div className="mt-3">
-          <div className="flex justify-between items-baseline mb-1">
-            <span className="text-xs text-slate-500">{n.pagaron}/{n.total} transfirieron · ${n.cuota} c/u</span>
-            <span className="text-xs font-extrabold text-emerald-600">{n.progreso}%</span>
-          </div>
-          <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500 rounded-full" style={{ width: `${n.progreso}%` }} />
-          </div>
-        </div>
-      )}
-      {n.tipo === "Votación" && (
-        <div className="mt-3 flex items-center gap-2">
-          <span className="text-xs bg-violet-50 text-violet-700 px-2 py-1 rounded-lg font-semibold">{n.opciones} opciones</span>
-          <span className="text-xs text-slate-500">Falta tu voto</span>
-        </div>
-      )}
-      <div className="mt-3 flex items-center gap-1 text-xs text-slate-400">
-        <IconClock className="w-3 h-3" />
-        <span>Cierra el {n.deadline}</span>
-      </div>
-    </button>
-  );
-}
-
-/* ===================== NUEVA ===================== */
-function NuevaScreen({ onBack }) {
-  const [tipo, setTipo] = useState("compra");
-  return (
-    <div>
-      <div className="bg-white px-5 py-4 border-b border-slate-100 flex items-center gap-3 sticky top-0 z-10">
-        <button onClick={onBack} className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center active:scale-95">
-          <IconArrowLeft className="w-5 h-5 text-slate-700" />
-        </button>
-        <h1 className="font-extrabold text-slate-900 text-lg">Nueva necesidad</h1>
-      </div>
-      <div className="p-5 space-y-5">
-        <Field label="Título" defaultValue="50 vasos descartables" />
-        <div>
-          <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Tipo</label>
-          <div className="grid grid-cols-3 gap-2 mt-1.5">
-            <TipoBtn icon="🛒" label="Compra" active={tipo === "compra"} onClick={() => setTipo("compra")} />
-            <TipoBtn icon="🗳️" label="Votación" active={tipo === "votacion"} onClick={() => setTipo("votacion")} />
-            <TipoBtn icon="✋" label="Tarea" active={tipo === "tarea"} onClick={() => setTipo("tarea")} />
-          </div>
-        </div>
-        <div>
-          <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Descripción</label>
-          <textarea rows={3} placeholder="Para el cierre del jardín, tipo plásticos de colores..." className="w-full mt-1.5 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-sm resize-none focus:outline-none focus:border-sky-500 focus:bg-white" />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Deadline" defaultValue="15/11/2026" />
-          <Field label="Presup. aprox." defaultValue="$12.000" />
-        </div>
-
-        <div className="bg-gradient-to-br from-violet-50 to-fuchsia-50 border border-violet-100 rounded-2xl p-4">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-lg">💡</span>
-            <h3 className="font-extrabold text-slate-900 text-sm">Sugerencia de rotación</h3>
-          </div>
-          <p className="text-xs text-slate-600 mb-3">Estas familias nunca se encargaron este año:</p>
-          <div className="space-y-2">
-            {["Fam. Fernández", "Fam. Sosa", "Fam. Romero"].map((f) => (
-              <button key={f} className="w-full bg-white rounded-xl px-3 py-2.5 flex items-center justify-between border border-violet-100 active:scale-[0.98] transition-transform">
-                <span className="text-sm font-semibold text-slate-700">{f}</span>
-                <span className="text-xs font-extrabold text-violet-600">Asignar →</span>
-              </button>
-            ))}
-          </div>
-          <button className="w-full mt-3 text-xs text-slate-500 font-semibold py-1">O dejarlo abierto para auto-asignación</button>
-        </div>
-
-        <button className="w-full bg-gradient-to-r from-sky-500 to-sky-600 text-white font-extrabold py-4 rounded-2xl shadow-lg shadow-sky-500/30 active:scale-[0.98] transition-transform">
-          Publicar y avisar al grupo
-        </button>
-      </div>
-    </div>
-  );
-}
-function Field({ label, defaultValue }) {
-  return (
-    <div>
-      <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">{label}</label>
-      <input type="text" defaultValue={defaultValue} className="w-full mt-1.5 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-semibold focus:outline-none focus:border-sky-500 focus:bg-white" />
-    </div>
-  );
-}
-function TipoBtn({ icon, label, active, onClick }) {
-  return (
-    <button onClick={onClick} className={`flex flex-col items-center gap-1 py-3 rounded-xl border-2 transition-all ${active ? "border-sky-500 bg-sky-50" : "border-slate-200 bg-white"}`}>
-      <span className="text-2xl">{icon}</span>
-      <span className={`text-xs font-extrabold ${active ? "text-sky-600" : "text-slate-500"}`}>{label}</span>
-    </button>
-  );
-}
-
-/* ===================== DETALLE ===================== */
-function DetalleScreen({ necesidad, onBack }) {
-  const n = necesidad || { titulo: "50 vasos descartables", responsable: "Fam. García", cuota: 500, pagaron: 18, total: 25, progreso: 72 };
-  const familias = [
-    { nombre: "Fam. García", estado: "pago", monto: 500 },
-    { nombre: "Fam. López", estado: "pago", monto: 500 },
-    { nombre: "Fam. Molina", estado: "pago", monto: 500 },
-    { nombre: "Fam. Pérez", estado: "marcado", monto: 500 },
-    { nombre: "Fam. Díaz", estado: "pendiente", monto: 500 },
-    { nombre: "Fam. Sosa", estado: "pendiente", monto: 500 },
-  ];
-  return (
-    <div className="pb-6">
-      <div className="bg-white px-5 py-4 border-b border-slate-100 flex items-center gap-3 sticky top-0 z-10">
-        <button onClick={onBack} className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center active:scale-95">
-          <IconArrowLeft className="w-5 h-5 text-slate-700" />
-        </button>
-        <h1 className="font-extrabold text-slate-900 text-base flex-1 truncate">{n.titulo}</h1>
-      </div>
-
-      <div className="p-5 space-y-5">
-        <div className="bg-slate-50 rounded-2xl p-4 flex items-center gap-3">
-          <div className="w-11 h-11 bg-gradient-to-br from-amber-400 to-orange-500 rounded-xl flex items-center justify-center text-white font-extrabold">G</div>
-          <div className="flex-1">
-            <p className="text-xs text-slate-500">Se encarga</p>
-            <p className="font-extrabold text-slate-900">{n.responsable}</p>
-          </div>
-          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-1 rounded-full">RESPONSABLE</span>
-        </div>
-
-        <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl p-5 border border-emerald-100">
-          <div className="flex justify-between items-baseline mb-2">
-            <h3 className="font-extrabold text-slate-900">Colecta</h3>
-            <span className="text-xs font-extrabold text-emerald-700">{n.progreso}%</span>
-          </div>
-          <div className="flex items-baseline gap-2 mb-3">
-            <span className="text-3xl font-black text-slate-900">$9.000</span>
-            <span className="text-sm text-slate-500">/ $12.500</span>
-          </div>
-          <div className="h-2.5 bg-white rounded-full overflow-hidden mb-3">
-            <div className="h-full bg-gradient-to-r from-emerald-400 to-teal-500 rounded-full" style={{ width: `${n.progreso}%` }} />
-          </div>
-          <p className="text-xs text-slate-600"><strong>{n.pagaron} de {n.total}</strong> familias transfirieron · Faltan 7</p>
-        </div>
-
-        <div className="bg-white border-2 border-dashed border-sky-300 rounded-2xl p-4">
-          <p className="text-xs text-slate-500 mb-1">Tu parte</p>
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-2xl font-extrabold text-slate-900">${n.cuota}</span>
-            <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-1 rounded-full">PENDIENTE</span>
-          </div>
-          <div className="bg-slate-50 rounded-xl p-3 mb-3 flex items-center justify-between">
-            <div>
-              <p className="text-[10px] text-slate-500 font-bold uppercase">Alias MP</p>
-              <p className="font-mono font-bold text-sm text-slate-900">garcia.jardin.mp</p>
-            </div>
-            <button className="w-8 h-8 bg-sky-100 rounded-lg flex items-center justify-center text-sky-600 active:scale-95">
-              <IconCopy className="w-4 h-4" />
-            </button>
-          </div>
-          <button className="w-full bg-sky-600 text-white font-extrabold py-3 rounded-xl active:scale-[0.98] transition-transform">
-            Ya transferí ✓
-          </button>
-        </div>
-
-        <div>
-          <h3 className="font-extrabold text-slate-900 mb-3 flex items-center gap-2">
-            <IconFileText className="w-4 h-4" /> Presupuestos (3)
-          </h3>
-          <div className="space-y-2">
-            <PresupuestoRow lugar="Mayorista Once" monto="$10.800" ganador />
-            <PresupuestoRow lugar="Jumbo" monto="$12.500" />
-            <PresupuestoRow lugar="Coto" monto="$13.200" />
-          </div>
-          <button className="w-full mt-3 text-sky-600 font-bold text-sm py-2 border border-sky-200 rounded-xl active:scale-[0.98]">
-            + Agregar otro presupuesto
-          </button>
-        </div>
-
-        <div>
-          <h3 className="font-extrabold text-slate-900 mb-3">Estado de transferencias</h3>
-          <div className="bg-white rounded-2xl border border-slate-200 divide-y divide-slate-100 overflow-hidden">
-            {familias.map((f) => <FamiliaRow key={f.nombre} {...f} />)}
-            <button className="w-full py-3 text-xs font-bold text-slate-500 flex items-center justify-center gap-1">
-              Ver las 25 familias <IconChevronRight className="w-3 h-3" />
-            </button>
-          </div>
-        </div>
-
-        <button className="w-full bg-slate-900 text-white font-extrabold py-4 rounded-2xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2">
-          <IconCamera className="w-4 h-4" /> Cerrar (subir ticket)
-        </button>
-      </div>
-    </div>
-  );
-}
-function PresupuestoRow({ lugar, monto, ganador }) {
-  return (
-    <div className={`rounded-xl p-3 border flex items-center justify-between ${ganador ? "border-emerald-400 bg-emerald-50" : "border-slate-200 bg-white"}`}>
-      <div className="flex items-center gap-3">
-        <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${ganador ? "bg-emerald-500" : "bg-slate-100"}`}>
-          {ganador ? <IconCheckCircle className="w-5 h-5 text-white" /> : <IconFileText className="w-4 h-4 text-slate-400" />}
-        </div>
-        <div>
-          <p className="font-bold text-slate-900 text-sm">{lugar}</p>
-          {ganador && <p className="text-[10px] text-emerald-700 font-extrabold">ELEGIDO</p>}
-        </div>
-      </div>
-      <span className={`font-extrabold ${ganador ? "text-emerald-700" : "text-slate-600"}`}>{monto}</span>
-    </div>
-  );
-}
-function FamiliaRow({ nombre, estado, monto }) {
-  const config = {
-    pago: { icon: "✅", text: "Confirmado", color: "text-emerald-600" },
-    marcado: { icon: "⏳", text: "Marcó como pagado", color: "text-amber-600" },
-    pendiente: { icon: "○", text: "Pendiente", color: "text-slate-400" },
-  };
-  const c = config[estado];
-  return (
-    <div className="px-4 py-3 flex items-center justify-between">
-      <div>
-        <p className="font-semibold text-slate-900 text-sm">{nombre}</p>
-        <p className={`text-xs ${c.color} font-semibold`}>{c.icon} {c.text}</p>
-      </div>
-      <span className="text-sm font-extrabold text-slate-700">${monto}</span>
-    </div>
-  );
-}
-
-/* ===================== ROTACIÓN ===================== */
-function RotacionScreen({ rotacion }) {
-  const max = Math.max(...rotacion.map(r => r.veces));
-  return (
-    <div>
-      <div className="bg-gradient-to-br from-violet-500 to-fuchsia-500 px-6 pt-6 pb-8">
-        <h1 className="text-white text-2xl font-extrabold tracking-tight">Rotación</h1>
-        <p className="text-violet-100 text-sm mt-1">Quién se encargó este año</p>
-        <div className="mt-4 bg-white/15 backdrop-blur rounded-2xl p-3 flex items-center gap-3">
-          <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-            <IconTrendingUp className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <p className="text-white font-extrabold text-sm">Promedio del grupo: 1.1</p>
-            <p className="text-violet-100 text-xs">3 familias nunca se encargaron</p>
-          </div>
-        </div>
-      </div>
-      <div className="p-5">
-        <div className="flex items-center gap-3 mb-4 text-xs flex-wrap">
-          <LegendDot color="bg-rose-400" label="Mucho" />
-          <LegendDot color="bg-amber-400" label="Normal" />
-          <LegendDot color="bg-emerald-400" label="Poco" />
-          <LegendDot color="bg-sky-400" label="Ninguna" />
-        </div>
-        <div className="space-y-2">
-          {rotacion.map((r, i) => <RotacionRow key={i} {...r} max={max} rank={i + 1} />)}
-        </div>
-        <div className="mt-6 bg-slate-50 rounded-2xl p-4 text-center">
-          <p className="text-xs text-slate-500">Rotación del año completa disponible en el panel de delegados</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-function LegendDot({ color, label }) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className={`w-2 h-2 rounded-full ${color}`}></span>
-      <span className="text-slate-500 font-semibold">{label}</span>
-    </div>
-  );
-}
-function RotacionRow({ familia, veces, ultima, tarea, color, max, rank }) {
-  const pct = max > 0 ? (veces / max) * 100 : 0;
-  const barColor = veces >= 3 ? "bg-rose-400" : veces >= 2 ? "bg-amber-400" : veces >= 1 ? "bg-emerald-400" : "bg-sky-300";
-  return (
-    <div className="bg-white rounded-2xl p-3.5 border border-slate-200">
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-extrabold text-slate-400 w-5">#{rank}</span>
-          <span className="font-bold text-slate-900 text-sm">{familia}</span>
-        </div>
-        <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${color}`}>
-          {veces} {veces === 1 ? "vez" : "veces"}
-        </span>
-      </div>
-      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden mb-2">
-        <div className={`h-full rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
-      </div>
-      <p className="text-[11px] text-slate-500">
-        {veces > 0 ? <>Última: <span className="font-semibold text-slate-700">{ultima} · {tarea}</span></> : <span className="italic">Nunca se encargó 👀</span>}
-      </p>
-    </div>
-  );
-}
+const fmt = (n) => "$" + new Intl.NumberFormat("es-AR").format(n);
+const fmtRange = (a, b) => `${fmt(a)} – ${fmt(b)}`;
 
 /* ===================== AUTH GATE ===================== */
 function AuthGate() {
   const [session, setSession] = useState(null);
+  const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const refetchProfile = async (s) => {
+    if (!s) return setProfile(null);
+    const { data, error } = await sb.from("profiles").select("*").eq("id", s.user.id).single();
+    if (error) {
+      console.warn("profile fetch error:", error.message);
+      setProfile({ id: s.user.id, email: s.user.email, role: null, _error: error.message });
+    } else {
+      setProfile(data);
+    }
+  };
+
   useEffect(() => {
-    sb.auth.getSession().then(({ data }) => {
+    sb.auth.getSession().then(async ({ data }) => {
       setSession(data.session);
+      await refetchProfile(data.session);
       setLoading(false);
     });
-    const { data: sub } = sb.auth.onAuthStateChange((_event, s) => setSession(s));
+    const { data: sub } = sb.auth.onAuthStateChange(async (_e, s) => {
+      setSession(s);
+      await refetchProfile(s);
+    });
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-100">
-        <div className="text-slate-500 text-sm">Cargando…</div>
-      </div>
-    );
-  }
+  if (loading) return <SplashScreen />;
   if (!session) return <LoginScreen />;
-  return <AppShell session={session} />;
+  if (!profile?.role) return <OnboardingRolScreen profile={profile} session={session} onDone={() => refetchProfile(session)} />;
+  return <AppRoot session={session} profile={profile} onProfileChange={() => refetchProfile(session)} />;
 }
 
+function SplashScreen() {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--cream)]">
+      <div className="font-display text-5xl font-extrabold tracking-tight">MaPaPis</div>
+      <div className="mt-2 text-sm text-slate-500">Cargando…</div>
+    </div>
+  );
+}
+
+/* ===================== LOGIN ===================== */
 function LoginScreen() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
@@ -548,69 +302,615 @@ function LoginScreen() {
 
   const onSubmit = async (e) => {
     e.preventDefault();
-    setSubmitting(true);
-    setError(null);
+    setSubmitting(true); setError(null);
     const { error } = await sb.auth.signInWithOtp({
       email,
       options: { emailRedirectTo: window.location.origin + window.location.pathname }
     });
     setSubmitting(false);
-    if (error) setError(error.message);
-    else setSent(true);
+    if (error) setError(error.message); else setSent(true);
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-sky-50 to-slate-100">
-      <div className="w-full max-w-sm bg-white rounded-3xl shadow-xl p-8">
-        <div className="text-center mb-6">
-          <div className="text-5xl mb-3">👨‍👩‍👧</div>
-          <h1 className="text-2xl font-extrabold text-slate-900">MaPaPis</h1>
-          <p className="text-sm text-slate-500 mt-1">Coordiná el grupo de padres</p>
+    <div className="min-h-screen flex flex-col bg-[var(--cream)] bg-dots">
+      {/* Hero header */}
+      <div className="px-6 pt-12 pb-6 anim-in">
+        <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-[0.2em] text-[var(--coral)]">
+          <span className="inline-block w-6 h-[2px] bg-[var(--coral)]"></span>
+          <span>Prototipo · v0.2</span>
         </div>
-        {sent ? (
-          <div className="text-center py-3">
-            <div className="text-4xl mb-3">📬</div>
-            <p className="text-sm text-slate-700 font-bold">Te mandamos un link a</p>
-            <p className="text-sm text-sky-600 font-mono mt-1 break-all">{email}</p>
-            <p className="text-xs text-slate-500 mt-4">Revisá tu casilla (también spam) y hacé click para entrar.</p>
-            <button
-              onClick={() => { setSent(false); setEmail(""); }}
-              className="text-xs text-slate-400 underline mt-4"
-            >Usar otro email</button>
-          </div>
-        ) : (
-          <form onSubmit={onSubmit} className="space-y-3">
-            <input
-              type="email" required value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="tu@email.com"
-              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-sky-500 focus:outline-none text-sm"
-            />
-            <button
-              type="submit" disabled={submitting || !email}
-              className="w-full py-3 bg-gradient-to-r from-sky-500 to-sky-600 text-white font-bold rounded-xl shadow-lg shadow-sky-500/30 active:scale-[0.98] transition-transform disabled:opacity-50"
-            >
-              {submitting ? "Enviando…" : "Recibir link mágico"}
-            </button>
-            {error && <p className="text-xs text-rose-600 text-center">{error}</p>}
-          </form>
-        )}
-        <p className="text-[10px] text-slate-400 text-center mt-6">Prototipo v0.1 · MaPaPis</p>
+        <h1 className="font-display font-black text-[64px] leading-[0.95] tracking-tight mt-4">
+          MaPaPis
+        </h1>
+        <p className="font-display-italic text-[28px] leading-tight mt-2 text-[var(--ink)]/80">
+          Lo del jardín, <span className="hl-sun">resuelto en grupo</span>.
+        </p>
+        <p className="mt-5 text-[15px] text-[var(--ink)]/70 max-w-sm">
+          Publicá lo que el grupo necesita. <span className="font-semibold">Las pymes ofertan</span>, ustedes eligen, todos pagan menos.
+        </p>
+      </div>
+
+      {/* Marquee de keywords */}
+      <div className="overflow-hidden border-y-[1.5px] border-[var(--ink)] bg-[var(--ink)] py-2 my-2">
+        <div className="marq-track flex gap-8 whitespace-nowrap text-[var(--cream)] font-display font-bold text-lg italic">
+          {Array.from({length: 2}).flatMap((_, i) => [
+            "compras grupales", "uniformes", "salidas didácticas", "materiales", "eventos", "catering", "kits", "ofertas selladas"
+          ].map((w, j) => (
+            <span key={`${i}-${j}`} className="flex items-center gap-8">
+              <span>{w}</span>
+              <span className="text-[var(--coral)]">✦</span>
+            </span>
+          )))}
+        </div>
+      </div>
+
+      {/* Login card */}
+      <div className="flex-1 flex items-start justify-center px-6 pt-8 pb-12">
+        <div className="w-full max-w-sm bg-white rounded-3xl border-[1.5px] border-[var(--ink)] p-7 anim-in" style={{boxShadow: "6px 6px 0 var(--ink)"}}>
+          {sent ? (
+            <div className="text-center py-3">
+              <div className="text-5xl mb-3">📬</div>
+              <p className="font-display font-bold text-2xl">Te mandamos un link</p>
+              <p className="text-sm text-[var(--ink)]/70 mt-2">a <span className="font-mono">{email}</span></p>
+              <p className="text-xs text-[var(--ink)]/60 mt-5">Abrí tu casilla (revisá spam) y hacé click para entrar.</p>
+              <button onClick={() => { setSent(false); setEmail(""); }} className="text-xs text-[var(--coral)] underline mt-5 font-semibold">Usar otro email</button>
+            </div>
+          ) : (
+            <>
+              <h2 className="font-display font-bold text-2xl">Entrá con tu email</h2>
+              <p className="text-sm text-[var(--ink)]/60 mt-1">Te mandamos un link mágico, sin contraseñas.</p>
+              <form onSubmit={onSubmit} className="space-y-3 mt-5">
+                <input
+                  type="email" required value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="tu@email.com"
+                  className="w-full px-4 py-3.5 rounded-xl border-[1.5px] border-[var(--ink)] bg-[var(--cream)] focus:bg-white focus:outline-none text-[15px] font-medium"
+                />
+                <button
+                  type="submit" disabled={submitting || !email}
+                  className="btn-pop w-full py-3.5 bg-[var(--coral)] text-white font-extrabold rounded-xl border-[1.5px] border-[var(--ink)] uppercase tracking-wider text-sm disabled:opacity-50"
+                >
+                  {submitting ? "Enviando…" : "Recibir link mágico →"}
+                </button>
+                {error && <p className="text-xs text-rose-700 bg-rose-50 rounded-lg p-2 text-center font-semibold">{error}</p>}
+              </form>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-function AppShell({ session }) {
-  const logout = async () => { await sb.auth.signOut(); };
+/* ===================== ONBOARDING — elegir rol ===================== */
+function OnboardingRolScreen({ profile, session, onDone }) {
+  const [saving, setSaving] = useState(null);
+  const [error, setError] = useState(null);
+
+  const elegir = async (role) => {
+    setSaving(role); setError(null);
+    const { error } = await sb.from("profiles").update({ role }).eq("id", session.user.id);
+    setSaving(null);
+    if (error) setError(error.message);
+    else onDone();
+  };
+
   return (
-    <>
-      <div className="fixed top-2 left-2 z-50 bg-white/90 backdrop-blur border border-slate-200 rounded-full px-3 py-1.5 shadow flex items-center gap-2 text-xs">
-        <span className="text-slate-700 font-semibold truncate max-w-[160px]">👤 {session.user.email}</span>
-        <button onClick={logout} className="text-rose-600 font-bold hover:text-rose-700">Salir</button>
+    <div className="min-h-screen bg-[var(--cream)] bg-dots px-6 py-10 anim-in">
+      <div className="max-w-md mx-auto">
+        <button
+          onClick={async () => { await sb.auth.signOut(); }}
+          className="text-xs text-[var(--ink)]/60 hover:text-[var(--coral)] font-semibold mb-8 flex items-center gap-1"
+        >
+          <IconLogout className="w-3.5 h-3.5" /> Salir
+        </button>
+        <div className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--coral)]">Bienvenido</div>
+        <h1 className="font-display font-black text-5xl leading-none mt-3">
+          ¿Quién <span className="font-display-italic">sos</span>?
+        </h1>
+        <p className="text-[var(--ink)]/70 mt-3 text-[15px]">
+          Esto define qué pantallas vas a ver. Lo podés cambiar después.
+        </p>
+        <div className="mt-8 space-y-3">
+          {Object.entries(ROLES_INFO).map(([key, info]) => {
+            const IconCmp = info.icon;
+            const isSaving = saving === key;
+            return (
+              <button
+                key={key}
+                disabled={!!saving}
+                onClick={() => elegir(key)}
+                className="card-hover w-full text-left bg-white rounded-3xl border-[1.5px] border-[var(--ink)] p-5 flex items-center gap-4 disabled:opacity-50"
+                style={{boxShadow: "4px 4px 0 var(--ink)"}}
+              >
+                <div className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0" style={{background: info.color}}>
+                  <IconCmp className="w-7 h-7 text-white" />
+                </div>
+                <div className="flex-1">
+                  <div className="font-display font-bold text-xl">{info.label}</div>
+                  <div className="text-sm text-[var(--ink)]/60">{info.short}</div>
+                </div>
+                {isSaving ? <span className="text-xs">…</span> : <IconArrowRight className="w-5 h-5" />}
+              </button>
+            );
+          })}
+        </div>
+        {error && <p className="text-xs text-rose-700 bg-rose-50 rounded-lg p-3 text-center font-semibold mt-4">{error}</p>}
       </div>
-      <App />
-    </>
+    </div>
+  );
+}
+
+/* ===================== APP ROOT — bottom nav + screens ===================== */
+function AppRoot({ session, profile, onProfileChange }) {
+  const [screen, setScreen] = useState("feed");
+  const [selected, setSelected] = useState(null);
+
+  const goDetalle = (n) => { setSelected(n); setScreen("detalle"); };
+  const goBack = () => { setSelected(null); setScreen("feed"); };
+
+  const isPyme = profile.role === "pyme";
+
+  return (
+    <div className="min-h-screen bg-[var(--cream)] flex justify-center">
+      <div className="w-full max-w-md flex flex-col min-h-screen relative pb-24">
+        {screen === "feed" && (isPyme
+          ? <FeedPymeScreen profile={profile} onOpen={goDetalle} />
+          : <FeedFamiliaScreen profile={profile} onOpen={goDetalle} />)}
+        {screen === "publicar" && <PublicarScreen profile={profile} onCancel={goBack} onPublicado={goBack} />}
+        {screen === "detalle" && <DetalleScreen necesidad={selected} profile={profile} onBack={goBack} />}
+        {screen === "perfil" && <PerfilScreen profile={profile} onProfileChange={onProfileChange} />}
+
+        <BottomNav screen={screen} setScreen={setScreen} isPyme={isPyme} />
+      </div>
+    </div>
+  );
+}
+
+function BottomNav({ screen, setScreen, isPyme }) {
+  return (
+    <div className="fixed bottom-0 left-0 right-0 z-30 flex justify-center pointer-events-none">
+      <div className="w-full max-w-md px-4 pb-3 pointer-events-auto">
+        <div className="bg-[var(--ink)] text-white rounded-3xl px-3 py-2.5 flex items-center justify-around" style={{boxShadow: "4px 4px 0 var(--coral)"}}>
+          <NavBtn IconCmp={IconHome} label="Feed" active={screen === "feed"} onClick={() => setScreen("feed")} />
+          {!isPyme && (
+            <button
+              onClick={() => setScreen("publicar")}
+              className="-mt-7 w-14 h-14 bg-[var(--coral)] rounded-2xl flex items-center justify-center border-[1.5px] border-[var(--ink)]"
+              style={{boxShadow: "3px 3px 0 var(--ink)"}}
+            >
+              <IconPlus className="w-7 h-7 text-white" stroke={2.5} />
+            </button>
+          )}
+          {isPyme && <NavBtn IconCmp={IconBolt} label="Mis ofertas" active={false} onClick={() => alert("Próximamente: tus ofertas presentadas")} />}
+          <NavBtn IconCmp={IconUser} label="Perfil" active={screen === "perfil"} onClick={() => setScreen("perfil")} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NavBtn({ IconCmp, label, active, onClick }) {
+  return (
+    <button onClick={onClick} className={`flex flex-col items-center gap-0.5 px-3 py-1 ${active ? 'text-[var(--sun)]' : 'text-white/60'}`}>
+      <IconCmp className="w-5 h-5" />
+      <span className="text-[10px] font-bold uppercase tracking-wider">{label}</span>
+    </button>
+  );
+}
+
+/* ===================== FEED — Familia / Institución ===================== */
+function FeedFamiliaScreen({ profile, onOpen }) {
+  const necesidades = NECESIDADES_MOCK;
+  const activas = necesidades.filter(n => n.estado !== "cumplida").length;
+  const enVotacion = necesidades.filter(n => n.estado === "en_votacion").length;
+  const totalOfertas = necesidades.reduce((a, n) => a + n.ofertas, 0);
+
+  return (
+    <div className="px-5 pt-8 anim-in">
+      {/* Header */}
+      <div className="flex items-start justify-between mb-6">
+        <div>
+          <p className="text-xs uppercase font-bold tracking-[0.2em] text-[var(--coral)]">Hola, {profile.nombre || profile.email.split("@")[0]}</p>
+          <h1 className="font-display font-black text-[44px] leading-[0.95] mt-2">
+            Necesidades <span className="font-display-italic">activas</span>
+          </h1>
+        </div>
+      </div>
+
+      {/* Bento stats */}
+      <div className="grid grid-cols-3 gap-2 mb-6">
+        <StatChip num={activas} label="activas" color="var(--coral)" />
+        <StatChip num={enVotacion} label="votando" color="var(--violet)" />
+        <StatChip num={totalOfertas} label="ofertas" color="var(--sage)" />
+      </div>
+
+      <div className="squiggle mb-5"></div>
+
+      {/* Lista */}
+      <div className="space-y-3">
+        {necesidades.map(n => <NecesidadCard key={n.id} n={n} onClick={() => onOpen(n)} mode="familia" />)}
+      </div>
+    </div>
+  );
+}
+
+function StatChip({ num, label, color }) {
+  return (
+    <div className="bg-white rounded-2xl border-[1.5px] border-[var(--ink)] p-3 flex flex-col items-start" style={{boxShadow: "3px 3px 0 var(--ink)"}}>
+      <span className="font-display font-black text-3xl leading-none" style={{color}}>{num}</span>
+      <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/70 mt-1">{label}</span>
+    </div>
+  );
+}
+
+/* ===================== FEED — Pyme ===================== */
+function FeedPymeScreen({ profile, onOpen }) {
+  const visibles = NECESIDADES_MOCK.filter(n => n.estado === "recibiendo_ofertas" || n.estado === "en_votacion");
+  const [filtroZona, setFiltroZona] = useState("todas");
+  const filtradas = filtroZona === "todas" ? visibles : visibles.filter(n => n.zona === filtroZona);
+
+  return (
+    <div className="px-5 pt-8 anim-in">
+      <div className="mb-6">
+        <p className="text-xs uppercase font-bold tracking-[0.2em] text-[var(--sage)]">Para tu pyme</p>
+        <h1 className="font-display font-black text-[44px] leading-[0.95] mt-2">
+          Necesidades <span className="font-display-italic">cerca</span>
+        </h1>
+        <p className="text-[var(--ink)]/60 text-sm mt-2">Pedidos anonimizados — el grupo lo elige al final.</p>
+      </div>
+
+      {/* Filtro de zona */}
+      <div className="flex gap-2 overflow-x-auto no-scrollbar pb-3 mb-2 -mx-5 px-5">
+        <FilterChip active={filtroZona === "todas"} onClick={() => setFiltroZona("todas")} label="Todas las zonas" />
+        {ZONAS.map(z => <FilterChip key={z} active={filtroZona === z} onClick={() => setFiltroZona(z)} label={z} />)}
+      </div>
+
+      <div className="squiggle mb-5"></div>
+
+      <div className="space-y-3">
+        {filtradas.length === 0
+          ? <div className="text-center text-sm text-[var(--ink)]/60 py-8">No hay necesidades en esta zona ahora.</div>
+          : filtradas.map(n => <NecesidadCard key={n.id} n={n} onClick={() => onOpen(n)} mode="pyme" />)}
+      </div>
+    </div>
+  );
+}
+
+function FilterChip({ active, onClick, label }) {
+  return (
+    <button onClick={onClick} className={`px-4 py-2 rounded-full border-[1.5px] border-[var(--ink)] text-xs font-bold whitespace-nowrap ${active ? 'bg-[var(--ink)] text-[var(--sun)]' : 'bg-white text-[var(--ink)]'}`}>
+      {label}
+    </button>
+  );
+}
+
+/* ===================== Card de necesidad (modos: familia / pyme) ===================== */
+function NecesidadCard({ n, onClick, mode }) {
+  const est = ESTADO_LABEL[n.estado];
+  const isPyme = mode === "pyme";
+  const tipoSolicitante = n.creador_tipo === "institucion" ? "Institución educativa" : "Grupo de padres";
+  const garantiaPago = n.creador_tipo === "institucion";
+
+  return (
+    <button onClick={onClick} className="card-hover block w-full text-left bg-white rounded-3xl border-[1.5px] border-[var(--ink)] overflow-hidden" style={{boxShadow: "3px 3px 0 var(--ink)"}}>
+      {/* Top strip de estado */}
+      <div className={`px-4 py-1.5 ${est.bg} ${est.fg} text-[10px] font-bold uppercase tracking-wider flex items-center justify-between`}>
+        <span>{est.txt}</span>
+        <span>{n.ofertas} {n.ofertas === 1 ? "oferta" : "ofertas"}</span>
+      </div>
+
+      <div className="p-4">
+        {/* Categoría + tipo solicitante */}
+        <div className="flex items-center gap-2 flex-wrap mb-2">
+          <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[var(--mist)] text-[var(--ink)]">
+            {n.categoria}
+          </span>
+          {isPyme && (
+            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[var(--ink)] text-[var(--cream)]">
+              {tipoSolicitante}
+            </span>
+          )}
+          {isPyme && garantiaPago && (
+            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[var(--sage)] text-white flex items-center gap-1">
+              <IconShield className="w-2.5 h-2.5" /> Pago garantizado
+            </span>
+          )}
+        </div>
+
+        <h3 className="font-display font-bold text-lg leading-tight">{n.titulo}</h3>
+
+        <div className="mt-3 flex items-center gap-3 text-xs text-[var(--ink)]/70 flex-wrap">
+          <span className="flex items-center gap-1"><IconMapPin className="w-3.5 h-3.5" /> {n.zona}</span>
+          <span className="flex items-center gap-1"><IconUsers className="w-3.5 h-3.5" /> {n.rango}</span>
+        </div>
+
+        <div className="mt-3 flex items-center justify-between">
+          <span className="font-mono text-sm font-bold">{fmtRange(n.presupuesto_min, n.presupuesto_max)}</span>
+          <IconArrowRight className="w-4 h-4 text-[var(--coral)]" />
+        </div>
+      </div>
+    </button>
+  );
+}
+
+/* ===================== Detalle de necesidad ===================== */
+function DetalleScreen({ necesidad: n, profile, onBack }) {
+  if (!n) return <div className="p-6">Sin necesidad seleccionada.</div>;
+  const est = ESTADO_LABEL[n.estado];
+  const isPyme = profile.role === "pyme";
+  const ofertas = OFERTAS_MOCK[n.id] || [];
+
+  return (
+    <div className="anim-in">
+      {/* Hero */}
+      <div className="bg-[var(--ink)] text-white px-5 pt-5 pb-8">
+        <button onClick={onBack} className="flex items-center gap-1 text-[var(--cream)]/80 text-sm font-semibold mb-4">
+          <IconArrowLeft className="w-4 h-4" /> Atrás
+        </button>
+        <div className={`inline-block px-3 py-1 rounded-full ${est.bg} ${est.fg} text-[10px] font-bold uppercase tracking-wider mb-3`}>
+          {est.txt}
+        </div>
+        <h1 className="font-display font-black text-3xl leading-tight">{n.titulo}</h1>
+        <div className="mt-3 flex items-center gap-3 text-xs text-[var(--cream)]/70 flex-wrap">
+          <span className="flex items-center gap-1"><IconMapPin className="w-3.5 h-3.5" /> {n.zona}</span>
+          <span className="flex items-center gap-1"><IconUsers className="w-3.5 h-3.5" /> {n.rango}</span>
+          <span className="flex items-center gap-1"><IconClock className="w-3.5 h-3.5" /> hasta {n.fecha_limite}</span>
+        </div>
+      </div>
+
+      <div className="px-5 -mt-5">
+        <div className="bg-white rounded-3xl border-[1.5px] border-[var(--ink)] p-5" style={{boxShadow: "3px 3px 0 var(--ink)"}}>
+          <h3 className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/60">Descripción</h3>
+          <p className="mt-2 text-sm text-[var(--ink)]/85">{n.descripcion}</p>
+
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <div>
+              <h3 className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/60">Presupuesto</h3>
+              <p className="font-mono text-sm font-bold mt-1">{fmtRange(n.presupuesto_min, n.presupuesto_max)}</p>
+            </div>
+            <div>
+              <h3 className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/60">Categoría</h3>
+              <p className="text-sm font-semibold mt-1">{n.categoria}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Acción según rol */}
+      {isPyme ? (
+        <div className="px-5 mt-6">
+          <h2 className="font-display font-bold text-xl mb-3">¿Cubrís este pedido?</h2>
+          <div className="bg-[var(--sun)] rounded-3xl border-[1.5px] border-[var(--ink)] p-5" style={{boxShadow: "3px 3px 0 var(--ink)"}}>
+            <p className="text-sm font-semibold">Las ofertas son <span className="hl-coral">selladas</span> — el grupo no ve el resto hasta que vence el plazo.</p>
+            <button
+              onClick={() => alert("Próximamente: formulario para presentar oferta")}
+              className="btn-pop mt-4 w-full py-3.5 bg-[var(--ink)] text-[var(--sun)] font-extrabold rounded-xl border-[1.5px] border-[var(--ink)] uppercase tracking-wider text-sm"
+            >
+              Presentar oferta →
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="px-5 mt-6">
+          <h2 className="font-display font-bold text-xl mb-3">Ofertas recibidas <span className="text-[var(--ink)]/40">({ofertas.length})</span></h2>
+          {ofertas.length === 0 ? (
+            <div className="bg-[var(--mist)] rounded-3xl p-5 text-center text-sm text-[var(--ink)]/70">
+              Esperando ofertas. Te avisamos cuando lleguen.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {ofertas.map(o => <OfertaCard key={o.id} o={o} />)}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="h-8"></div>
+    </div>
+  );
+}
+
+function OfertaCard({ o }) {
+  const tier = TIER_LABEL[o.tier];
+  return (
+    <div className="bg-white rounded-3xl border-[1.5px] border-[var(--ink)] p-4" style={{boxShadow: "3px 3px 0 var(--ink)"}}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="font-display font-bold text-lg">{o.pyme}</h3>
+            <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${tier.color}`}>{tier.txt}</span>
+          </div>
+          <div className="flex items-center gap-1 text-xs mt-1">
+            <IconStar className="w-3.5 h-3.5 text-[var(--sun)] fill-[var(--sun)]" stroke={1.5} />
+            <span className="font-bold">{o.rating}</span>
+            <span className="text-[var(--ink)]/50">({o.reviews} reviews)</span>
+          </div>
+        </div>
+        <div className="text-right shrink-0">
+          <div className="font-mono font-extrabold text-xl">{fmt(o.monto)}</div>
+          <div className="text-[10px] uppercase tracking-wider text-[var(--ink)]/60">{o.tiempo_dias} días</div>
+        </div>
+      </div>
+      <p className="text-sm text-[var(--ink)]/75 mt-3">{o.descripcion}</p>
+      <button className="mt-3 text-xs font-bold text-[var(--coral)] uppercase tracking-wider hover:underline">Ver perfil de la pyme →</button>
+    </div>
+  );
+}
+
+/* ===================== Publicar necesidad ===================== */
+function PublicarScreen({ profile, onCancel, onPublicado }) {
+  const [titulo, setTitulo] = useState("");
+  const [categoria, setCategoria] = useState(CATEGORIAS[0]);
+  const [zona, setZona] = useState(ZONAS[0]);
+  const [presupuestoMin, setPresupuestoMin] = useState("");
+  const [presupuestoMax, setPresupuestoMax] = useState("");
+  const [descripcion, setDescripcion] = useState("");
+  const [enviando, setEnviando] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setEnviando(true);
+    // TODO Slice 3: insertar en Supabase
+    await new Promise(r => setTimeout(r, 700));
+    setEnviando(false);
+    alert("Mock: necesidad publicada. (En el próximo slice se guarda en la DB.)");
+    onPublicado();
+  };
+
+  return (
+    <div className="px-5 pt-6 pb-12 anim-in">
+      <button onClick={onCancel} className="flex items-center gap-1 text-sm font-semibold text-[var(--ink)]/70 mb-4">
+        <IconArrowLeft className="w-4 h-4" /> Cancelar
+      </button>
+      <h1 className="font-display font-black text-4xl leading-none">
+        Publicar <span className="font-display-italic">necesidad</span>
+      </h1>
+      <p className="text-sm text-[var(--ink)]/60 mt-2">Las pymes verán esto anonimizado por zona.</p>
+      <div className="squiggle my-5"></div>
+
+      <form onSubmit={submit} className="space-y-4">
+        <Field label="Título">
+          <input value={titulo} onChange={(e) => setTitulo(e.target.value)} required placeholder="ej: 25 mapas políticos plastificados"
+            className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-medium focus:outline-none" />
+        </Field>
+
+        <Field label="Categoría">
+          <select value={categoria} onChange={(e) => setCategoria(e.target.value)}
+            className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-medium">
+            {CATEGORIAS.map(c => <option key={c}>{c}</option>)}
+          </select>
+        </Field>
+
+        <Field label="Zona">
+          <select value={zona} onChange={(e) => setZona(e.target.value)}
+            className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-medium">
+            {ZONAS.map(z => <option key={z}>{z}</option>)}
+          </select>
+        </Field>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Presupuesto mín">
+            <input type="number" value={presupuestoMin} onChange={(e) => setPresupuestoMin(e.target.value)} placeholder="30000"
+              className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-mono" />
+          </Field>
+          <Field label="Presupuesto máx">
+            <input type="number" value={presupuestoMax} onChange={(e) => setPresupuestoMax(e.target.value)} placeholder="50000"
+              className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-mono" />
+          </Field>
+        </div>
+
+        <Field label="Descripción">
+          <textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} required rows={4}
+            placeholder="Detalle del pedido. Sin nombres del jardín/colegio ni datos de contacto."
+            className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-medium focus:outline-none resize-none" />
+        </Field>
+
+        <div className="bg-[var(--mist)] rounded-2xl p-3 text-xs text-[var(--ink)]/75">
+          <span className="font-bold">⚠️ Privacidad:</span> no incluyas teléfonos, emails ni nombre de la institución. Filtramos esto automáticamente.
+        </div>
+
+        <button type="submit" disabled={enviando}
+          className="btn-pop w-full py-3.5 bg-[var(--coral)] text-white font-extrabold rounded-xl border-[1.5px] border-[var(--ink)] uppercase tracking-wider text-sm disabled:opacity-50">
+          {enviando ? "Publicando…" : "Publicar →"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <label className="block">
+      <span className="block text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/60 mb-1.5">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+/* ===================== Perfil ===================== */
+function PerfilScreen({ profile, onProfileChange }) {
+  const [editing, setEditing] = useState(false);
+  const [nombre, setNombre] = useState(profile.nombre || "");
+  const [saving, setSaving] = useState(false);
+
+  const guardarNombre = async () => {
+    setSaving(true);
+    await sb.from("profiles").update({ nombre }).eq("id", profile.id);
+    setSaving(false);
+    setEditing(false);
+    onProfileChange();
+  };
+
+  const cambiarRol = async () => {
+    if (!confirm("¿Cambiar de rol? Vas a volver al onboarding.")) return;
+    await sb.from("profiles").update({ role: null }).eq("id", profile.id);
+    onProfileChange();
+  };
+
+  const logout = async () => { await sb.auth.signOut(); };
+
+  const info = ROLES_INFO[profile.role];
+  const IconCmp = info?.icon || IconUser;
+  const initial = (profile.nombre || profile.email)[0]?.toUpperCase();
+
+  return (
+    <div className="px-5 pt-8 anim-in">
+      <h1 className="font-display font-black text-4xl leading-none">Tu <span className="font-display-italic">perfil</span></h1>
+      <div className="squiggle my-5"></div>
+
+      {/* Header tarjeta */}
+      <div className="bg-white rounded-3xl border-[1.5px] border-[var(--ink)] p-5 mb-4" style={{boxShadow: "4px 4px 0 var(--ink)"}}>
+        <div className="flex items-center gap-4">
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center font-display font-black text-3xl text-white" style={{background: info?.color || "var(--coral)"}}>
+            {initial}
+          </div>
+          <div className="flex-1 min-w-0">
+            {editing ? (
+              <div className="flex gap-2">
+                <input value={nombre} onChange={(e) => setNombre(e.target.value)}
+                  className="flex-1 px-3 py-2 rounded-lg border-[1.5px] border-[var(--ink)] text-sm font-semibold" />
+                <button onClick={guardarNombre} disabled={saving} className="btn-pop bg-[var(--sage)] text-white px-3 py-2 rounded-lg border-[1.5px] border-[var(--ink)] text-xs font-bold uppercase">
+                  {saving ? "…" : "OK"}
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="font-display font-bold text-xl truncate">{profile.nombre || profile.email.split("@")[0]}</div>
+                <div className="text-xs text-[var(--ink)]/60 truncate">{profile.email}</div>
+                <button onClick={() => setEditing(true)} className="text-[10px] font-bold uppercase tracking-wider text-[var(--coral)] mt-1">Editar nombre</button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Rol */}
+      <div className="bg-white rounded-3xl border-[1.5px] border-[var(--ink)] p-5 mb-4" style={{boxShadow: "3px 3px 0 var(--ink)"}}>
+        <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/60 mb-2">Rol</div>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{background: info?.color}}>
+              <IconCmp className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <div className="font-display font-bold text-lg">{info?.label}</div>
+              <div className="text-xs text-[var(--ink)]/60">{info?.short}</div>
+            </div>
+          </div>
+        </div>
+        <button onClick={cambiarRol} className="mt-4 text-xs font-bold uppercase tracking-wider text-[var(--coral)]">Cambiar de rol →</button>
+      </div>
+
+      {/* Logout */}
+      <button onClick={logout} className="btn-pop w-full py-3.5 bg-white text-[var(--ink)] font-extrabold rounded-xl border-[1.5px] border-[var(--ink)] uppercase tracking-wider text-sm flex items-center justify-center gap-2">
+        <IconLogout className="w-4 h-4" /> Cerrar sesión
+      </button>
+
+      <div className="text-center text-[10px] text-[var(--ink)]/40 mt-8 uppercase tracking-widest">
+        MaPaPis · Prototipo v0.2
+      </div>
+    </div>
   );
 }
 
