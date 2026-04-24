@@ -13,6 +13,12 @@
 <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  window.SUPABASE_URL = 'https://adpbjslkswtnqklzejuy.supabase.co';
+  window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFkcGJqc2xrc3d0bnFrbHplanV5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwNjg5NzIsImV4cCI6MjA5MjY0NDk3Mn0.LrzDO8CtW1FeJjdUH5unjaoAdOtMHnDd9T1E4q7X_uU';
+  window.sb = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+</script>
 <style>
   :root {
     --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -42,7 +48,8 @@
 <div class="version-badge">v0.1</div>
 
 <script type="text/babel">
-const { useState } = React;
+const { useState, useEffect } = React;
+const sb = window.sb;
 
 /* ===================== ICONS (inline SVG) ===================== */
 const Icon = ({ d, className = "w-5 h-5", stroke = 2 }) => (
@@ -508,7 +515,106 @@ function RotacionRow({ familia, veces, ultima, tarea, color, max, rank }) {
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+/* ===================== AUTH GATE ===================== */
+function AuthGate() {
+  const [session, setSession] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    sb.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setLoading(false);
+    });
+    const { data: sub } = sb.auth.onAuthStateChange((_event, s) => setSession(s));
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-100">
+        <div className="text-slate-500 text-sm">Cargando…</div>
+      </div>
+    );
+  }
+  if (!session) return <LoginScreen />;
+  return <AppShell session={session} />;
+}
+
+function LoginScreen() {
+  const [email, setEmail] = useState("");
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const onSubmit = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setError(null);
+    const { error } = await sb.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: window.location.origin + window.location.pathname }
+    });
+    setSubmitting(false);
+    if (error) setError(error.message);
+    else setSent(true);
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-sky-50 to-slate-100">
+      <div className="w-full max-w-sm bg-white rounded-3xl shadow-xl p-8">
+        <div className="text-center mb-6">
+          <div className="text-5xl mb-3">👨‍👩‍👧</div>
+          <h1 className="text-2xl font-extrabold text-slate-900">MaPaPis</h1>
+          <p className="text-sm text-slate-500 mt-1">Coordiná el grupo de padres</p>
+        </div>
+        {sent ? (
+          <div className="text-center py-3">
+            <div className="text-4xl mb-3">📬</div>
+            <p className="text-sm text-slate-700 font-bold">Te mandamos un link a</p>
+            <p className="text-sm text-sky-600 font-mono mt-1 break-all">{email}</p>
+            <p className="text-xs text-slate-500 mt-4">Revisá tu casilla (también spam) y hacé click para entrar.</p>
+            <button
+              onClick={() => { setSent(false); setEmail(""); }}
+              className="text-xs text-slate-400 underline mt-4"
+            >Usar otro email</button>
+          </div>
+        ) : (
+          <form onSubmit={onSubmit} className="space-y-3">
+            <input
+              type="email" required value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="tu@email.com"
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:border-sky-500 focus:outline-none text-sm"
+            />
+            <button
+              type="submit" disabled={submitting || !email}
+              className="w-full py-3 bg-gradient-to-r from-sky-500 to-sky-600 text-white font-bold rounded-xl shadow-lg shadow-sky-500/30 active:scale-[0.98] transition-transform disabled:opacity-50"
+            >
+              {submitting ? "Enviando…" : "Recibir link mágico"}
+            </button>
+            {error && <p className="text-xs text-rose-600 text-center">{error}</p>}
+          </form>
+        )}
+        <p className="text-[10px] text-slate-400 text-center mt-6">Prototipo v0.1 · MaPaPis</p>
+      </div>
+    </div>
+  );
+}
+
+function AppShell({ session }) {
+  const logout = async () => { await sb.auth.signOut(); };
+  return (
+    <>
+      <div className="fixed top-2 left-2 z-50 bg-white/90 backdrop-blur border border-slate-200 rounded-full px-3 py-1.5 shadow flex items-center gap-2 text-xs">
+        <span className="text-slate-700 font-semibold truncate max-w-[160px]">👤 {session.user.email}</span>
+        <button onClick={logout} className="text-rose-600 font-bold hover:text-rose-700">Salir</button>
+      </div>
+      <App />
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<AuthGate />);
 </script>
 </body>
 </html>
