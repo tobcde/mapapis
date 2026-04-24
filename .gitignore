@@ -1,0 +1,19 @@
+# Memory / agent state
+.claude/
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Build / deps (por si después agregamos node)
+node_modules/
+dist/
+build/
+.env
+.env.local

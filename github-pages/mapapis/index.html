@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#0284c7" />
+<title>MaPaPis — Prototipo</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  :root {
+    --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+  html, body { margin: 0; padding: 0; font-family: var(--font-sans); background: #f1f5f9; -webkit-tap-highlight-color: transparent; }
+  * { -webkit-font-smoothing: antialiased; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  .font-mono { font-family: var(--font-mono); }
+  @media (max-width: 430px) {
+    .phone-frame { border-radius: 0 !important; border: none !important; box-shadow: none !important; height: 100vh !important; max-width: 100% !important; }
+  }
+  /* Version badge */
+  .version-badge {
+    position: fixed; bottom: 12px; right: 12px; z-index: 9999;
+    background: rgba(15, 23, 42, 0.85); color: #fbbf24;
+    border: 1px solid rgba(251, 191, 36, 0.4);
+    padding: 3px 8px; border-radius: 6px;
+    font-family: 'Barlow Condensed', sans-serif; font-size: 11px; font-weight: 600;
+    backdrop-filter: blur(6px); letter-spacing: 0.5px;
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<div class="version-badge">v0.1</div>
+
+<script type="text/babel">
+const { useState } = React;
+
+/* ===================== ICONS (inline SVG) ===================== */
+const Icon = ({ d, className = "w-5 h-5", stroke = 2 }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" className={className}>
+    {d}
+  </svg>
+);
+const IconPlus = (p) => <Icon {...p} d={<><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>} />;
+const IconArrowLeft = (p) => <Icon {...p} d={<><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></>} />;
+const IconUsers = (p) => <Icon {...p} d={<><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>} />;
+const IconTrendingUp = (p) => <Icon {...p} d={<><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></>} />;
+const IconCheckCircle = (p) => <Icon {...p} d={<><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></>} />;
+const IconClock = (p) => <Icon {...p} d={<><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>} />;
+const IconHome = (p) => <Icon {...p} d={<><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></>} />;
+const IconRotateCcw = (p) => <Icon {...p} d={<><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></>} />;
+const IconBell = (p) => <Icon {...p} d={<><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></>} />;
+const IconCamera = (p) => <Icon {...p} d={<><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></>} />;
+const IconFileText = (p) => <Icon {...p} d={<><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></>} />;
+const IconChevronRight = (p) => <Icon {...p} d={<polyline points="9 18 15 12 9 6"/>} />;
+const IconCopy = (p) => <Icon {...p} d={<><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></>} />;
+
+/* ===================== DATA (mock) ===================== */
+const NECESIDADES = [
+  { id: 1, titulo: "50 vasos descartables cierre sala amarilla", responsable: "Fam. García", estado: "En curso", deadline: "15/11", progreso: 72, tipo: "Compra", cuota: 500, pagaron: 18, total: 25, presupuestos: 3 },
+  { id: 2, titulo: "Regalo seño Laura fin de año", responsable: "Fam. Pérez", estado: "Votación", deadline: "20/11", progreso: 0, tipo: "Votación", opciones: 3 },
+  { id: 3, titulo: "Torta cumple de la sala", responsable: "Fam. Sosa", estado: "Abierta", deadline: "28/11", progreso: 0, tipo: "Tarea" },
+];
+const ROTACION = [
+  { familia: "Fam. García", veces: 3, ultima: "02/11", tarea: "vasos", color: "bg-rose-100 text-rose-700" },
+  { familia: "Fam. Pérez", veces: 2, ultima: "15/09", tarea: "torta seño", color: "bg-amber-100 text-amber-700" },
+  { familia: "Fam. López", veces: 2, ultima: "20/08", tarea: "regalo día del niño", color: "bg-amber-100 text-amber-700" },
+  { familia: "Fam. Molina", veces: 1, ultima: "12/07", tarea: "guirnaldas", color: "bg-emerald-100 text-emerald-700" },
+  { familia: "Fam. Díaz", veces: 1, ultima: "03/06", tarea: "velitas", color: "bg-emerald-100 text-emerald-700" },
+  { familia: "Fam. Fernández", veces: 0, ultima: "—", tarea: "—", color: "bg-sky-100 text-sky-700" },
+  { familia: "Fam. Sosa", veces: 0, ultima: "—", tarea: "—", color: "bg-sky-100 text-sky-700" },
+  { familia: "Fam. Romero", veces: 0, ultima: "—", tarea: "—", color: "bg-sky-100 text-sky-700" },
+];
+
+/* ===================== APP ===================== */
+function App() {
+  const [screen, setScreen] = useState("home");
+  const [selectedNecesidad, setSelectedNecesidad] = useState(null);
+
+  const openDetalle = (n) => { setSelectedNecesidad(n); setScreen("detalle"); };
+
+  return (
+    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-0 sm:p-4">
+      <div className="phone-frame w-full max-w-[390px] h-[844px] bg-white rounded-[48px] shadow-2xl overflow-hidden relative border-8 border-slate-900 flex flex-col">
+        {/* Status bar */}
+        <div className="h-11 bg-white flex items-center justify-between px-8 pt-2 text-xs font-bold text-slate-900 shrink-0">
+          <span>9:41</span>
+          <div className="w-20 h-6 bg-slate-900 rounded-full"></div>
+          <div className="flex gap-1 items-center">
+            <div className="w-4 h-3 border border-slate-900 rounded-sm relative">
+              <div className="absolute inset-0.5 bg-slate-900 rounded-[1px]"></div>
+            </div>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto no-scrollbar">
+          {screen === "home" && <HomeScreen necesidades={NECESIDADES} onOpen={openDetalle} />}
+          {screen === "nueva" && <NuevaScreen onBack={() => setScreen("home")} />}
+          {screen === "detalle" && <DetalleScreen necesidad={selectedNecesidad} onBack={() => setScreen("home")} />}
+          {screen === "rotacion" && <RotacionScreen rotacion={ROTACION} />}
+        </div>
+
+        {/* Bottom nav */}
+        <div className="h-20 bg-white border-t border-slate-200 flex items-center justify-around px-4 shrink-0 pb-4">
+          <NavBtn IconCmp={IconHome} label="Inicio" active={screen === "home"} onClick={() => setScreen("home")} />
+          <NavBtn IconCmp={IconRotateCcw} label="Rotación" active={screen === "rotacion"} onClick={() => setScreen("rotacion")} />
+          <button
+            onClick={() => setScreen("nueva")}
+            className="w-14 h-14 bg-gradient-to-br from-sky-500 to-sky-600 rounded-2xl shadow-lg shadow-sky-500/40 flex items-center justify-center -mt-4 active:scale-95 transition-transform"
+          >
+            <IconPlus className="w-7 h-7 text-white" stroke={2.5} />
+          </button>
+          <NavBtn IconCmp={IconBell} label="Avisos" onClick={() => {}} />
+          <NavBtn IconCmp={IconUsers} label="Grupo" onClick={() => {}} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NavBtn({ IconCmp, label, active, onClick }) {
+  return (
+    <button onClick={onClick} className="flex flex-col items-center gap-0.5 px-2 active:scale-95 transition-transform">
+      <IconCmp className={`w-5 h-5 ${active ? "text-sky-600" : "text-slate-400"}`} stroke={active ? 2.5 : 2} />
+      <span className={`text-[10px] font-semibold ${active ? "text-sky-600" : "text-slate-400"}`}>{label}</span>
+    </button>
+  );
+}
+
+/* ===================== HOME ===================== */
+function HomeScreen({ necesidades, onOpen }) {
+  return (
+    <div className="pb-4">
+      <div className="bg-gradient-to-br from-sky-500 via-sky-500 to-cyan-500 px-6 pt-4 pb-8 rounded-b-[32px]">
+        <div className="flex justify-between items-start mb-5">
+          <div>
+            <p className="text-sky-100 text-xs font-semibold">Hola, Carolina 👋</p>
+            <h1 className="text-white text-2xl font-extrabold tracking-tight">Sala Amarilla 🟡</h1>
+            <p className="text-sky-100 text-xs mt-0.5">25 familias · Jardín Delvalle</p>
+          </div>
+          <div className="w-10 h-10 bg-white/20 backdrop-blur rounded-full flex items-center justify-center text-white font-bold text-sm">CD</div>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          <StatCard label="Activas" value="3" />
+          <StatCard label="Debés" value="$500" highlight />
+          <StatCard label="Cerradas" value="12" />
+        </div>
+      </div>
+
+      <div className="px-5 mt-5">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-slate-900 font-extrabold text-lg">Necesidades activas</h2>
+          <button className="text-sky-600 text-xs font-bold">Ver todas</button>
+        </div>
+        <div className="space-y-3">
+          {necesidades.map((n) => <NecesidadCard key={n.id} n={n} onClick={() => onOpen(n)} />)}
+        </div>
+
+        <div className="mt-6 bg-gradient-to-br from-violet-50 to-fuchsia-50 rounded-2xl p-4 border border-violet-100">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-8 h-8 bg-violet-500 rounded-lg flex items-center justify-center">
+              <IconTrendingUp className="w-4 h-4 text-white" stroke={2.5} />
+            </div>
+            <h3 className="font-extrabold text-slate-900 text-sm">Rotación del grupo</h3>
+          </div>
+          <p className="text-xs text-slate-600 mb-3">3 familias nunca se encargaron. Tocales el hombro 👋</p>
+          <div className="flex gap-2 flex-wrap">
+            {["Fam. Fernández", "Fam. Sosa", "Fam. Romero"].map(f => (
+              <span key={f} className="text-xs bg-white px-2.5 py-1 rounded-full font-semibold text-slate-700 border border-violet-100">{f}</span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value, highlight }) {
+  return (
+    <div className={`rounded-2xl p-3 ${highlight ? "bg-white" : "bg-white/15 backdrop-blur"}`}>
+      <p className={`text-[10px] font-semibold ${highlight ? "text-slate-500" : "text-sky-100"}`}>{label}</p>
+      <p className={`text-lg font-extrabold ${highlight ? "text-sky-600" : "text-white"}`}>{value}</p>
+    </div>
+  );
+}
+
+function NecesidadCard({ n, onClick }) {
+  const estadoColors = {
+    "En curso": "bg-amber-100 text-amber-700",
+    "Votación": "bg-violet-100 text-violet-700",
+    "Abierta": "bg-sky-100 text-sky-700",
+  };
+  const tipoIcons = { "Compra": "🛒", "Votación": "🗳️", "Tarea": "✋" };
+
+  return (
+    <button onClick={onClick} className="w-full bg-white rounded-2xl p-4 border border-slate-200 shadow-sm hover:shadow-md active:scale-[0.99] transition-all text-left">
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="flex items-start gap-2 flex-1 min-w-0">
+          <span className="text-xl leading-none mt-0.5">{tipoIcons[n.tipo]}</span>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-bold text-slate-900 text-sm leading-tight">{n.titulo}</h3>
+            <p className="text-xs text-slate-500 mt-1">Se encarga: <span className="font-semibold text-slate-700">{n.responsable}</span></p>
+          </div>
+        </div>
+        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${estadoColors[n.estado]}`}>{n.estado}</span>
+      </div>
+
+      {n.tipo === "Compra" && (
+        <div className="mt-3">
+          <div className="flex justify-between items-baseline mb-1">
+            <span className="text-xs text-slate-500">{n.pagaron}/{n.total} transfirieron · ${n.cuota} c/u</span>
+            <span className="text-xs font-extrabold text-emerald-600">{n.progreso}%</span>
+          </div>
+          <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+            <div className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500 rounded-full" style={{ width: `${n.progreso}%` }} />
+          </div>
+        </div>
+      )}
+      {n.tipo === "Votación" && (
+        <div className="mt-3 flex items-center gap-2">
+          <span className="text-xs bg-violet-50 text-violet-700 px-2 py-1 rounded-lg font-semibold">{n.opciones} opciones</span>
+          <span className="text-xs text-slate-500">Falta tu voto</span>
+        </div>
+      )}
+      <div className="mt-3 flex items-center gap-1 text-xs text-slate-400">
+        <IconClock className="w-3 h-3" />
+        <span>Cierra el {n.deadline}</span>
+      </div>
+    </button>
+  );
+}
+
+/* ===================== NUEVA ===================== */
+function NuevaScreen({ onBack }) {
+  const [tipo, setTipo] = useState("compra");
+  return (
+    <div>
+      <div className="bg-white px-5 py-4 border-b border-slate-100 flex items-center gap-3 sticky top-0 z-10">
+        <button onClick={onBack} className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center active:scale-95">
+          <IconArrowLeft className="w-5 h-5 text-slate-700" />
+        </button>
+        <h1 className="font-extrabold text-slate-900 text-lg">Nueva necesidad</h1>
+      </div>
+      <div className="p-5 space-y-5">
+        <Field label="Título" defaultValue="50 vasos descartables" />
+        <div>
+          <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Tipo</label>
+          <div className="grid grid-cols-3 gap-2 mt-1.5">
+            <TipoBtn icon="🛒" label="Compra" active={tipo === "compra"} onClick={() => setTipo("compra")} />
+            <TipoBtn icon="🗳️" label="Votación" active={tipo === "votacion"} onClick={() => setTipo("votacion")} />
+            <TipoBtn icon="✋" label="Tarea" active={tipo === "tarea"} onClick={() => setTipo("tarea")} />
+          </div>
+        </div>
+        <div>
+          <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Descripción</label>
+          <textarea rows={3} placeholder="Para el cierre del jardín, tipo plásticos de colores..." className="w-full mt-1.5 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 text-sm resize-none focus:outline-none focus:border-sky-500 focus:bg-white" />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Deadline" defaultValue="15/11/2026" />
+          <Field label="Presup. aprox." defaultValue="$12.000" />
+        </div>
+
+        <div className="bg-gradient-to-br from-violet-50 to-fuchsia-50 border border-violet-100 rounded-2xl p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-lg">💡</span>
+            <h3 className="font-extrabold text-slate-900 text-sm">Sugerencia de rotación</h3>
+          </div>
+          <p className="text-xs text-slate-600 mb-3">Estas familias nunca se encargaron este año:</p>
+          <div className="space-y-2">
+            {["Fam. Fernández", "Fam. Sosa", "Fam. Romero"].map((f) => (
+              <button key={f} className="w-full bg-white rounded-xl px-3 py-2.5 flex items-center justify-between border border-violet-100 active:scale-[0.98] transition-transform">
+                <span className="text-sm font-semibold text-slate-700">{f}</span>
+                <span className="text-xs font-extrabold text-violet-600">Asignar →</span>
+              </button>
+            ))}
+          </div>
+          <button className="w-full mt-3 text-xs text-slate-500 font-semibold py-1">O dejarlo abierto para auto-asignación</button>
+        </div>
+
+        <button className="w-full bg-gradient-to-r from-sky-500 to-sky-600 text-white font-extrabold py-4 rounded-2xl shadow-lg shadow-sky-500/30 active:scale-[0.98] transition-transform">
+          Publicar y avisar al grupo
+        </button>
+      </div>
+    </div>
+  );
+}
+function Field({ label, defaultValue }) {
+  return (
+    <div>
+      <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">{label}</label>
+      <input type="text" defaultValue={defaultValue} className="w-full mt-1.5 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-semibold focus:outline-none focus:border-sky-500 focus:bg-white" />
+    </div>
+  );
+}
+function TipoBtn({ icon, label, active, onClick }) {
+  return (
+    <button onClick={onClick} className={`flex flex-col items-center gap-1 py-3 rounded-xl border-2 transition-all ${active ? "border-sky-500 bg-sky-50" : "border-slate-200 bg-white"}`}>
+      <span className="text-2xl">{icon}</span>
+      <span className={`text-xs font-extrabold ${active ? "text-sky-600" : "text-slate-500"}`}>{label}</span>
+    </button>
+  );
+}
+
+/* ===================== DETALLE ===================== */
+function DetalleScreen({ necesidad, onBack }) {
+  const n = necesidad || { titulo: "50 vasos descartables", responsable: "Fam. García", cuota: 500, pagaron: 18, total: 25, progreso: 72 };
+  const familias = [
+    { nombre: "Fam. García", estado: "pago", monto: 500 },
+    { nombre: "Fam. López", estado: "pago", monto: 500 },
+    { nombre: "Fam. Molina", estado: "pago", monto: 500 },
+    { nombre: "Fam. Pérez", estado: "marcado", monto: 500 },
+    { nombre: "Fam. Díaz", estado: "pendiente", monto: 500 },
+    { nombre: "Fam. Sosa", estado: "pendiente", monto: 500 },
+  ];
+  return (
+    <div className="pb-6">
+      <div className="bg-white px-5 py-4 border-b border-slate-100 flex items-center gap-3 sticky top-0 z-10">
+        <button onClick={onBack} className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center active:scale-95">
+          <IconArrowLeft className="w-5 h-5 text-slate-700" />
+        </button>
+        <h1 className="font-extrabold text-slate-900 text-base flex-1 truncate">{n.titulo}</h1>
+      </div>
+
+      <div className="p-5 space-y-5">
+        <div className="bg-slate-50 rounded-2xl p-4 flex items-center gap-3">
+          <div className="w-11 h-11 bg-gradient-to-br from-amber-400 to-orange-500 rounded-xl flex items-center justify-center text-white font-extrabold">G</div>
+          <div className="flex-1">
+            <p className="text-xs text-slate-500">Se encarga</p>
+            <p className="font-extrabold text-slate-900">{n.responsable}</p>
+          </div>
+          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-1 rounded-full">RESPONSABLE</span>
+        </div>
+
+        <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl p-5 border border-emerald-100">
+          <div className="flex justify-between items-baseline mb-2">
+            <h3 className="font-extrabold text-slate-900">Colecta</h3>
+            <span className="text-xs font-extrabold text-emerald-700">{n.progreso}%</span>
+          </div>
+          <div className="flex items-baseline gap-2 mb-3">
+            <span className="text-3xl font-black text-slate-900">$9.000</span>
+            <span className="text-sm text-slate-500">/ $12.500</span>
+          </div>
+          <div className="h-2.5 bg-white rounded-full overflow-hidden mb-3">
+            <div className="h-full bg-gradient-to-r from-emerald-400 to-teal-500 rounded-full" style={{ width: `${n.progreso}%` }} />
+          </div>
+          <p className="text-xs text-slate-600"><strong>{n.pagaron} de {n.total}</strong> familias transfirieron · Faltan 7</p>
+        </div>
+
+        <div className="bg-white border-2 border-dashed border-sky-300 rounded-2xl p-4">
+          <p className="text-xs text-slate-500 mb-1">Tu parte</p>
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-2xl font-extrabold text-slate-900">${n.cuota}</span>
+            <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-1 rounded-full">PENDIENTE</span>
+          </div>
+          <div className="bg-slate-50 rounded-xl p-3 mb-3 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] text-slate-500 font-bold uppercase">Alias MP</p>
+              <p className="font-mono font-bold text-sm text-slate-900">garcia.jardin.mp</p>
+            </div>
+            <button className="w-8 h-8 bg-sky-100 rounded-lg flex items-center justify-center text-sky-600 active:scale-95">
+              <IconCopy className="w-4 h-4" />
+            </button>
+          </div>
+          <button className="w-full bg-sky-600 text-white font-extrabold py-3 rounded-xl active:scale-[0.98] transition-transform">
+            Ya transferí ✓
+          </button>
+        </div>
+
+        <div>
+          <h3 className="font-extrabold text-slate-900 mb-3 flex items-center gap-2">
+            <IconFileText className="w-4 h-4" /> Presupuestos (3)
+          </h3>
+          <div className="space-y-2">
+            <PresupuestoRow lugar="Mayorista Once" monto="$10.800" ganador />
+            <PresupuestoRow lugar="Jumbo" monto="$12.500" />
+            <PresupuestoRow lugar="Coto" monto="$13.200" />
+          </div>
+          <button className="w-full mt-3 text-sky-600 font-bold text-sm py-2 border border-sky-200 rounded-xl active:scale-[0.98]">
+            + Agregar otro presupuesto
+          </button>
+        </div>
+
+        <div>
+          <h3 className="font-extrabold text-slate-900 mb-3">Estado de transferencias</h3>
+          <div className="bg-white rounded-2xl border border-slate-200 divide-y divide-slate-100 overflow-hidden">
+            {familias.map((f) => <FamiliaRow key={f.nombre} {...f} />)}
+            <button className="w-full py-3 text-xs font-bold text-slate-500 flex items-center justify-center gap-1">
+              Ver las 25 familias <IconChevronRight className="w-3 h-3" />
+            </button>
+          </div>
+        </div>
+
+        <button className="w-full bg-slate-900 text-white font-extrabold py-4 rounded-2xl active:scale-[0.98] transition-transform flex items-center justify-center gap-2">
+          <IconCamera className="w-4 h-4" /> Cerrar (subir ticket)
+        </button>
+      </div>
+    </div>
+  );
+}
+function PresupuestoRow({ lugar, monto, ganador }) {
+  return (
+    <div className={`rounded-xl p-3 border flex items-center justify-between ${ganador ? "border-emerald-400 bg-emerald-50" : "border-slate-200 bg-white"}`}>
+      <div className="flex items-center gap-3">
+        <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${ganador ? "bg-emerald-500" : "bg-slate-100"}`}>
+          {ganador ? <IconCheckCircle className="w-5 h-5 text-white" /> : <IconFileText className="w-4 h-4 text-slate-400" />}
+        </div>
+        <div>
+          <p className="font-bold text-slate-900 text-sm">{lugar}</p>
+          {ganador && <p className="text-[10px] text-emerald-700 font-extrabold">ELEGIDO</p>}
+        </div>
+      </div>
+      <span className={`font-extrabold ${ganador ? "text-emerald-700" : "text-slate-600"}`}>{monto}</span>
+    </div>
+  );
+}
+function FamiliaRow({ nombre, estado, monto }) {
+  const config = {
+    pago: { icon: "✅", text: "Confirmado", color: "text-emerald-600" },
+    marcado: { icon: "⏳", text: "Marcó como pagado", color: "text-amber-600" },
+    pendiente: { icon: "○", text: "Pendiente", color: "text-slate-400" },
+  };
+  const c = config[estado];
+  return (
+    <div className="px-4 py-3 flex items-center justify-between">
+      <div>
+        <p className="font-semibold text-slate-900 text-sm">{nombre}</p>
+        <p className={`text-xs ${c.color} font-semibold`}>{c.icon} {c.text}</p>
+      </div>
+      <span className="text-sm font-extrabold text-slate-700">${monto}</span>
+    </div>
+  );
+}
+
+/* ===================== ROTACIÓN ===================== */
+function RotacionScreen({ rotacion }) {
+  const max = Math.max(...rotacion.map(r => r.veces));
+  return (
+    <div>
+      <div className="bg-gradient-to-br from-violet-500 to-fuchsia-500 px-6 pt-6 pb-8">
+        <h1 className="text-white text-2xl font-extrabold tracking-tight">Rotación</h1>
+        <p className="text-violet-100 text-sm mt-1">Quién se encargó este año</p>
+        <div className="mt-4 bg-white/15 backdrop-blur rounded-2xl p-3 flex items-center gap-3">
+          <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+            <IconTrendingUp className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <p className="text-white font-extrabold text-sm">Promedio del grupo: 1.1</p>
+            <p className="text-violet-100 text-xs">3 familias nunca se encargaron</p>
+          </div>
+        </div>
+      </div>
+      <div className="p-5">
+        <div className="flex items-center gap-3 mb-4 text-xs flex-wrap">
+          <LegendDot color="bg-rose-400" label="Mucho" />
+          <LegendDot color="bg-amber-400" label="Normal" />
+          <LegendDot color="bg-emerald-400" label="Poco" />
+          <LegendDot color="bg-sky-400" label="Ninguna" />
+        </div>
+        <div className="space-y-2">
+          {rotacion.map((r, i) => <RotacionRow key={i} {...r} max={max} rank={i + 1} />)}
+        </div>
+        <div className="mt-6 bg-slate-50 rounded-2xl p-4 text-center">
+          <p className="text-xs text-slate-500">Rotación del año completa disponible en el panel de delegados</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+function LegendDot({ color, label }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className={`w-2 h-2 rounded-full ${color}`}></span>
+      <span className="text-slate-500 font-semibold">{label}</span>
+    </div>
+  );
+}
+function RotacionRow({ familia, veces, ultima, tarea, color, max, rank }) {
+  const pct = max > 0 ? (veces / max) * 100 : 0;
+  const barColor = veces >= 3 ? "bg-rose-400" : veces >= 2 ? "bg-amber-400" : veces >= 1 ? "bg-emerald-400" : "bg-sky-300";
+  return (
+    <div className="bg-white rounded-2xl p-3.5 border border-slate-200">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-extrabold text-slate-400 w-5">#{rank}</span>
+          <span className="font-bold text-slate-900 text-sm">{familia}</span>
+        </div>
+        <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${color}`}>
+          {veces} {veces === 1 ? "vez" : "veces"}
+        </span>
+      </div>
+      <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden mb-2">
+        <div className={`h-full rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
+      </div>
+      <p className="text-[11px] text-slate-500">
+        {veces > 0 ? <>Última: <span className="font-semibold text-slate-700">{ultima} · {tarea}</span></> : <span className="italic">Nunca se encargó 👀</span>}
+      </p>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
