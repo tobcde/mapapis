@@ -212,7 +212,27 @@ const IconTrash = (p) => <Icon {...p} d={<><polyline points="3 6 5 6 21 6"/><pat
 const IconRefresh = (p) => <Icon {...p} d={<><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></>} />;
 
 /* ===================== MOCK DATA (marketplace) ===================== */
-const ZONAS = ["Belgrano", "Caballito", "Palermo", "Núñez", "Villa Urquiza", "Saavedra", "Recoleta"];
+const ZONAS_BY_REGION = {
+  "GBA Norte": [
+    "Olivos", "Vicente López", "Florida", "La Lucila", "Munro", "Carapachay", "Villa Adelina", "Villa Martelli",
+    "Martínez", "Acassuso", "San Isidro", "Beccar", "Boulogne", "Béccar",
+    "Tigre", "Don Torcuato", "El Talar", "Pacheco", "Nordelta",
+    "Pilar", "Del Viso", "Manzanares"
+  ],
+  "CABA": [
+    "Belgrano", "Núñez", "Saavedra", "Villa Urquiza", "Coghlan", "Colegiales",
+    "Palermo", "Recoleta", "Caballito", "Almagro", "Villa Crespo",
+    "Flores", "Floresta", "Villa Devoto", "Villa del Parque",
+    "Barracas", "Boedo", "San Telmo", "Puerto Madero"
+  ],
+  "GBA Oeste": [
+    "Castelar", "Morón", "Ituzaingó", "Haedo", "Ramos Mejía", "San Justo", "Hurlingham"
+  ],
+  "GBA Sur": [
+    "Avellaneda", "Lanús", "Quilmes", "Lomas de Zamora", "Banfield", "Adrogué", "Temperley"
+  ]
+};
+const ZONAS = Object.values(ZONAS_BY_REGION).flat();
 const CATEGORIAS = ["Materiales didácticos", "Indumentaria", "Servicios", "Alimentación", "Salidas / eventos", "Tecnología"];
 const RANGOS_FAMILIAS = ["10-20 familias", "15-30 familias", "25-40 familias"];
 
@@ -968,7 +988,11 @@ function PublicarScreen({ profile, onCancel, onPublicado }) {
         <Field label="Zona">
           <select value={zona} onChange={(e) => setZona(e.target.value)}
             className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-medium">
-            {ZONAS.map(z => <option key={z}>{z}</option>)}
+            {Object.entries(ZONAS_BY_REGION).map(([region, zonas]) => (
+              <optgroup key={region} label={region}>
+                {zonas.map(z => <option key={z}>{z}</option>)}
+              </optgroup>
+            ))}
           </select>
         </Field>
 
@@ -1103,7 +1127,11 @@ function CrearGrupoScreen({ profile, onCreated, onCancel }) {
         <Field label="Zona">
           <select value={zona} onChange={(e) => setZona(e.target.value)}
             className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-medium focus:outline-none">
-            {ZONAS.map(z => <option key={z}>{z}</option>)}
+            {Object.entries(ZONAS_BY_REGION).map(([region, zonas]) => (
+              <optgroup key={region} label={region}>
+                {zonas.map(z => <option key={z}>{z}</option>)}
+              </optgroup>
+            ))}
           </select>
         </Field>
 
