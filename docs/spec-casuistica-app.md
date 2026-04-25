@@ -10,15 +10,20 @@
 MaPaPis es un **marketplace PWA de compras grupales escolares** para Argentina. Tres audiencias:
 
 - **Familias**: papás/mamás/tutores de un grupo (sala de jardín, aula, comisión). Publican necesidades, votan, pagan a la pyme adjudicada.
-- **Pymes**: librerías, imprentas, catering, indumentaria, etc. Ofertan respondiendo a necesidades, cobran off-platform (transferencia), entregan.
+- **Pymes**: librerías, imprentas, catering, indumentaria, etc. Ofertan respondiendo a necesidades, cobran y entregan.
+
+> **Modelo de cobro objetivo: escrow on-platform.** Las familias pagan dentro de la app, MaPaPis **retiene el dinero**, y se libera a la pyme una vez confirmada la entrega (`marcar_cumplida`). Esto requiere Mercado Pago Marketplace API + split de pagos (ver [spec-pagos-escrow.md](spec-pagos-escrow.md)). Hoy todavía no está implementado: el flujo vivo (Sprint 1) es **off-platform** — la pyme cobra por transferencia (CBU/alias) y las familias marcan el pago manualmente. Toda la sección de pagos en este doc describe el flujo interino; el módulo MP es el siguiente hito grande.
 - **Instituciones / personal_institucion**: jardines/colegios. Pueden publicar necesidades transversales. Hoy es un rol con onboarding básico, sin diferenciación profunda de UX.
 
-El flujo canónico:
+El flujo canónico (objetivo final):
 
 ```
 familia crea grupo → invita papás → publica necesidad → pymes ofertan
-→ familias votan → admin adjudica → familias pagan (manual) → admin/pyme marca cumplida
+→ familias votan → admin adjudica → familias pagan ON-PLATFORM (MP, escrow)
+→ admin/pyme marca cumplida → MaPaPis libera el dinero a la pyme menos comisión
 ```
+
+Hoy (Sprint 1) el cobro **todavía es off-platform** mientras no está integrado MP — ver §7.5 (interino) y §7.5b (modelo definitivo).
 
 Stack: Supabase (Postgres + Auth + RLS + RPCs `security definer`) y un único `index.html` con React UMD + Tailwind CDN + Service Worker. **No hay backend propio**.
 
@@ -277,7 +282,10 @@ Diferencias clave individual vs grupal:
 | Voto | Por familia (peso 1) | Por alumno (peso compartido entre tutores) |
 | Pago | 1 fila por familia | 1 fila por alumno |
 
-### 7.5 Pago externo (post-adjudicación)
+### 7.5 Pago (post-adjudicación) — flujo interino off-platform
+
+> **Atención**: ésta es la implementación **interina** mientras no esté Mercado Pago Marketplace API. El modelo definitivo es escrow on-platform — ver §7.5b y [spec-pagos-escrow.md](spec-pagos-escrow.md).
+
 
 ```mermaid
 flowchart TD
@@ -299,6 +307,37 @@ Reglas de quién puede registrar/eliminar (ver `db/016`):
 - **Individual**: tutor del alumno, o admin del grupo. Si admin actúa, se asigna como pagante el primer tutor del alumno (orden por `created_at` en `alumno_tutores`).
 - **Grupal**: cualquier miembro del grupo, o admin.
 - **Eliminar**: solo `marcado_por` o admin.
+
+### 7.5b Pago — modelo objetivo (escrow on-platform, NO implementado)
+
+```mermaid
+sequenceDiagram
+    actor F as Familia
+    participant App
+    participant MP as Mercado Pago
+    actor Pyme
+    F->>App: Pagar (post-adjudicación)
+    App->>MP: crear preference con application_fee + collector=MaPaPis
+    F->>MP: tarjeta / Pago Fácil / saldo MP
+    MP-->>App: webhook approved
+    App->>App: necesidad_pagos.estado=retenido<br/>(plata en cuenta MaPaPis)
+    Note over App: Espera confirmación de entrega
+    actor Adm as Admin grupo
+    Adm->>App: marcar_cumplida (o expira ventana sin disputa)
+    App->>MP: liberar split → pyme recibe (precio − comisión)
+    App->>App: necesidad_pagos.estado=liberado
+    App->>F: comprobante final
+```
+
+**Reglas que cambian respecto al flujo interino:**
+
+- La familia paga dentro de la app; el dinero queda **retenido en la cuenta MaPaPis**, no llega a la pyme hasta confirmar entrega.
+- Si se dispara `revertir_cumplida` dentro de las 24hs **el dinero todavía no se liberó** → puede volver al estado retenido sin movimientos bancarios reales.
+- Si nadie marca cumplida en N días post-adjudicación → ventana de disputa abierta (TODO: definir N, hoy ~7 días candidato).
+- Comisión MaPaPis: aplicada como `application_fee` en la preference; descuento automático al liberar el split.
+- Casos a definir: refund parcial, contracargo, falla de webhook, entrega parcial en modo individual.
+
+Estado: spec preliminar en [spec-pagos-escrow.md](spec-pagos-escrow.md). Implementación = Slice 4. Hasta entonces vale §7.5.
 
 ### 7.6 Cumplida y revertir
 
