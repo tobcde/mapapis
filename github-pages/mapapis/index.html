@@ -142,8 +142,32 @@
 <div class="version-badge">v0.2 · prototipo</div>
 
 <script type="text/babel" data-presets="env,react">
-const { useState, useEffect, useMemo } = React;
+const { useState, useEffect, useMemo, useRef } = React;
 const sb = window.sb;
+
+/* ===================== URL + grupo helpers ===================== */
+function getUrlParam(name) {
+  return new URLSearchParams(window.location.search).get(name);
+}
+function buildInviteUrl(code) {
+  const base = window.location.origin + window.location.pathname;
+  return `${base}?join=${code}`;
+}
+function clearJoinFromUrl() {
+  const url = new URL(window.location.href);
+  url.searchParams.delete("join");
+  window.history.replaceState({}, "", url.pathname + (url.search ? url.search : ""));
+}
+function setActiveGrupo(id) { try { localStorage.setItem("mapapis.activeGrupoId", id || ""); } catch {} }
+function getActiveGrupo() { try { return localStorage.getItem("mapapis.activeGrupoId") || null; } catch { return null; } }
+function setPendingJoinCode(code) { try { localStorage.setItem("mapapis.pendingJoinCode", code || ""); } catch {} }
+function getPendingJoinCode() { try { return localStorage.getItem("mapapis.pendingJoinCode") || null; } catch { return null; } }
+async function copyToClipboard(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch { return false; }
+}
+async function joinGrupoByCode(code) {
+  return await sb.rpc("join_grupo_by_code", { p_code: code });
+}
 
 /* ===================== ICONS (inline SVG) ===================== */
 const Icon = ({ d, className = "w-5 h-5", stroke = 2 }) => (
@@ -165,6 +189,12 @@ const IconSparkles = (p) => <Icon {...p} d={<><path d="M12 2v4M12 18v4M4.93 4.93
 const IconShield = (p) => <Icon {...p} d={<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>} />;
 const IconBolt = (p) => <Icon {...p} d={<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>} />;
 const IconLogout = (p) => <Icon {...p} d={<><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></>} />;
+const IconCopy = (p) => <Icon {...p} d={<><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></>} />;
+const IconLink = (p) => <Icon {...p} d={<><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></>} />;
+const IconShare = (p) => <Icon {...p} d={<><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></>} />;
+const IconCrown = (p) => <Icon {...p} d={<path d="M2 8l5 5 5-9 5 9 5-5-2 12H4z"/>} />;
+const IconTrash = (p) => <Icon {...p} d={<><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></>} />;
+const IconRefresh = (p) => <Icon {...p} d={<><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></>} />;
 
 /* ===================== MOCK DATA (marketplace) ===================== */
 const ZONAS = ["Belgrano", "Caballito", "Palermo", "Núñez", "Villa Urquiza", "Saavedra", "Recoleta"];
@@ -286,6 +316,7 @@ function AuthGate() {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [joinBanner, setJoinBanner] = useState(null);  // { nombre, zona, code } cuando hay ?join=
 
   const refetchProfile = async (s) => {
     if (!s) return setProfile(null);
@@ -297,6 +328,45 @@ function AuthGate() {
       setProfile(data);
     }
   };
+
+  // Capturar ?join=CODE al cargar y guardar para después del login
+  useEffect(() => {
+    const code = getUrlParam("join");
+    if (code) {
+      setPendingJoinCode(code);
+      // Buscar info del grupo para mostrar banner (acceso anon a la view)
+      sb.from("grupos_por_invite").select("nombre, zona, miembros_count, invite_code")
+        .eq("invite_code", code.toUpperCase()).maybeSingle()
+        .then(({ data }) => { if (data) setJoinBanner(data); });
+    }
+  }, []);
+
+  // Auto-join cuando ya hay sesión + rol familia/institucion + código pendiente
+  useEffect(() => {
+    const code = getPendingJoinCode();
+    if (!code || !session || !profile?.role) return;
+    if (profile.role === "pyme") {
+      // pymes no pertenecen a grupos
+      setPendingJoinCode("");
+      return;
+    }
+    (async () => {
+      const { data, error } = await joinGrupoByCode(code);
+      if (error) {
+        console.warn("join error:", error.message);
+        alert("No pudimos sumarte al grupo: " + error.message);
+        setPendingJoinCode("");
+        return;
+      }
+      const result = Array.isArray(data) ? data[0] : data;
+      if (result?.grupo_id) {
+        setActiveGrupo(result.grupo_id);
+        setPendingJoinCode("");
+        clearJoinFromUrl();
+        if (!result.ya_era_miembro) alert(`Te sumaste a "${result.nombre}" 🎉`);
+      }
+    })();
+  }, [session, profile?.role]);
 
   useEffect(() => {
     sb.auth.getSession().then(async ({ data }) => {
@@ -312,7 +382,7 @@ function AuthGate() {
   }, []);
 
   if (loading) return <SplashScreen />;
-  if (!session) return <LoginScreen />;
+  if (!session) return <LoginScreen joinBanner={joinBanner} />;
   if (!profile?.role) return <OnboardingRolScreen profile={profile} session={session} onDone={() => refetchProfile(session)} />;
   return <AppRoot session={session} profile={profile} onProfileChange={() => refetchProfile(session)} />;
 }
@@ -327,7 +397,7 @@ function SplashScreen() {
 }
 
 /* ===================== LOGIN ===================== */
-function LoginScreen() {
+function LoginScreen({ joinBanner }) {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [error, setError] = useState(null);
@@ -336,12 +406,26 @@ function LoginScreen() {
   const onSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true); setError(null);
+    // Preservar ?join= en el redirect
+    const code = getPendingJoinCode();
+    const redirect = window.location.origin + window.location.pathname + (code ? `?join=${code}` : "");
     const { error } = await sb.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: window.location.origin + window.location.pathname }
+      options: { emailRedirectTo: redirect }
     });
     setSubmitting(false);
     if (error) setError(error.message); else setSent(true);
+  };
+
+  const onGoogle = async () => {
+    setError(null);
+    const code = getPendingJoinCode();
+    const redirect = window.location.origin + window.location.pathname + (code ? `?join=${code}` : "");
+    const { error } = await sb.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: redirect }
+    });
+    if (error) setError(error.message);
   };
 
   return (
@@ -379,36 +463,64 @@ function LoginScreen() {
 
       {/* Login card */}
       <div className="flex-1 flex items-start justify-center px-6 pt-8 pb-12">
-        <div className="w-full max-w-sm bg-white rounded-3xl border-[1.5px] border-[var(--ink)] p-7 anim-in" style={{boxShadow: "6px 6px 0 var(--ink)"}}>
-          {sent ? (
-            <div className="text-center py-3">
-              <div className="text-5xl mb-3">📬</div>
-              <p className="font-display font-bold text-2xl">Te mandamos un link</p>
-              <p className="text-sm text-[var(--ink)]/70 mt-2">a <span className="font-mono">{email}</span></p>
-              <p className="text-xs text-[var(--ink)]/60 mt-5">Abrí tu casilla (revisá spam) y hacé click para entrar.</p>
-              <button onClick={() => { setSent(false); setEmail(""); }} className="text-xs text-[var(--coral)] underline mt-5 font-semibold">Usar otro email</button>
+        <div className="w-full max-w-sm space-y-4 anim-in">
+          {/* Banner de invitación */}
+          {joinBanner && (
+            <div className="bg-[var(--sun)] rounded-2xl border-[1.5px] border-[var(--ink)] p-4" style={{boxShadow: "4px 4px 0 var(--ink)"}}>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/70">Invitación al grupo</div>
+              <div className="font-display font-black text-xl mt-1">{joinBanner.nombre}</div>
+              <div className="text-xs text-[var(--ink)]/70 mt-0.5">📍 {joinBanner.zona} · {joinBanner.miembros_count} miembro{joinBanner.miembros_count === 1 ? "" : "s"}</div>
+              <div className="text-xs text-[var(--ink)]/80 mt-2 font-semibold">Entrá y te sumamos automático ↓</div>
             </div>
-          ) : (
-            <>
-              <h2 className="font-display font-bold text-2xl">Entrá con tu email</h2>
-              <p className="text-sm text-[var(--ink)]/60 mt-1">Te mandamos un link mágico, sin contraseñas.</p>
-              <form onSubmit={onSubmit} className="space-y-3 mt-5">
-                <input
-                  type="email" required value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="tu@email.com"
-                  className="w-full px-4 py-3.5 rounded-xl border-[1.5px] border-[var(--ink)] bg-[var(--cream)] focus:bg-white focus:outline-none text-[15px] font-medium"
-                />
-                <button
-                  type="submit" disabled={submitting || !email}
-                  className="btn-pop w-full py-3.5 bg-[var(--coral)] text-white font-extrabold rounded-xl border-[1.5px] border-[var(--ink)] uppercase tracking-wider text-sm disabled:opacity-50"
-                >
-                  {submitting ? "Enviando…" : "Recibir link mágico →"}
-                </button>
-                {error && <p className="text-xs text-rose-700 bg-rose-50 rounded-lg p-2 text-center font-semibold">{error}</p>}
-              </form>
-            </>
           )}
+
+          <div className="bg-white rounded-3xl border-[1.5px] border-[var(--ink)] p-7" style={{boxShadow: "6px 6px 0 var(--ink)"}}>
+            {sent ? (
+              <div className="text-center py-3">
+                <div className="text-5xl mb-3">📬</div>
+                <p className="font-display font-bold text-2xl">Te mandamos un link</p>
+                <p className="text-sm text-[var(--ink)]/70 mt-2">a <span className="font-mono">{email}</span></p>
+                <p className="text-xs text-[var(--ink)]/60 mt-5">Abrí tu casilla (revisá spam) y hacé click para entrar.</p>
+                <button onClick={() => { setSent(false); setEmail(""); }} className="text-xs text-[var(--coral)] underline mt-5 font-semibold">Usar otro email</button>
+              </div>
+            ) : (
+              <>
+                <h2 className="font-display font-bold text-2xl">{joinBanner ? "Entrá para sumarte" : "Entrá a MaPaPis"}</h2>
+                <p className="text-sm text-[var(--ink)]/60 mt-1">Sin contraseñas. Elegí cómo entrar.</p>
+
+                {/* Google OAuth */}
+                <button
+                  onClick={onGoogle}
+                  className="btn-pop w-full mt-5 py-3 bg-white text-[var(--ink)] font-extrabold rounded-xl border-[1.5px] border-[var(--ink)] uppercase tracking-wider text-xs flex items-center justify-center gap-2.5"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34.5 6.1 29.5 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15 19 12 24 12c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34.5 6.1 29.5 4 24 4 16.3 4 9.7 8.4 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.3 0 10.1-2 13.7-5.3l-6.3-5.3c-2 1.4-4.6 2.3-7.4 2.3-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.2 4.3-4.1 5.7l6.3 5.3C40.7 36 44 30.5 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
+                  Entrar con Google
+                </button>
+
+                <div className="flex items-center gap-2 my-4">
+                  <div className="flex-1 h-px bg-[var(--ink)]/20"></div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/50">o por email</span>
+                  <div className="flex-1 h-px bg-[var(--ink)]/20"></div>
+                </div>
+
+                <form onSubmit={onSubmit} className="space-y-3">
+                  <input
+                    type="email" required value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="tu@email.com"
+                    className="w-full px-4 py-3.5 rounded-xl border-[1.5px] border-[var(--ink)] bg-[var(--cream)] focus:bg-white focus:outline-none text-[15px] font-medium"
+                  />
+                  <button
+                    type="submit" disabled={submitting || !email}
+                    className="btn-pop w-full py-3.5 bg-[var(--coral)] text-white font-extrabold rounded-xl uppercase tracking-wider text-sm disabled:opacity-50"
+                  >
+                    {submitting ? "Enviando…" : "Recibir link mágico →"}
+                  </button>
+                  {error && <p className="text-xs text-rose-700 bg-rose-50 rounded-lg p-2 text-center font-semibold">{error}</p>}
+                </form>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -478,9 +590,18 @@ function OnboardingRolScreen({ profile, session, onDone }) {
 function AppRoot({ session, profile, onProfileChange }) {
   const [screen, setScreen] = useState("feed");
   const [selected, setSelected] = useState(null);
+  const [activeGrupoId, setActiveGrupoIdState] = useState(getActiveGrupo() || null);
 
   const goDetalle = (n) => { setSelected(n); setScreen("detalle"); };
   const goBack = () => { setSelected(null); setScreen("feed"); };
+  const onChangeGrupo = (id) => { setActiveGrupo(id || ""); setActiveGrupoIdState(id || null); };
+  const goToScreen = (s) => {
+    if (s === "grupo") {
+      const stored = getActiveGrupo();
+      if (stored && stored !== activeGrupoId) setActiveGrupoIdState(stored);
+    }
+    setScreen(s);
+  };
 
   const isPyme = profile.role === "pyme";
 
@@ -491,10 +612,11 @@ function AppRoot({ session, profile, onProfileChange }) {
           ? <FeedPymeScreen profile={profile} onOpen={goDetalle} />
           : <FeedFamiliaScreen profile={profile} onOpen={goDetalle} />)}
         {screen === "publicar" && <PublicarScreen profile={profile} onCancel={goBack} onPublicado={goBack} />}
+        {screen === "grupo" && <GrupoScreen profile={profile} grupoId={activeGrupoId} onChangeGrupo={onChangeGrupo} />}
         {screen === "detalle" && <DetalleScreen necesidad={selected} profile={profile} onBack={goBack} />}
         {screen === "perfil" && <PerfilScreen profile={profile} onProfileChange={onProfileChange} />}
 
-        <BottomNav screen={screen} setScreen={setScreen} isPyme={isPyme} />
+        <BottomNav screen={screen} setScreen={goToScreen} isPyme={isPyme} />
       </div>
     </div>
   );
@@ -506,6 +628,7 @@ function BottomNav({ screen, setScreen, isPyme }) {
       <div className="w-full max-w-md px-4 pb-3 pointer-events-auto">
         <div className="bg-[var(--ink)] text-white rounded-3xl px-3 py-2.5 flex items-center justify-around" style={{boxShadow: "4px 4px 0 var(--coral)"}}>
           <NavBtn IconCmp={IconHome} label="Feed" active={screen === "feed"} onClick={() => setScreen("feed")} />
+          {!isPyme && <NavBtn IconCmp={IconUsers} label="Grupo" active={screen === "grupo"} onClick={() => { setScreen("grupo"); }} />}
           {!isPyme && (
             <button
               onClick={() => setScreen("publicar")}
@@ -858,6 +981,389 @@ function Field({ label, children }) {
       <span className="block text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/60 mb-1.5">{label}</span>
       {children}
     </label>
+  );
+}
+
+/* ===================== CREAR GRUPO ===================== */
+function CrearGrupoScreen({ profile, onCreated, onCancel }) {
+  const [nombre, setNombre] = useState("");
+  const [zona, setZona] = useState(ZONAS[0]);
+  const [tipo, setTipo] = useState("aula");
+  const [rango, setRango] = useState(RANGOS_FAMILIAS[0]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const onSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true); setError(null);
+    const { data, error } = await sb.from("grupos").insert({
+      nombre, zona, tipo, rango_familias: rango, creado_por: profile.id
+    }).select().single();
+    setSaving(false);
+    if (error) { setError(error.message); return; }
+    setActiveGrupo(data.id);
+    onCreated(data);
+  };
+
+  const tipos = [
+    { v: "aula", label: "Aula / sala", desc: "Sala amarilla, 3°B…" },
+    { v: "curso", label: "Curso completo", desc: "5° año entero" },
+    { v: "comision", label: "Comisión", desc: "Evento, viaje, fiesta" }
+  ];
+
+  return (
+    <div className="px-5 pt-8 anim-in pb-8">
+      <button onClick={onCancel} className="text-xs font-bold uppercase tracking-wider text-[var(--ink)]/60 mb-4 flex items-center gap-1">
+        <IconArrowLeft className="w-3.5 h-3.5" /> Volver
+      </button>
+      <h1 className="font-display font-black text-4xl leading-none">Crear <span className="font-display-italic">grupo</span></h1>
+      <p className="text-sm text-[var(--ink)]/70 mt-3 mb-5">
+        Vas a quedar como <span className="font-bold">creador</span>. Después invitás a los demás con un link de WhatsApp.
+      </p>
+
+      <form onSubmit={onSubmit} className="space-y-4">
+        <Field label="Nombre del grupo">
+          <input value={nombre} onChange={(e) => setNombre(e.target.value)} required minLength={3} maxLength={60}
+            placeholder="Sala Amarilla — Jardín Los Olivos"
+            className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-medium focus:outline-none" />
+        </Field>
+
+        <Field label="Tipo">
+          <div className="grid grid-cols-3 gap-2">
+            {tipos.map(t => (
+              <button type="button" key={t.v} onClick={() => setTipo(t.v)}
+                className={`p-3 rounded-xl border-[1.5px] text-left ${tipo === t.v ? "border-[var(--ink)] bg-[var(--sun)]" : "border-[var(--ink)]/30 bg-white"}`}>
+                <div className="font-display font-bold text-sm">{t.label}</div>
+                <div className="text-[10px] text-[var(--ink)]/60 mt-0.5">{t.desc}</div>
+              </button>
+            ))}
+          </div>
+        </Field>
+
+        <Field label="Zona">
+          <select value={zona} onChange={(e) => setZona(e.target.value)}
+            className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-medium focus:outline-none">
+            {ZONAS.map(z => <option key={z}>{z}</option>)}
+          </select>
+        </Field>
+
+        <Field label="Tamaño aproximado">
+          <select value={rango} onChange={(e) => setRango(e.target.value)}
+            className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-medium focus:outline-none">
+            {RANGOS_FAMILIAS.map(r => <option key={r}>{r}</option>)}
+          </select>
+        </Field>
+
+        {error && <p className="text-xs text-rose-700 bg-rose-50 rounded-lg p-2 text-center font-semibold">{error}</p>}
+
+        <button type="submit" disabled={saving || !nombre}
+          className="btn-pop w-full py-3.5 bg-[var(--coral)] text-white font-extrabold rounded-xl uppercase tracking-wider text-sm disabled:opacity-50">
+          {saving ? "Creando…" : "Crear grupo →"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+/* ===================== UNIRSE POR CÓDIGO MANUAL ===================== */
+function UnirsePorCodigoScreen({ profile, onJoined, onCancel }) {
+  const [code, setCode] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+
+  const onSubmit = async (e) => {
+    e.preventDefault();
+    setSubmitting(true); setError(null);
+    const { data, error } = await joinGrupoByCode(code.trim());
+    setSubmitting(false);
+    if (error) { setError(error.message); return; }
+    const result = Array.isArray(data) ? data[0] : data;
+    if (result?.grupo_id) {
+      setActiveGrupo(result.grupo_id);
+      onJoined(result);
+    }
+  };
+
+  return (
+    <div className="px-5 pt-8 anim-in">
+      <button onClick={onCancel} className="text-xs font-bold uppercase tracking-wider text-[var(--ink)]/60 mb-4 flex items-center gap-1">
+        <IconArrowLeft className="w-3.5 h-3.5" /> Volver
+      </button>
+      <h1 className="font-display font-black text-4xl leading-none">Pegá el <span className="font-display-italic">código</span></h1>
+      <p className="text-sm text-[var(--ink)]/70 mt-3 mb-5">El que te compartió tu grupo te pasó un link o un código de 8 letras.</p>
+
+      <form onSubmit={onSubmit} className="space-y-4">
+        <input
+          value={code} onChange={(e) => setCode(e.target.value.toUpperCase())}
+          required maxLength={8} pattern="[A-Z0-9]{8}"
+          placeholder="ABC123XY"
+          className="w-full px-4 py-4 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-2xl font-mono font-bold tracking-[0.3em] text-center uppercase focus:outline-none" />
+        {error && <p className="text-xs text-rose-700 bg-rose-50 rounded-lg p-2 text-center font-semibold">{error}</p>}
+        <button type="submit" disabled={submitting || code.length < 8}
+          className="btn-pop w-full py-3.5 bg-[var(--coral)] text-white font-extrabold rounded-xl uppercase tracking-wider text-sm disabled:opacity-50">
+          {submitting ? "Sumándote…" : "Sumarme →"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+/* ===================== MI GRUPO (gestión + invite link) ===================== */
+function GrupoScreen({ profile, grupoId, onChangeGrupo }) {
+  const [grupo, setGrupo] = useState(null);
+  const [miembros, setMiembros] = useState([]);
+  const [misGrupos, setMisGrupos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
+  const [view, setView] = useState("home"); // 'home' | 'crear' | 'unirse'
+
+  const fetchAll = async () => {
+    setLoading(true);
+    // Mis grupos (todos donde soy miembro)
+    const { data: mgs } = await sb.from("grupo_miembros")
+      .select("rol_en_grupo, grupos(id, nombre, zona, tipo, invite_code, creado_por)")
+      .eq("profile_id", profile.id);
+    const grupos = (mgs || []).map(m => ({ ...m.grupos, miRol: m.rol_en_grupo })).filter(Boolean);
+    setMisGrupos(grupos);
+
+    if (grupoId) {
+      const g = grupos.find(x => x.id === grupoId);
+      setGrupo(g || null);
+      if (g) {
+        const { data: mbs } = await sb.from("grupo_miembros")
+          .select("profile_id, rol_en_grupo, profiles(id, nombre, email)")
+          .eq("grupo_id", grupoId);
+        setMiembros(mbs || []);
+      }
+    } else {
+      setGrupo(null);
+      setMiembros([]);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchAll(); /* eslint-disable-next-line */ }, [grupoId]);
+
+  const onCopyLink = async () => {
+    if (!grupo) return;
+    const ok = await copyToClipboard(buildInviteUrl(grupo.invite_code));
+    if (ok) { setCopied(true); setTimeout(() => setCopied(false), 2000); }
+  };
+
+  const onShareWhatsApp = () => {
+    if (!grupo) return;
+    const url = buildInviteUrl(grupo.invite_code);
+    const msg = `Te invito a sumarte a "${grupo.nombre}" en MaPaPis. Coordinamos compras del grupo: ${url}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
+  };
+
+  const onPromote = async (targetId) => {
+    if (!confirm("¿Promover a admin? Va a poder gestionar el grupo y publicar necesidades.")) return;
+    const { error } = await sb.rpc("promote_to_admin", { p_grupo: grupo.id, p_target: targetId });
+    if (error) return alert(error.message);
+    fetchAll();
+  };
+
+  const onDemote = async (targetId) => {
+    const { error } = await sb.rpc("demote_admin", { p_grupo: grupo.id, p_target: targetId });
+    if (error) return alert(error.message);
+    fetchAll();
+  };
+
+  const onKick = async (targetId, nombre) => {
+    if (!confirm(`¿Eliminar a ${nombre || "este miembro"} del grupo?`)) return;
+    const { error } = await sb.rpc("kick_miembro", { p_grupo: grupo.id, p_target: targetId });
+    if (error) return alert(error.message);
+    fetchAll();
+  };
+
+  const onLeave = async () => {
+    if (!confirm(`¿Salir de "${grupo.nombre}"?`)) return;
+    const { error } = await sb.rpc("leave_grupo", { p_grupo: grupo.id });
+    if (error) return alert(error.message);
+    setActiveGrupo("");
+    onChangeGrupo(null);
+  };
+
+  const onRegenerate = async () => {
+    if (!confirm("¿Generar un código nuevo? El link anterior dejará de funcionar.")) return;
+    const { data, error } = await sb.rpc("regenerate_invite_code", { p_grupo: grupo.id });
+    if (error) return alert(error.message);
+    fetchAll();
+  };
+
+  const onSwitch = (gid) => { setActiveGrupo(gid); onChangeGrupo(gid); };
+
+  if (view === "crear") return <CrearGrupoScreen profile={profile} onCancel={() => setView("home")} onCreated={(g) => { onChangeGrupo(g.id); setView("home"); }} />;
+  if (view === "unirse") return <UnirsePorCodigoScreen profile={profile} onCancel={() => setView("home")} onJoined={(r) => { onChangeGrupo(r.grupo_id); setView("home"); }} />;
+
+  if (loading) {
+    return <div className="px-5 pt-12 text-center text-sm text-[var(--ink)]/60">Cargando…</div>;
+  }
+
+  // Sin grupo activo y sin grupos: empty state
+  if (!grupo && misGrupos.length === 0) {
+    return (
+      <div className="px-5 pt-8 anim-in">
+        <h1 className="font-display font-black text-4xl leading-none">Tu <span className="font-display-italic">grupo</span></h1>
+        <div className="bg-white rounded-3xl border-[1.5px] border-[var(--ink)] p-6 mt-6" style={{boxShadow: "4px 4px 0 var(--ink)"}}>
+          <div className="text-5xl mb-3">👋</div>
+          <h2 className="font-display font-bold text-2xl">Aún no estás en un grupo</h2>
+          <p className="text-sm text-[var(--ink)]/70 mt-2">Creá uno para tu sala/aula, o sumate a uno existente con el código que te pasaron.</p>
+          <div className="space-y-2 mt-5">
+            <button onClick={() => setView("crear")}
+              className="btn-pop w-full py-3 bg-[var(--coral)] text-white font-extrabold rounded-xl uppercase tracking-wider text-xs">
+              Crear grupo
+            </button>
+            <button onClick={() => setView("unirse")}
+              className="btn-pop w-full py-3 bg-white text-[var(--ink)] font-extrabold rounded-xl uppercase tracking-wider text-xs">
+              Tengo un código
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Tiene grupos pero ninguno seleccionado
+  if (!grupo) {
+    return (
+      <div className="px-5 pt-8 anim-in">
+        <h1 className="font-display font-black text-4xl leading-none">Mis <span className="font-display-italic">grupos</span></h1>
+        <div className="space-y-2 mt-5">
+          {misGrupos.map(g => (
+            <button key={g.id} onClick={() => onSwitch(g.id)}
+              className="w-full bg-white rounded-2xl border-[1.5px] border-[var(--ink)] p-4 text-left card-hover">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-display font-bold text-lg">{g.nombre}</div>
+                  <div className="text-xs text-[var(--ink)]/60">📍 {g.zona} · {g.tipo}</div>
+                </div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--coral)]">{g.miRol}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+        <div className="grid grid-cols-2 gap-2 mt-5">
+          <button onClick={() => setView("crear")} className="btn-pop py-3 bg-[var(--ink)] text-white font-extrabold rounded-xl uppercase tracking-wider text-xs">+ Crear</button>
+          <button onClick={() => setView("unirse")} className="btn-pop py-3 bg-white text-[var(--ink)] font-extrabold rounded-xl uppercase tracking-wider text-xs">Pegar código</button>
+        </div>
+      </div>
+    );
+  }
+
+  const miMembership = miembros.find(m => m.profile_id === profile.id);
+  const miRol = miMembership?.rol_en_grupo || "miembro";
+  const soyAdmin = miRol === "creador" || miRol === "admin";
+  const soyCreador = miRol === "creador";
+
+  return (
+    <div className="px-5 pt-8 anim-in">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h1 className="font-display font-black text-3xl leading-tight">{grupo.nombre}</h1>
+          <div className="text-xs text-[var(--ink)]/60 mt-1">📍 {grupo.zona} · {grupo.tipo} · {miembros.length} miembro{miembros.length === 1 ? "" : "s"}</div>
+        </div>
+        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-full" style={{
+          background: soyCreador ? "var(--sun)" : (soyAdmin ? "var(--violet)" : "var(--mist)"),
+          color: soyAdmin && !soyCreador ? "white" : "var(--ink)"
+        }}>
+          {miRol}
+        </span>
+      </div>
+
+      <div className="squiggle my-5"></div>
+
+      {/* Invite link card */}
+      <div className="bg-[var(--ink)] text-white rounded-3xl p-5" style={{boxShadow: "4px 4px 0 var(--coral)"}}>
+        <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--sun)] mb-2 flex items-center gap-1.5">
+          <IconLink className="w-3.5 h-3.5" /> Invitá al grupo
+        </div>
+        <div className="font-mono font-black text-2xl tracking-[0.2em]">{grupo.invite_code}</div>
+        <div className="text-[11px] text-white/60 mt-1 break-all">{buildInviteUrl(grupo.invite_code)}</div>
+        <div className="grid grid-cols-2 gap-2 mt-4">
+          <button onClick={onCopyLink}
+            className="py-2.5 bg-white text-[var(--ink)] font-extrabold rounded-xl uppercase tracking-wider text-xs flex items-center justify-center gap-1.5">
+            <IconCopy className="w-3.5 h-3.5" /> {copied ? "Copiado!" : "Copiar"}
+          </button>
+          <button onClick={onShareWhatsApp}
+            className="py-2.5 bg-[var(--sage)] text-white font-extrabold rounded-xl uppercase tracking-wider text-xs flex items-center justify-center gap-1.5">
+            <IconShare className="w-3.5 h-3.5" /> WhatsApp
+          </button>
+        </div>
+        {soyCreador && (
+          <button onClick={onRegenerate} className="mt-3 text-[10px] font-bold uppercase tracking-wider text-[var(--sun)] flex items-center gap-1">
+            <IconRefresh className="w-3 h-3" /> Regenerar código
+          </button>
+        )}
+      </div>
+
+      {/* Lista de miembros */}
+      <h2 className="font-display font-bold text-xl mt-6 mb-3">Miembros</h2>
+      <div className="space-y-2">
+        {miembros.map(m => {
+          const esYo = m.profile_id === profile.id;
+          const targetEsCreador = m.rol_en_grupo === "creador";
+          const targetEsAdmin = m.rol_en_grupo === "admin";
+          const puedoPromote = soyCreador && !esYo && !targetEsCreador && !targetEsAdmin;
+          const puedoDemote = soyCreador && !esYo && targetEsAdmin;
+          const puedoKick = soyAdmin && !esYo && !targetEsCreador && !(targetEsAdmin && !soyCreador);
+          const initial = (m.profiles?.nombre || m.profiles?.email || "?")[0]?.toUpperCase();
+          return (
+            <div key={m.profile_id} className="bg-white rounded-2xl border-[1.5px] border-[var(--ink)] p-3 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-[var(--mist)] flex items-center justify-center font-display font-black">{initial}</div>
+              <div className="flex-1 min-w-0">
+                <div className="font-bold text-sm truncate flex items-center gap-1.5">
+                  {m.profiles?.nombre || m.profiles?.email?.split("@")[0]}
+                  {esYo && <span className="text-[9px] font-bold uppercase tracking-wider text-[var(--ink)]/50">(yo)</span>}
+                  {targetEsCreador && <IconCrown className="w-3.5 h-3.5 text-[var(--sun)]" />}
+                </div>
+                <div className="text-[10px] text-[var(--ink)]/50 uppercase tracking-wider font-semibold">{m.rol_en_grupo}</div>
+              </div>
+              <div className="flex items-center gap-1">
+                {puedoPromote && (
+                  <button onClick={() => onPromote(m.profile_id)} title="Promover a admin"
+                    className="text-[10px] font-bold uppercase tracking-wider text-[var(--violet)] px-2 py-1.5 rounded-lg bg-[var(--violet)]/10">
+                    + Admin
+                  </button>
+                )}
+                {puedoDemote && (
+                  <button onClick={() => onDemote(m.profile_id)} title="Quitar admin"
+                    className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/60 px-2 py-1.5 rounded-lg bg-[var(--mist)]">
+                    Quitar admin
+                  </button>
+                )}
+                {puedoKick && (
+                  <button onClick={() => onKick(m.profile_id, m.profiles?.nombre)} title="Eliminar"
+                    className="p-1.5 rounded-lg text-rose-700 hover:bg-rose-50">
+                    <IconTrash className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Acciones bottom */}
+      <div className="mt-6 space-y-2">
+        {misGrupos.length > 1 && (
+          <button onClick={() => onChangeGrupo(null)}
+            className="w-full py-2.5 text-xs font-bold uppercase tracking-wider text-[var(--ink)]/70">
+            Ver todos mis grupos
+          </button>
+        )}
+        {!soyCreador && (
+          <button onClick={onLeave}
+            className="w-full py-2.5 text-xs font-bold uppercase tracking-wider text-rose-700">
+            Salir del grupo
+          </button>
+        )}
+      </div>
+
+      <div className="h-12"></div>
+    </div>
   );
 }
 
