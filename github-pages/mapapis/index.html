@@ -201,6 +201,25 @@ async function cerrarInscripcion(necesidadId) {
 async function reabrirInscripcion(necesidadId) {
   return await sb.rpc("reabrir_inscripcion", { p_necesidad: necesidadId });
 }
+async function actualizarPyme({ nombre, descripcion, telefono, zonas }) {
+  return await sb.rpc("actualizar_pyme", {
+    p_nombre: nombre,
+    p_descripcion: descripcion || null,
+    p_telefono: telefono || null,
+    p_zonas: Array.isArray(zonas) ? zonas : null,
+  });
+}
+async function crearOferta({ necesidadId, precioCentavos, tiempoDias, descripcion }) {
+  return await sb.rpc("crear_oferta", {
+    p_necesidad: necesidadId,
+    p_precio_centavos: precioCentavos,
+    p_tiempo_dias: tiempoDias,
+    p_descripcion: descripcion,
+  });
+}
+async function adjudicarOferta(ofertaId) {
+  return await sb.rpc("adjudicar_oferta", { p_oferta: ofertaId });
+}
 
 /* ===================== ICONS (inline SVG) ===================== */
 const Icon = ({ d, className = "w-5 h-5", stroke = 2 }) => (
@@ -406,7 +425,93 @@ function AuthGate() {
   if (loading) return <SplashScreen />;
   if (!session) return <LoginScreen joinBanner={joinBanner} />;
   if (!profile?.role) return <OnboardingRolScreen profile={profile} session={session} onDone={() => refetchProfile(session)} />;
+  if (profile.role === "pyme") {
+    return <PymeProfileGate profile={profile} session={session} onProfileChange={() => refetchProfile(session)} />;
+  }
   return <AppRoot session={session} profile={profile} onProfileChange={() => refetchProfile(session)} />;
+}
+
+function PymeProfileGate({ profile, session, onProfileChange }) {
+  const [pymeRow, setPymeRow] = useState(undefined); // undefined = loading, null = no existe
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const { data } = await sb.from("pymes").select("*").eq("profile_id", profile.id).maybeSingle();
+      if (!alive) return;
+      setPymeRow(data || null);
+    })();
+    return () => { alive = false; };
+  }, [profile.id, reloadKey]);
+
+  if (pymeRow === undefined) return <SplashScreen />;
+  if (!pymeRow) return <PymeOnboardingScreen profile={profile} onDone={() => setReloadKey(k => k + 1)} />;
+  return <AppRoot session={session} profile={profile} pyme={pymeRow} onProfileChange={onProfileChange} />;
+}
+
+function PymeOnboardingScreen({ profile, onDone }) {
+  const [nombre, setNombre] = useState("");
+  const [descripcion, setDescripcion] = useState("");
+  const [telefono, setTelefono] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError(null);
+    if (nombre.trim().length < 2) { setError("El nombre comercial es obligatorio."); return; }
+    setSubmitting(true);
+    const { error: err } = await actualizarPyme({
+      nombre: nombre.trim(),
+      descripcion: descripcion.trim() || null,
+      telefono: telefono.trim() || null,
+    });
+    setSubmitting(false);
+    if (err) { setError(err.message); return; }
+    onDone();
+  };
+
+  return (
+    <div className="min-h-screen bg-[var(--cream)] bg-dots">
+      <div className="px-6 pt-12 pb-6 max-w-md mx-auto anim-in">
+        <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-[0.2em] text-[var(--sage)]">
+          <span className="inline-block w-6 h-[2px] bg-[var(--sage)]"></span>
+          <span>Pyme · Onboarding</span>
+        </div>
+        <h1 className="font-display font-black text-4xl leading-tight tracking-tight mt-4">
+          Contanos de tu negocio
+        </h1>
+        <p className="text-[15px] text-[var(--ink)]/70 mt-3">
+          Las familias ven este nombre cuando ofertás. Podés ajustarlo después desde tu perfil.
+        </p>
+      </div>
+      <div className="px-6 pb-16 max-w-md mx-auto">
+        <form onSubmit={submit} className="bg-white rounded-3xl border-[1.5px] border-[var(--ink)] p-6 space-y-4" style={{boxShadow: "4px 4px 0 var(--ink)"}}>
+          {error && <div className="p-2 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700">{error}</div>}
+          <Field label="Nombre comercial *">
+            <input type="text" required minLength={2} maxLength={80} value={nombre} onChange={(e) => setNombre(e.target.value)}
+              placeholder="Ej: Imprenta Olivos / Catering Sabor Sur"
+              className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-medium focus:outline-none" />
+          </Field>
+          <Field label="Descripción (opcional)">
+            <textarea maxLength={600} rows={3} value={descripcion} onChange={(e) => setDescripcion(e.target.value)}
+              placeholder="Qué ofrecés, especialidad, años en el rubro, etc."
+              className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] resize-none focus:outline-none" />
+          </Field>
+          <Field label="Teléfono / WhatsApp (opcional)">
+            <input type="tel" maxLength={30} value={telefono} onChange={(e) => setTelefono(e.target.value)}
+              placeholder="+54 9 11 ..."
+              className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-mono focus:outline-none" />
+          </Field>
+          <button type="submit" disabled={submitting}
+            className="btn-pop w-full py-3.5 bg-[var(--ink)] text-[var(--sun)] font-extrabold rounded-xl border-[1.5px] border-[var(--ink)] uppercase tracking-wider text-sm disabled:opacity-50">
+            {submitting ? "Guardando…" : "Empezar a ofertar →"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
 }
 
 function SplashScreen() {
@@ -925,7 +1030,7 @@ function DetalleScreen({ necesidad: n, profile, onBack }) {
     setLoading(true);
     try {
       const ofertasReq = sb.from("ofertas")
-        .select("*, profiles!ofertas_pyme_id_fkey(nombre, email)")
+        .select("*, profiles!ofertas_pyme_id_fkey(nombre, email, pymes(nombre_comercial, descripcion, telefono, tier))")
         .eq("necesidad_id", n.id)
         .order("created_at", { ascending: true });
 
@@ -1171,12 +1276,15 @@ function DetalleScreen({ necesidad: n, profile, onBack }) {
         <PymeOfertaPanel necesidad={n} profile={profile} ofertas={ofertas} loading={loading} onChanged={fetchData} />
       ) : (
         <FamiliaOfertasPanel
+          necesidad={n}
           ofertas={ofertas}
           loading={loading}
           misAlumnos={misAlumnos}
           misVotos={misVotos}
           onVote={onVote}
           onUnvote={onUnvote}
+          esAdminGrupo={esAdminGrupo}
+          onChanged={fetchData}
         />
       )}
 
@@ -1199,11 +1307,10 @@ function PymeOfertaPanel({ necesidad: n, profile, ofertas, loading, onChanged })
     e.preventDefault();
     setEnviando(true); setErr(null);
     if (desc.trim().length < 10) { setErr("La descripción debe tener al menos 10 caracteres."); setEnviando(false); return; }
-    const { error } = await sb.from("ofertas").insert({
-      necesidad_id: n.id,
-      pyme_id: profile.id,
-      precio_total_centavos: Number(precio),
-      tiempo_entrega_dias: dias ? Number(dias) : null,
+    const { error } = await crearOferta({
+      necesidadId: n.id,
+      precioCentavos: Number(precio),
+      tiempoDias: dias ? Number(dias) : null,
       descripcion: desc.trim(),
     });
     setEnviando(false);
@@ -1277,10 +1384,11 @@ function PymeOfertaPanel({ necesidad: n, profile, ofertas, loading, onChanged })
 }
 
 /* ===================== Familia: lista de ofertas + voto ===================== */
-function FamiliaOfertasPanel({ ofertas, loading, misAlumnos, misVotos, onVote, onUnvote }) {
+function FamiliaOfertasPanel({ necesidad: n, ofertas, loading, misAlumnos, misVotos, onVote, onUnvote, esAdminGrupo, onChanged }) {
   if (loading) {
     return <div className="px-5 mt-6 text-sm text-[var(--ink)]/60">Cargando ofertas…</div>;
   }
+  const adjudicada = n?.estado === "adjudicada" || ofertas.some(o => o.estado === "ganadora");
   return (
     <div className="px-5 mt-6">
       <h2 className="font-display font-bold text-xl mb-3">
@@ -1293,7 +1401,17 @@ function FamiliaOfertasPanel({ ofertas, loading, misAlumnos, misVotos, onVote, o
       ) : (
         <div className="space-y-3">
           {ofertas.map(o => (
-            <OfertaCard key={o.id} o={o} misAlumnos={misAlumnos} misVotos={misVotos} onVote={onVote} onUnvote={onUnvote} />
+            <OfertaCard key={o.id}
+              o={o}
+              necesidad={n}
+              misAlumnos={misAlumnos}
+              misVotos={misVotos}
+              onVote={onVote}
+              onUnvote={onUnvote}
+              esAdminGrupo={esAdminGrupo}
+              adjudicada={adjudicada}
+              onChanged={onChanged}
+            />
           ))}
         </div>
       )}
@@ -1301,17 +1419,45 @@ function FamiliaOfertasPanel({ ofertas, loading, misAlumnos, misVotos, onVote, o
   );
 }
 
-function OfertaCard({ o, misAlumnos, misVotos, onVote, onUnvote }) {
-  const pymeNombre = o.profiles?.nombre || (o.profiles?.email ? o.profiles.email.split("@")[0] : "Pyme");
+function OfertaCard({ o, necesidad: n, misAlumnos, misVotos, onVote, onUnvote, esAdminGrupo, adjudicada, onChanged }) {
+  const pyme = o.profiles?.pymes;
+  const pymeNombre = pyme?.nombre_comercial
+    || o.profiles?.nombre
+    || (o.profiles?.email ? o.profiles.email.split("@")[0] : "Pyme");
   const monto = Number(o.precio_total_centavos);
   const dias = o.tiempo_entrega_dias;
+  const esGanadora = o.estado === "ganadora";
+  const esDescartada = o.estado === "descartada";
+  const [adjudicandoBusy, setAdjudicandoBusy] = useState(false);
+
+  const onAdjudicar = async () => {
+    if (!confirm(`Adjudicar a "${pymeNombre}" por ${fmt(monto)}? Las demás ofertas quedan descartadas.`)) return;
+    setAdjudicandoBusy(true);
+    const { error } = await adjudicarOferta(o.id);
+    setAdjudicandoBusy(false);
+    if (error) { alert("Error: " + error.message); return; }
+    onChanged && onChanged();
+  };
+
   return (
-    <div className="bg-white rounded-3xl border-[1.5px] border-[var(--ink)] p-4" style={{boxShadow: "3px 3px 0 var(--ink)"}}>
+    <div className={`rounded-3xl border-[1.5px] p-4 transition ${
+      esGanadora ? "bg-[var(--sage)]/15 border-[var(--sage)]"
+      : esDescartada ? "bg-white border-[var(--ink)]/15 opacity-60"
+      : "bg-white border-[var(--ink)]"
+    }`} style={{boxShadow: esDescartada ? "none" : "3px 3px 0 var(--ink)"}}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <h3 className="font-display font-bold text-lg">{pymeNombre}</h3>
-          {o.estado && o.estado !== "presentada" && (
-            <span className="text-[10px] uppercase tracking-wider font-bold text-[var(--ink)]/55">{o.estado}</span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="font-display font-bold text-lg">{pymeNombre}</h3>
+            {esGanadora && (
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[var(--sage)] text-white">Ganadora</span>
+            )}
+            {esDescartada && (
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/55">Descartada</span>
+            )}
+          </div>
+          {pyme?.descripcion && (
+            <p className="text-[11px] text-[var(--ink)]/55 mt-0.5 line-clamp-1">{pyme.descripcion}</p>
           )}
         </div>
         <div className="text-right shrink-0">
@@ -1321,7 +1467,13 @@ function OfertaCard({ o, misAlumnos, misVotos, onVote, onUnvote }) {
       </div>
       <p className="text-sm text-[var(--ink)]/75 mt-3 whitespace-pre-wrap">{o.descripcion}</p>
 
-      {misAlumnos && misAlumnos.length > 0 && (
+      {esGanadora && pyme?.telefono && (
+        <a href={`tel:${pyme.telefono}`} className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--sage)] underline">
+          📞 {pyme.telefono}
+        </a>
+      )}
+
+      {!adjudicada && misAlumnos && misAlumnos.length > 0 && (
         <div className="mt-3 pt-3 border-t border-[var(--ink)]/10">
           <div className="text-[10px] uppercase tracking-wider font-bold text-[var(--ink)]/55 mb-2">Tu voto</div>
           <div className="flex flex-wrap gap-2">
@@ -1336,6 +1488,15 @@ function OfertaCard({ o, misAlumnos, misVotos, onVote, onUnvote }) {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {!adjudicada && esAdminGrupo && (
+        <div className="mt-3 pt-3 border-t border-[var(--ink)]/10">
+          <button onClick={onAdjudicar} disabled={adjudicandoBusy}
+            className="w-full py-2.5 rounded-xl bg-[var(--ink)] text-[var(--sun)] text-xs font-bold uppercase tracking-wider disabled:opacity-50">
+            {adjudicandoBusy ? "Adjudicando..." : "Adjudicar a esta pyme"}
+          </button>
         </div>
       )}
     </div>
