@@ -12,10 +12,8 @@
 -- =========================================================================
 
 -- ─────────────────────────────────────────────────────────────────────────
--- 1. Extensiones y helpers
+-- 1. Helpers (gen_random_uuid es nativo en Postgres 13+, no necesita pgcrypto)
 -- ─────────────────────────────────────────────────────────────────────────
-
-create extension if not exists "pgcrypto";
 
 -- Helper: rol del usuario actual (evita join a profiles en cada RLS check)
 create or replace function public.user_role()
@@ -29,17 +27,22 @@ as $$
 $$;
 
 -- Helper: ¿soy miembro del grupo X?
+-- (plpgsql para que la referencia a grupo_miembros se valide lazy, no a create-time)
 create or replace function public.is_grupo_miembro(p_grupo uuid)
 returns boolean
-language sql
+language plpgsql
 stable
 security definer
 set search_path = public
 as $$
+declare v_existe boolean;
+begin
   select exists (
     select 1 from public.grupo_miembros
     where grupo_id = p_grupo and profile_id = auth.uid()
-  );
+  ) into v_existe;
+  return v_existe;
+end;
 $$;
 
 -- Que cualquier usuario logueado pueda ejecutar las funciones helper

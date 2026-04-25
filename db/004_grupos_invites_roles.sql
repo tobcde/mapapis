@@ -325,17 +325,21 @@ grant execute on function public.regenerate_invite_code(uuid) to authenticated;
 
 create or replace function public.is_grupo_admin(p_grupo uuid)
 returns boolean
-language sql
+language plpgsql
 stable
 security definer
 set search_path = public
 as $$
+declare v_es boolean;
+begin
   select exists (
     select 1 from public.grupo_miembros
     where grupo_id = p_grupo
       and profile_id = auth.uid()
       and rol_en_grupo in ('creador', 'admin')
-  );
+  ) into v_es;
+  return v_es;
+end;
 $$;
 
 grant execute on function public.is_grupo_admin(uuid) to authenticated;
