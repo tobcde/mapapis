@@ -1107,6 +1107,7 @@ function AppRoot({ session, profile, onProfileChange }) {
         {screen === "feed" && (isPyme
           ? <FeedPymeScreen profile={profile} onOpen={goDetalle} />
           : <FeedFamiliaScreen profile={profile} onOpen={goDetalle} />)}
+        {screen === "mis-ofertas" && isPyme && <MisOfertasScreen profile={profile} onOpen={goDetalle} />}
         {screen === "publicar" && <PublicarScreen profile={profile} grupoId={activeGrupoId} onChangeGrupo={onChangeGrupo} onCancel={goBack} onPublicado={goBack} />}
         {screen === "grupo" && <GrupoScreen profile={profile} grupoId={activeGrupoId} onChangeGrupo={onChangeGrupo} onBack={() => setScreen("feed")} />}
         {screen === "detalle" && <DetalleScreen necesidad={selected} profile={profile} onBack={goBack} />}
@@ -1153,7 +1154,7 @@ function BottomNav({ screen, setScreen, isPyme }) {
               <IconPlus className="w-7 h-7 text-white" stroke={2.5} />
             </button>
           )}
-          {isPyme && <NavBtn IconCmp={IconBolt} label="Mis ofertas" active={false} onClick={async () => { await showAlert("Próximamente: tus ofertas presentadas"); }} />}
+          {isPyme && <NavBtn IconCmp={IconBolt} label="Mis ofertas" active={screen === "mis-ofertas"} onClick={() => setScreen("mis-ofertas")} />}
           <NavBtn IconCmp={IconUser} label="Perfil" active={screen === "perfil"} onClick={() => setScreen("perfil")} />
         </div>
       </div>
@@ -1309,6 +1310,125 @@ function FilterChip({ active, onClick, label }) {
   return (
     <button onClick={onClick} className={`px-4 py-2 rounded-full border-[1.5px] border-[var(--ink)] text-xs font-bold whitespace-nowrap ${active ? 'bg-[var(--ink)] text-[var(--sun)]' : 'bg-white text-[var(--ink)]'}`}>
       {label}
+    </button>
+  );
+}
+
+/* ===================== MIS OFERTAS — Pyme ===================== */
+function MisOfertasScreen({ profile, onOpen }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState("activas");
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    (async () => {
+      const { data, error } = await sb
+        .from("ofertas")
+        .select("id, estado, precio_total_centavos, tiempo_entrega_dias, descripcion, created_at, necesidad:necesidades(id, titulo, zona, estado, modalidad, fecha_limite, ofertas_count, creador_tipo, foto_url, categorias(nombre))")
+        .eq("pyme_id", profile.id)
+        .order("created_at", { ascending: false });
+      if (!alive) return;
+      if (error) { console.error("[MisOfertas] fetch:", error); setItems([]); }
+      else setItems(data || []);
+      setLoading(false);
+    })();
+    return () => { alive = false; };
+  }, [profile.id]);
+
+  const clasificar = (o) => {
+    const ne = o.necesidad?.estado;
+    if (o.estado === "ganadora") {
+      if (ne === "cumplida") return "ganadas";
+      return "ganadas";
+    }
+    if (o.estado === "retirada") return "perdidas";
+    if (o.estado === "descartada") return "perdidas";
+    if (ne === "cancelada") return "perdidas";
+    if (ne === "adjudicada" || ne === "en_curso" || ne === "cumplida") return "perdidas";
+    return "activas";
+  };
+
+  const grupos = { activas: [], ganadas: [], perdidas: [] };
+  items.forEach(o => grupos[clasificar(o)].push(o));
+
+  const TABS = [
+    { key: "activas", label: "Activas", color: "var(--sun)" },
+    { key: "ganadas", label: "Ganadas", color: "var(--sage)" },
+    { key: "perdidas", label: "Perdidas", color: "var(--ink)" },
+  ];
+
+  const visibles = grupos[tab];
+
+  return (
+    <div className="px-5 pt-8 anim-in">
+      <div className="flex items-start justify-between mb-6">
+        <div>
+          <p className="text-xs uppercase font-bold tracking-[0.2em] text-[var(--sage)]">Hola, {profile.nombre || profile.email.split("@")[0]}</p>
+          <h1 className="font-display font-black text-[44px] leading-[0.95] mt-2">
+            Mis <span className="font-display-italic">ofertas</span>
+          </h1>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 mb-5">
+        {TABS.map(t => (
+          <button key={t.key} onClick={() => setTab(t.key)}
+            className={`bg-white rounded-2xl border-[1.5px] border-[var(--ink)] p-3 flex flex-col items-start ${tab === t.key ? 'ring-2 ring-[var(--ink)]' : ''}`}
+            style={{boxShadow: "3px 3px 0 var(--ink)"}}>
+            <span className="font-display font-black text-3xl leading-none" style={{color: t.color}}>{grupos[t.key].length}</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/70 mt-1">{t.label}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="squiggle mb-5"></div>
+
+      <div className="space-y-3">
+        {loading ? (
+          <div className="text-center text-sm text-[var(--ink)]/60 py-8">Cargando…</div>
+        ) : visibles.length === 0 ? (
+          <div className="bg-white rounded-2xl border-[1.5px] border-dashed border-[var(--ink)]/30 p-8 text-center">
+            <p className="text-sm text-[var(--ink)]/70">
+              {tab === "activas" && "No tenés ofertas activas. Mirá el feed para presentar."}
+              {tab === "ganadas" && "Todavía no ganaste ninguna. ¡Suerte con las activas!"}
+              {tab === "perdidas" && "Sin ofertas perdidas. ✨"}
+            </p>
+          </div>
+        ) : (
+          visibles.map(o => <MiOfertaCard key={o.id} oferta={o} onClick={() => o.necesidad && onOpen(normalizeNecesidad(o.necesidad))} />)
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MiOfertaCard({ oferta, onClick }) {
+  const n = oferta.necesidad;
+  if (!n) return null;
+  const est = ESTADO_LABEL[n.estado] || { txt: n.estado, bg: "bg-slate-200", fg: "text-[var(--ink)]" };
+  const ganada = oferta.estado === "ganadora";
+  const perdida = oferta.estado === "descartada" || (n.estado === "adjudicada" && oferta.estado === "presentada") || (n.estado === "cancelada");
+  const accent = ganada ? "var(--sage)" : perdida ? "var(--ink)" : "var(--sun)";
+  const tag = ganada ? "🏆 Ganaste" : perdida ? "Pasaron" : "Esperando";
+  return (
+    <button onClick={onClick} className="card-hover block w-full text-left bg-white rounded-3xl border-[1.5px] border-[var(--ink)] overflow-hidden" style={{boxShadow: "3px 3px 0 var(--ink)"}}>
+      <div className={`px-4 py-1.5 ${est.bg} ${est.fg} text-[10px] font-bold uppercase tracking-wider flex items-center justify-between`}>
+        <span>{est.txt}</span>
+        <span style={{color: accent === "var(--sun)" ? "var(--ink)" : undefined}}>{tag}</span>
+      </div>
+      <div className="p-4">
+        <p className="text-[10px] uppercase tracking-wider font-bold text-[var(--ink)]/50">{n.categorias?.nombre || "—"} · {n.zona}</p>
+        <h3 className="font-display font-bold text-lg mt-1 leading-tight">{n.titulo}</h3>
+        <div className="mt-3 flex items-baseline justify-between gap-3">
+          <span className="font-mono font-extrabold text-xl">{fmt(Number(oferta.precio_total_centavos))}</span>
+          {oferta.tiempo_entrega_dias && (
+            <span className="text-[10px] uppercase tracking-wider font-bold text-[var(--ink)]/60">{oferta.tiempo_entrega_dias} días</span>
+          )}
+        </div>
+        <p className="text-xs text-[var(--ink)]/70 mt-2 line-clamp-2">{oferta.descripcion}</p>
+      </div>
     </button>
   );
 }
