@@ -630,6 +630,9 @@ function AuthGate() {
   if (loading) return <SplashScreen />;
   if (!session) return <LoginScreen joinBanner={joinBanner} />;
   if (!profile?.role) return <OnboardingRolScreen profile={profile} session={session} onDone={() => refetchProfile(session)} />;
+  if (profile.role === "admin") {
+    return <FounderApp profile={profile} session={session} onProfileChange={() => refetchProfile(session)} />;
+  }
   if (profile.role === "pyme") {
     return <PymeProfileGate profile={profile} session={session} onProfileChange={() => refetchProfile(session)} />;
   }
@@ -1107,6 +1110,266 @@ function OnboardingRolScreen({ profile, session, onDone }) {
         </div>
         {error && <p className="text-xs text-rose-700 bg-rose-50 rounded-lg p-3 text-center font-semibold mt-4">{error}</p>}
       </div>
+    </div>
+  );
+}
+
+/* ===================== FOUNDER APP — admin only ===================== */
+function FounderApp({ profile, session, onProfileChange }) {
+  const [tab, setTab] = useState("stats");
+  return (
+    <div className="min-h-screen flex justify-center bg-[var(--cream)]" data-role="admin">
+      <div className="w-full max-w-3xl flex flex-col min-h-screen relative pb-24">
+        <div className="px-5 pt-8">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-xs uppercase font-bold tracking-[0.2em] text-[var(--ink)]/60">Founder · Admin</p>
+              <h1 className="font-display font-black text-3xl leading-tight mt-1">Panel interno</h1>
+            </div>
+            <button onClick={async () => { await sb.auth.signOut(); }}
+              className="px-3 py-1.5 rounded-lg border-[1.5px] border-[var(--ink)]/30 text-xs font-bold uppercase tracking-wider">
+              Salir
+            </button>
+          </div>
+
+          <div className="flex gap-2 mb-5 overflow-x-auto no-scrollbar">
+            <FounderTab active={tab === "stats"} onClick={() => setTab("stats")} label="Stats" />
+            <FounderTab active={tab === "pymes"} onClick={() => setTab("pymes")} label="Pymes" />
+            <FounderTab active={tab === "necesidades"} onClick={() => setTab("necesidades")} label="Necesidades" />
+          </div>
+
+          {tab === "stats" && <FounderStats />}
+          {tab === "pymes" && <FounderPymes />}
+          {tab === "necesidades" && <FounderNecesidades />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FounderTab({ active, onClick, label }) {
+  return (
+    <button onClick={onClick}
+      className={`px-4 py-2 rounded-full border-[1.5px] border-[var(--ink)] text-xs font-bold whitespace-nowrap ${active ? 'bg-[var(--ink)] text-[var(--sun)]' : 'bg-white text-[var(--ink)]'}`}>
+      {label}
+    </button>
+  );
+}
+
+function FounderStats() {
+  const [stats, setStats] = useState(null);
+  const [err, setErr] = useState(null);
+  useEffect(() => {
+    (async () => {
+      const { data, error } = await sb.rpc("admin_stats");
+      if (error) { setErr(error.message); return; }
+      setStats(Array.isArray(data) ? data[0] : data);
+    })();
+  }, []);
+  if (err) return <div className="text-sm text-rose-700">{err}</div>;
+  if (!stats) return <div className="text-sm text-[var(--ink)]/60">Cargando…</div>;
+
+  const Box = ({ num, label, color = "var(--ink)" }) => (
+    <div className="bg-white rounded-2xl border-[1.5px] border-[var(--ink)] p-4" style={{boxShadow: "3px 3px 0 var(--ink)"}}>
+      <div className="font-display font-black text-3xl leading-none" style={{color}}>{num ?? 0}</div>
+      <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/70 mt-2">{label}</div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="font-display font-bold text-lg mb-2">Personas</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <Box num={stats.total_profiles} label="Profiles" />
+          <Box num={stats.total_grupos} label="Grupos" />
+          <Box num={stats.total_alumnos} label="Alumnos" />
+          <Box num={stats.total_pymes} label="Pymes" color="var(--sage)" />
+        </div>
+      </div>
+      <div>
+        <h2 className="font-display font-bold text-lg mb-2">Pymes por tier</h2>
+        <div className="grid grid-cols-3 gap-2">
+          <Box num={stats.pymes_tier_0} label="Tier 0 (nuevas)" />
+          <Box num={stats.pymes_tier_1plus} label="Tier 1+" color="var(--sage)" />
+          <Box num={stats.pymes_suspendidas} label="Suspendidas" color="var(--coral)" />
+        </div>
+      </div>
+      <div>
+        <h2 className="font-display font-bold text-lg mb-2">Marketplace</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <Box num={stats.necesidades_activas} label="Activas" color="var(--coral)" />
+          <Box num={stats.necesidades_recibiendo_ofertas} label="Recibiendo ofertas" color="var(--sun)" />
+          <Box num={stats.necesidades_en_votacion} label="En votación" color="var(--violet)" />
+          <Box num={stats.necesidades_cumplidas} label="Cumplidas" color="var(--sage)" />
+        </div>
+        <div className="grid grid-cols-2 gap-2 mt-2">
+          <Box num={stats.total_ofertas} label="Ofertas totales" />
+          <Box num={stats.total_reviews} label="Reviews" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const TIER_OPTIONS = [
+  { v: 0, label: "0 · Nueva", color: "bg-slate-100 text-slate-700" },
+  { v: 1, label: "1 · Verificada", color: "bg-sky-100 text-sky-700" },
+  { v: 2, label: "2 · Confiable", color: "bg-emerald-100 text-emerald-700" },
+  { v: 3, label: "3 · Premium", color: "bg-amber-100 text-amber-800" },
+];
+
+function FounderPymes() {
+  const [items, setItems] = useState(null);
+  const [err, setErr] = useState(null);
+  const [busy, setBusy] = useState(null);
+  const [filtroEstado, setFiltroEstado] = useState("todas");
+  const { showAlert, showConfirm } = useDialog();
+
+  const cargar = async () => {
+    const { data, error } = await sb.rpc("admin_pymes_lista");
+    if (error) { setErr(error.message); return; }
+    setItems(data || []);
+  };
+  useEffect(() => { cargar(); }, []);
+
+  const setTier = async (profile_id, tier) => {
+    setBusy(profile_id);
+    const { error } = await sb.rpc("admin_set_pyme_tier", { p_profile: profile_id, p_tier: tier });
+    setBusy(null);
+    if (error) { await showAlert("Error: " + error.message); return; }
+    cargar();
+  };
+  const setEstado = async (profile_id, nombre, estado) => {
+    let motivo = null;
+    if (estado === "suspendida") {
+      const ok = await showConfirm(`¿Suspender a "${nombre}"?`);
+      if (!ok) return;
+      motivo = "Suspendida desde panel admin";
+    }
+    setBusy(profile_id);
+    const { error } = await sb.rpc("admin_set_pyme_estado", { p_profile: profile_id, p_estado: estado, p_motivo: motivo });
+    setBusy(null);
+    if (error) { await showAlert("Error: " + error.message); return; }
+    cargar();
+  };
+
+  if (err) return <div className="text-sm text-rose-700">{err}</div>;
+  if (!items) return <div className="text-sm text-[var(--ink)]/60">Cargando…</div>;
+
+  const filtered = filtroEstado === "todas" ? items : items.filter(p => p.estado === filtroEstado);
+
+  return (
+    <div>
+      <div className="flex gap-2 mb-3 overflow-x-auto no-scrollbar">
+        <FounderTab active={filtroEstado === "todas"} onClick={() => setFiltroEstado("todas")} label={`Todas (${items.length})`} />
+        <FounderTab active={filtroEstado === "activa"} onClick={() => setFiltroEstado("activa")} label={`Activas (${items.filter(i=>i.estado==='activa').length})`} />
+        <FounderTab active={filtroEstado === "pendiente_revision"} onClick={() => setFiltroEstado("pendiente_revision")} label={`Pendientes (${items.filter(i=>i.estado==='pendiente_revision').length})`} />
+        <FounderTab active={filtroEstado === "suspendida"} onClick={() => setFiltroEstado("suspendida")} label={`Suspendidas (${items.filter(i=>i.estado==='suspendida').length})`} />
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="bg-white rounded-2xl border-[1.5px] border-dashed border-[var(--ink)]/30 p-6 text-center text-sm text-[var(--ink)]/60">
+          Nada en este filtro.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map(p => {
+            const tierInfo = TIER_OPTIONS.find(t => t.v === p.tier) || TIER_OPTIONS[0];
+            const isBusy = busy === p.profile_id;
+            return (
+              <div key={p.profile_id} className="bg-white rounded-2xl border-[1.5px] border-[var(--ink)]/15 p-3" style={{boxShadow: "2px 2px 0 var(--ink)"}}>
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-display font-bold text-base">{p.nombre_comercial}</span>
+                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${tierInfo.color}`}>{tierInfo.label}</span>
+                      {p.estado !== "activa" && (
+                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">{p.estado}</span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-[var(--ink)]/60 mt-0.5">
+                      {p.email}{p.cuit ? ` · CUIT ${p.cuit}` : ""}{p.telefono ? ` · ${p.telefono}` : ""}
+                    </div>
+                    <div className="text-[11px] text-[var(--ink)]/60 mt-0.5">
+                      {p.ofertas_total || 0} oferta{p.ofertas_total === 1 ? "" : "s"} · {p.ofertas_ganadas || 0} ganada{p.ofertas_ganadas === 1 ? "" : "s"}
+                      {p.rating_count > 0 && ` · ⭐ ${Number(p.rating_promedio).toFixed(1)} (${p.rating_count})`}
+                      {p.zonas?.length > 0 && ` · ${p.zonas.join(", ")}`}
+                    </div>
+                    {(p.web_url || p.instagram || p.facebook) && (
+                      <div className="text-[11px] mt-1 flex gap-2 flex-wrap">
+                        {p.web_url && <a href={p.web_url} target="_blank" rel="noopener noreferrer" className="text-[var(--violet)] underline">web</a>}
+                        {p.instagram && <a href={p.instagram} target="_blank" rel="noopener noreferrer" className="text-[var(--violet)] underline">IG</a>}
+                        {p.facebook && <a href={p.facebook} target="_blank" rel="noopener noreferrer" className="text-[var(--violet)] underline">FB</a>}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-2 shrink-0 items-end">
+                    <select disabled={isBusy} value={p.tier} onChange={(e) => setTier(p.profile_id, parseInt(e.target.value, 10))}
+                      className="text-xs border-[1.5px] border-[var(--ink)]/30 rounded-lg px-2 py-1 bg-white">
+                      {TIER_OPTIONS.map(t => <option key={t.v} value={t.v}>{t.label}</option>)}
+                    </select>
+                    {p.estado === "activa" ? (
+                      <button disabled={isBusy} onClick={() => setEstado(p.profile_id, p.nombre_comercial, "suspendida")}
+                        className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 border border-rose-200">
+                        Suspender
+                      </button>
+                    ) : (
+                      <button disabled={isBusy} onClick={() => setEstado(p.profile_id, p.nombre_comercial, "activa")}
+                        className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg bg-[var(--sage)]/15 text-[var(--sage)] border border-[var(--sage)]">
+                        Reactivar
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FounderNecesidades() {
+  const [items, setItems] = useState(null);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      const { data, error } = await sb.rpc("admin_necesidades_lista");
+      if (error) { setErr(error.message); return; }
+      setItems(data || []);
+    })();
+  }, []);
+
+  if (err) return <div className="text-sm text-rose-700">{err}</div>;
+  if (!items) return <div className="text-sm text-[var(--ink)]/60">Cargando…</div>;
+  if (items.length === 0) return <div className="bg-white rounded-2xl border-[1.5px] border-dashed border-[var(--ink)]/30 p-6 text-center text-sm text-[var(--ink)]/60">Sin necesidades aún.</div>;
+
+  return (
+    <div className="space-y-2">
+      {items.map(n => {
+        const est = ESTADO_LABEL[n.estado] || { txt: n.estado, bg: "bg-slate-200", fg: "text-[var(--ink)]" };
+        const trabada = n.estado === "recibiendo_ofertas" && n.dias_desde_creacion >= 3 && n.ofertas_count === 0;
+        return (
+          <div key={n.id} className={`bg-white rounded-2xl border-[1.5px] ${trabada ? "border-[var(--coral)]" : "border-[var(--ink)]/15"} p-3`} style={{boxShadow: "2px 2px 0 var(--ink)"}}>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`px-2 py-0.5 ${est.bg} ${est.fg} text-[10px] font-bold uppercase tracking-wider rounded-full`}>{est.txt}</span>
+                  {trabada && <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[var(--coral)] text-white">⚠ trabada</span>}
+                  <span className="font-display font-bold text-base">{n.titulo}</span>
+                </div>
+                <div className="text-[11px] text-[var(--ink)]/60 mt-0.5">
+                  {n.zona} · {n.modalidad} · {n.grupo_nombre || "—"} · {n.ofertas_count} oferta{n.ofertas_count === 1 ? "" : "s"} · creada hace {n.dias_desde_creacion} día{n.dias_desde_creacion === 1 ? "" : "s"}
+                </div>
+                <div className="text-[10px] text-[var(--ink)]/50 mt-0.5">{n.creador_email}</div>
+              </div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
