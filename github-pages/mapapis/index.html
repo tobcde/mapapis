@@ -307,6 +307,23 @@ async function fetchContactoPyme(necesidadId) {
 async function fetchContactoAdminGrupo(necesidadId) {
   return await sb.rpc("contacto_admin_grupo", { p_necesidad: necesidadId });
 }
+async function crearReviewPyme({ necesidadId, estrellas, comentario = null }) {
+  return await sb.rpc("crear_review_pyme", { p_necesidad: necesidadId, p_estrellas: estrellas, p_comentario: comentario });
+}
+async function fetchMiReviewNecesidad(necesidadId) {
+  return await sb.rpc("mi_review_necesidad", { p_necesidad: necesidadId });
+}
+async function fetchReviewsNecesidad(necesidadId) {
+  return await sb.from("reviews_pyme")
+    .select("id, autor_id, estrellas, comentario, created_at, profiles!reviews_pyme_autor_id_fkey(nombre)")
+    .eq("necesidad_id", necesidadId)
+    .order("created_at", { ascending: false });
+}
+async function fetchPymeRating(pymeId) {
+  return await sb.from("pymes_rating_summary")
+    .select("total_reviews, promedio")
+    .eq("pyme_id", pymeId).maybeSingle();
+}
 
 /* ===================== ICONS (inline SVG) ===================== */
 const Icon = ({ d, className = "w-5 h-5", stroke = 2 }) => (
@@ -1799,6 +1816,11 @@ function DetalleScreen({ necesidad: necProp, profile, onBack }) {
         />
       )}
 
+      {/* Reviews: solo cuando ya esta cumplida */}
+      {n.estado === "cumplida" && (
+        <ReviewPanel necesidad={n} profile={profile} ofertas={ofertas} />
+      )}
+
       {/* Sección rol */}
       {isPyme ? (
         <PymeOfertaPanel necesidad={n} profile={profile} ofertas={ofertas} loading={loading} onChanged={fetchData} />
@@ -2086,6 +2108,139 @@ function PagosPanel({ necesidad: n, profile, ofertas, misAlumnos, inscripciones,
   );
 }
 
+/* ===================== Reviews post-cumplida ===================== */
+function StarRating({ value, onChange, size = "lg", interactive = true }) {
+  const dim = size === "sm" ? "w-4 h-4" : size === "md" ? "w-5 h-5" : "w-7 h-7";
+  return (
+    <div className="flex items-center gap-1">
+      {[1,2,3,4,5].map(i => (
+        <button
+          key={i}
+          type="button"
+          disabled={!interactive}
+          onClick={() => interactive && onChange?.(i)}
+          className={`${interactive ? "hover:scale-110" : ""} transition-transform`}
+          aria-label={`${i} estrella${i === 1 ? "" : "s"}`}
+        >
+          <svg viewBox="0 0 24 24" className={dim} fill={i <= value ? "var(--sun)" : "none"} stroke="var(--ink)" strokeWidth={1.8} strokeLinejoin="round">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+          </svg>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ReviewPanel({ necesidad: n, profile, ofertas }) {
+  const isPyme = profile.role === "pyme";
+  const ganadora = ofertas.find(o => o.estado === "ganadora");
+  const esPymeGanadora = isPyme && ganadora?.pyme_id === profile.id;
+  const puedeCalificar = !isPyme;
+
+  const [miReview, setMiReview] = useState(undefined);
+  const [estrellas, setEstrellas] = useState(0);
+  const [comentario, setComentario] = useState("");
+  const [todas, setTodas] = useState([]);
+  const [enviando, setEnviando] = useState(false);
+  const [err, setErr] = useState(null);
+  const [okMsg, setOkMsg] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (puedeCalificar) {
+        const { data } = await fetchMiReviewNecesidad(n.id);
+        if (!alive) return;
+        const row = Array.isArray(data) ? data[0] : data;
+        setMiReview(row || null);
+        if (row) { setEstrellas(row.estrellas); setComentario(row.comentario || ""); }
+      } else {
+        setMiReview(null);
+      }
+      const { data: rs } = await fetchReviewsNecesidad(n.id);
+      if (!alive) return;
+      setTodas(rs || []);
+    })();
+    return () => { alive = false; };
+  }, [n.id, puedeCalificar]);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (estrellas < 1) { setErr("Elegí entre 1 y 5 estrellas."); return; }
+    setEnviando(true); setErr(null); setOkMsg(null);
+    const { data, error } = await crearReviewPyme({
+      necesidadId: n.id,
+      estrellas,
+      comentario: comentario.trim() || null,
+    });
+    setEnviando(false);
+    if (error) { setErr(error.message); return; }
+    setMiReview(data);
+    setOkMsg(miReview ? "Review actualizada ✓" : "¡Gracias por tu review!");
+    const { data: rs } = await fetchReviewsNecesidad(n.id);
+    setTodas(rs || []);
+  };
+
+  if (!ganadora) return null;
+
+  return (
+    <div className="px-5 mt-6">
+      <h2 className="font-display font-bold text-xl mb-3">
+        {esPymeGanadora ? "Reviews recibidas" : "Calificá a la pyme"}
+      </h2>
+
+      {/* Form solo para familias/instituciones */}
+      {puedeCalificar && (
+        <form onSubmit={submit} className="bg-white rounded-3xl border-[1.5px] border-[var(--ink)] p-5 space-y-4" style={{boxShadow: "3px 3px 0 var(--ink)"}}>
+          {err && <div className="p-2 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700">{err}</div>}
+          {okMsg && <div className="p-2 rounded-lg bg-[var(--sage)]/15 border border-[var(--sage)] text-xs text-[var(--sage)] font-bold">{okMsg}</div>}
+
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/60">¿Cómo te fue?</label>
+            <div className="mt-2"><StarRating value={estrellas} onChange={setEstrellas} /></div>
+          </div>
+
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/60">Comentario (opcional)</label>
+            <textarea maxLength={500} rows={3} value={comentario} onChange={(e) => setComentario(e.target.value)}
+              placeholder="Calidad, puntualidad, cómo te trataron…"
+              className="mt-2 w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[14px] focus:outline-none resize-none" />
+          </div>
+
+          <button type="submit" disabled={enviando || estrellas < 1}
+            className="btn-pop w-full py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-[var(--ink)] text-[var(--sun)] text-xs font-bold uppercase tracking-wider disabled:opacity-50">
+            {enviando ? "Enviando…" : miReview ? "Actualizar review" : "Enviar review"}
+          </button>
+        </form>
+      )}
+
+      {/* Lista de reviews (todos la ven) */}
+      {todas.length > 0 && (
+        <div className="mt-4 space-y-2">
+          <h3 className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/60">
+            {todas.length} review{todas.length === 1 ? "" : "s"} de este pedido
+          </h3>
+          {todas.map(r => (
+            <div key={r.id} className="bg-white rounded-2xl border-[1.5px] border-[var(--ink)]/15 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold text-[var(--ink)]/70">{r.profiles?.nombre || "Familia"}</span>
+                <StarRating value={r.estrellas} interactive={false} size="sm" />
+              </div>
+              {r.comentario && <p className="text-sm text-[var(--ink)]/85 mt-1.5 whitespace-pre-wrap">{r.comentario}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {esPymeGanadora && todas.length === 0 && (
+        <div className="bg-white rounded-2xl border-[1.5px] border-dashed border-[var(--ink)]/30 p-5 text-center text-sm text-[var(--ink)]/60">
+          Todavía no hay reviews. Cuando las familias califiquen, aparecen acá.
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ===================== Pyme: presentar oferta ===================== */
 function PymeOfertaPanel({ necesidad: n, profile, ofertas, loading, onChanged }) {
   const miOferta = ofertas.find(o => o.pyme_id === profile.id);
@@ -2178,6 +2333,22 @@ function PymeOfertaPanel({ necesidad: n, profile, ofertas, loading, onChanged })
 
 /* ===================== Familia: lista de ofertas + voto ===================== */
 function FamiliaOfertasPanel({ necesidad: n, ofertas, loading, misAlumnos, misVotos, onVote, onUnvote, esAdminGrupo, onChanged }) {
+  const [ratings, setRatings] = useState({});
+  useEffect(() => {
+    let alive = true;
+    if (!ofertas || ofertas.length === 0) { setRatings({}); return; }
+    const ids = [...new Set(ofertas.map(o => o.pyme_id).filter(Boolean))];
+    if (ids.length === 0) return;
+    sb.from("pymes_rating_summary").select("pyme_id, total_reviews, promedio").in("pyme_id", ids)
+      .then(({ data }) => {
+        if (!alive || !data) return;
+        const map = {};
+        data.forEach(r => { map[r.pyme_id] = r; });
+        setRatings(map);
+      });
+    return () => { alive = false; };
+  }, [ofertas?.map(o => o.id).join(",")]);
+
   if (loading) {
     return <div className="px-5 mt-6 text-sm text-[var(--ink)]/60">Cargando ofertas…</div>;
   }
@@ -2204,6 +2375,7 @@ function FamiliaOfertasPanel({ necesidad: n, ofertas, loading, misAlumnos, misVo
               esAdminGrupo={esAdminGrupo}
               adjudicada={adjudicada}
               onChanged={onChanged}
+              rating={ratings[o.pyme_id]}
             />
           ))}
         </div>
@@ -2212,7 +2384,7 @@ function FamiliaOfertasPanel({ necesidad: n, ofertas, loading, misAlumnos, misVo
   );
 }
 
-function OfertaCard({ o, necesidad: n, misAlumnos, misVotos, onVote, onUnvote, esAdminGrupo, adjudicada, onChanged }) {
+function OfertaCard({ o, necesidad: n, misAlumnos, misVotos, onVote, onUnvote, esAdminGrupo, adjudicada, onChanged, rating }) {
   const pyme = o.profiles?.pymes;
   const pymeNombre = pyme?.nombre_comercial
     || o.profiles?.nombre
@@ -2252,6 +2424,15 @@ function OfertaCard({ o, necesidad: n, misAlumnos, misVotos, onVote, onUnvote, e
           </div>
           {pyme?.descripcion && (
             <p className="text-[11px] text-[var(--ink)]/55 mt-0.5 line-clamp-1">{pyme.descripcion}</p>
+          )}
+          {rating && rating.total_reviews > 0 && (
+            <div className="flex items-center gap-1 mt-1">
+              <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="var(--sun)" stroke="var(--ink)" strokeWidth={1.5}>
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              </svg>
+              <span className="text-[11px] font-bold">{Number(rating.promedio).toFixed(1)}</span>
+              <span className="text-[10px] text-[var(--ink)]/55">({rating.total_reviews})</span>
+            </div>
           )}
         </div>
         <div className="text-right shrink-0">
