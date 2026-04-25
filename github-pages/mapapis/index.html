@@ -240,6 +240,29 @@ const NECESIDADES_MOCK = [];
 
 const OFERTAS_MOCK = {};
 
+// DB row -> shape que usan NecesidadCard / DetalleScreen (compat con mocks viejos).
+function normalizeNecesidad(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    titulo: row.titulo,
+    descripcion: row.descripcion,
+    categoria: row.categoria_nombre || row.categorias?.nombre || row.categoria || "—",
+    categoria_id: row.categoria_id,
+    tipo: row.tipo || "compra",
+    zona: row.zona,
+    rango: row.rango_familias || row.grupos?.rango_familias || "",
+    presupuesto_min: row.presupuesto_min_centavos != null ? Number(row.presupuesto_min_centavos) : (row.presupuesto_min || 0),
+    presupuesto_max: row.presupuesto_max_centavos != null ? Number(row.presupuesto_max_centavos) : (row.presupuesto_max || 0),
+    estado: row.estado,
+    ofertas: row.ofertas_count ?? row.ofertas ?? 0,
+    creador_tipo: row.creador_tipo,
+    fecha_limite: row.fecha_limite,
+    grupo_id: row.grupo_id,
+    grupo_nombre: row.grupos?.nombre,
+  };
+}
+
 const ESTADO_LABEL = {
   recibiendo_ofertas: { txt: "Recibiendo ofertas", bg: "bg-[var(--sun)]", fg: "text-[var(--ink)]" },
   en_votacion: { txt: "En votación", bg: "bg-[var(--violet)]", fg: "text-white" },
@@ -576,7 +599,7 @@ function AppRoot({ session, profile, onProfileChange }) {
         {screen === "feed" && (isPyme
           ? <FeedPymeScreen profile={profile} onOpen={goDetalle} />
           : <FeedFamiliaScreen profile={profile} onOpen={goDetalle} />)}
-        {screen === "publicar" && <PublicarScreen profile={profile} onCancel={goBack} onPublicado={goBack} />}
+        {screen === "publicar" && <PublicarScreen profile={profile} grupoId={activeGrupoId} onCancel={goBack} onPublicado={goBack} />}
         {screen === "grupo" && <GrupoScreen profile={profile} grupoId={activeGrupoId} onChangeGrupo={onChangeGrupo} />}
         {screen === "detalle" && <DetalleScreen necesidad={selected} profile={profile} onBack={goBack} />}
         {screen === "perfil" && <PerfilScreen profile={profile} onProfileChange={onProfileChange} />}
@@ -622,10 +645,24 @@ function NavBtn({ IconCmp, label, active, onClick }) {
 
 /* ===================== FEED — Familia / Institución ===================== */
 function FeedFamiliaScreen({ profile, onOpen }) {
-  const necesidades = NECESIDADES_MOCK;
-  const activas = necesidades.filter(n => n.estado !== "cumplida").length;
+  const [necesidades, setNecesidades] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchAll = async () => {
+    setLoading(true);
+    // RLS ya filtra a las necesidades de mis grupos
+    const { data, error } = await sb
+      .from("necesidades")
+      .select("*, categorias(nombre, slug), grupos(nombre, rango_familias)")
+      .order("created_at", { ascending: false });
+    if (!error && data) setNecesidades(data.map(normalizeNecesidad));
+    setLoading(false);
+  };
+  useEffect(() => { fetchAll(); }, []);
+
+  const activas = necesidades.filter(n => !["completada", "cumplida", "cancelada"].includes(n.estado)).length;
   const enVotacion = necesidades.filter(n => n.estado === "en_votacion").length;
-  const totalOfertas = necesidades.reduce((a, n) => a + n.ofertas, 0);
+  const totalOfertas = necesidades.reduce((a, n) => a + (n.ofertas || 0), 0);
 
   return (
     <div className="px-5 pt-8 anim-in">
@@ -650,7 +687,9 @@ function FeedFamiliaScreen({ profile, onOpen }) {
 
       {/* Lista */}
       <div className="space-y-3">
-        {necesidades.length === 0 ? (
+        {loading ? (
+          <div className="text-center text-sm text-[var(--ink)]/60 py-8">Cargando…</div>
+        ) : necesidades.length === 0 ? (
           <div className="bg-white rounded-2xl border-[1.5px] border-dashed border-[var(--ink)]/30 p-8 text-center">
             <p className="text-sm text-[var(--ink)]/70">Todavía no hay necesidades.</p>
             <p className="text-xs text-[var(--ink)]/50 mt-1">Tocá <span className="font-bold">+</span> abajo para publicar la primera.</p>
@@ -867,24 +906,99 @@ function OfertaCard({ o }) {
 }
 
 /* ===================== Publicar necesidad ===================== */
-function PublicarScreen({ profile, onCancel, onPublicado }) {
+function PublicarScreen({ profile, grupoId, onCancel, onPublicado }) {
+  const [grupo, setGrupo] = useState(null);
+  const [esAdmin, setEsAdmin] = useState(false);
+  const [categorias, setCategorias] = useState([]);
+  const [categoriaId, setCategoriaId] = useState("");
   const [titulo, setTitulo] = useState("");
-  const [categoria, setCategoria] = useState(CATEGORIAS[0]);
-  const [zona, setZona] = useState(ZONAS[0]);
   const [presupuestoMin, setPresupuestoMin] = useState("");
   const [presupuestoMax, setPresupuestoMax] = useState("");
+  const [fechaLimite, setFechaLimite] = useState("");
   const [descripcion, setDescripcion] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      if (!grupoId) { setLoading(false); return; }
+      const [gRes, cRes, mRes] = await Promise.all([
+        sb.from("grupos").select("id, nombre, zona, rango_familias").eq("id", grupoId).maybeSingle(),
+        sb.from("categorias").select("id, slug, nombre").eq("activa", true).order("orden"),
+        sb.from("grupo_miembros").select("rol_en_grupo").eq("grupo_id", grupoId).eq("profile_id", profile.id).maybeSingle(),
+      ]);
+      if (gRes.data) setGrupo(gRes.data);
+      if (cRes.data) {
+        setCategorias(cRes.data);
+        if (cRes.data[0]) setCategoriaId(cRes.data[0].id);
+      }
+      const rol = mRes.data?.rol_en_grupo;
+      setEsAdmin(rol === "creador" || rol === "admin");
+      setLoading(false);
+    })();
+  }, [grupoId, profile.id]);
 
   const submit = async (e) => {
     e.preventDefault();
-    setEnviando(true);
-    // TODO Slice 3: insertar en Supabase
-    await new Promise(r => setTimeout(r, 700));
+    setEnviando(true); setError(null);
+    const tituloTrim = titulo.trim();
+    if (tituloTrim.length < 8 || tituloTrim.length > 140) {
+      setError("El título debe tener entre 8 y 140 caracteres."); setEnviando(false); return;
+    }
+    const descTrim = descripcion.trim();
+    if (descTrim.length < 10 || descTrim.length > 1200) {
+      setError("La descripción debe tener entre 10 y 1200 caracteres."); setEnviando(false); return;
+    }
+    const min = presupuestoMin ? Number(presupuestoMin) : null;
+    const max = presupuestoMax ? Number(presupuestoMax) : null;
+    if (min != null && max != null && min > max) {
+      setError("El mínimo no puede ser mayor que el máximo."); setEnviando(false); return;
+    }
+    const { error: errInsert } = await sb.from("necesidades").insert({
+      grupo_id: grupoId,
+      creador_id: profile.id,
+      creador_tipo: profile.role === "institucion" ? "institucion" : "familia",
+      categoria_id: categoriaId,
+      titulo: tituloTrim,
+      descripcion: descTrim,
+      zona: grupo.zona,
+      presupuesto_min_centavos: min,
+      presupuesto_max_centavos: max,
+      fecha_limite: fechaLimite || null,
+    });
     setEnviando(false);
-    alert("Mock: necesidad publicada. (En el próximo slice se guarda en la DB.)");
+    if (errInsert) { setError(errInsert.message); return; }
     onPublicado();
   };
+
+  if (loading) {
+    return <div className="p-8 text-sm text-[var(--ink)]/60">Cargando…</div>;
+  }
+  if (!grupo) {
+    return (
+      <div className="px-5 pt-8">
+        <button onClick={onCancel} className="text-sm font-semibold text-[var(--ink)]/70 flex items-center gap-1 mb-4">
+          <IconArrowLeft className="w-4 h-4" /> Volver
+        </button>
+        <h1 className="font-display font-black text-3xl">Sin grupo activo</h1>
+        <p className="text-sm text-[var(--ink)]/70 mt-3">Necesitás estar en un grupo para publicar. Andá a "Grupo" y elegí o creá uno.</p>
+      </div>
+    );
+  }
+  if (!esAdmin) {
+    return (
+      <div className="px-5 pt-8">
+        <button onClick={onCancel} className="text-sm font-semibold text-[var(--ink)]/70 flex items-center gap-1 mb-4">
+          <IconArrowLeft className="w-4 h-4" /> Volver
+        </button>
+        <h1 className="font-display font-black text-3xl">Solo el creador o admin</h1>
+        <p className="text-sm text-[var(--ink)]/70 mt-3">
+          En <span className="font-bold">{grupo.nombre}</span> sólo el creador o un admin pueden publicar necesidades. Pedile al creador que te promueva.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="px-5 pt-6 pb-12 anim-in">
@@ -894,52 +1008,52 @@ function PublicarScreen({ profile, onCancel, onPublicado }) {
       <h1 className="font-display font-black text-4xl leading-none">
         Publicar <span className="font-display-italic">necesidad</span>
       </h1>
-      <p className="text-sm text-[var(--ink)]/60 mt-2">Las pymes verán esto anonimizado por zona.</p>
+      <p className="text-sm text-[var(--ink)]/60 mt-2">
+        En <span className="font-bold">{grupo.nombre}</span> · {grupo.zona}. Las pymes lo verán anonimizado por zona.
+      </p>
       <div className="squiggle my-5"></div>
+
+      {error && (
+        <div className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700">{error}</div>
+      )}
 
       <form onSubmit={submit} className="space-y-4">
         <Field label="Título">
-          <input value={titulo} onChange={(e) => setTitulo(e.target.value)} required placeholder="ej: 25 mapas políticos plastificados"
+          <input value={titulo} onChange={(e) => setTitulo(e.target.value)} required minLength={8} maxLength={140} placeholder="ej: 25 mapas políticos plastificados"
             className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-medium focus:outline-none" />
         </Field>
 
         <Field label="Categoría">
-          <select value={categoria} onChange={(e) => setCategoria(e.target.value)}
+          <select value={categoriaId} onChange={(e) => setCategoriaId(e.target.value)} required
             className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-medium">
-            {CATEGORIAS.map(c => <option key={c}>{c}</option>)}
-          </select>
-        </Field>
-
-        <Field label="Zona">
-          <select value={zona} onChange={(e) => setZona(e.target.value)}
-            className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-medium">
-            {Object.entries(ZONAS_BY_REGION).map(([region, zonas]) => (
-              <optgroup key={region} label={region}>
-                {zonas.map(z => <option key={z}>{z}</option>)}
-              </optgroup>
-            ))}
+            {categorias.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
           </select>
         </Field>
 
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Presupuesto mín">
-            <input type="number" value={presupuestoMin} onChange={(e) => setPresupuestoMin(e.target.value)} placeholder="30000"
+          <Field label="Presupuesto mín ($)">
+            <input type="number" min="0" value={presupuestoMin} onChange={(e) => setPresupuestoMin(e.target.value)} placeholder="30000"
               className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-mono" />
           </Field>
-          <Field label="Presupuesto máx">
-            <input type="number" value={presupuestoMax} onChange={(e) => setPresupuestoMax(e.target.value)} placeholder="50000"
+          <Field label="Presupuesto máx ($)">
+            <input type="number" min="0" value={presupuestoMax} onChange={(e) => setPresupuestoMax(e.target.value)} placeholder="50000"
               className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-mono" />
           </Field>
         </div>
 
+        <Field label="Fecha límite (opcional)">
+          <input type="date" value={fechaLimite} onChange={(e) => setFechaLimite(e.target.value)}
+            className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-medium" />
+        </Field>
+
         <Field label="Descripción">
-          <textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} required rows={4}
+          <textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} required minLength={10} maxLength={1200} rows={4}
             placeholder="Detalle del pedido. Sin nombres del jardín/colegio ni datos de contacto."
             className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-medium focus:outline-none resize-none" />
         </Field>
 
         <div className="bg-[var(--mist)] rounded-2xl p-3 text-xs text-[var(--ink)]/75">
-          <span className="font-bold">⚠️ Privacidad:</span> no incluyas teléfonos, emails ni nombre de la institución. Filtramos esto automáticamente.
+          <span className="font-bold">⚠️ Privacidad:</span> no incluyas teléfonos, emails ni nombre de la institución.
         </div>
 
         <button type="submit" disabled={enviando}
