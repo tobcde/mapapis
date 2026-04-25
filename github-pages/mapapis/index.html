@@ -607,7 +607,7 @@ function AppRoot({ session, profile, onProfileChange }) {
         {screen === "feed" && (isPyme
           ? <FeedPymeScreen profile={profile} onOpen={goDetalle} />
           : <FeedFamiliaScreen profile={profile} onOpen={goDetalle} />)}
-        {screen === "publicar" && <PublicarScreen profile={profile} grupoId={activeGrupoId} onCancel={goBack} onPublicado={goBack} />}
+        {screen === "publicar" && <PublicarScreen profile={profile} grupoId={activeGrupoId} onChangeGrupo={onChangeGrupo} onCancel={goBack} onPublicado={goBack} />}
         {screen === "grupo" && <GrupoScreen profile={profile} grupoId={activeGrupoId} onChangeGrupo={onChangeGrupo} />}
         {screen === "detalle" && <DetalleScreen necesidad={selected} profile={profile} onBack={goBack} />}
         {screen === "perfil" && <PerfilScreen profile={profile} onProfileChange={onProfileChange} />}
@@ -802,6 +802,12 @@ function NecesidadCard({ n, onClick, mode }) {
       )}
 
       <div className="p-4">
+        {/* Para qué grupo (solo visible para familia/inst) */}
+        {!isPyme && n.grupo_nombre && (
+          <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--coral)] mb-1">
+            {n.grupo_nombre}
+          </div>
+        )}
         {/* Categoría + tipo solicitante + cantidad */}
         <div className="flex items-center gap-2 flex-wrap mb-2">
           <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[var(--mist)] text-[var(--ink)]">
@@ -908,8 +914,15 @@ function DetalleScreen({ necesidad: n, profile, onBack }) {
         <button onClick={onBack} className="flex items-center gap-1 text-[var(--cream)]/80 text-sm font-semibold mb-4">
           <IconArrowLeft className="w-4 h-4" /> Atrás
         </button>
-        <div className={`inline-block px-3 py-1 rounded-full ${est.bg} ${est.fg} text-[10px] font-bold uppercase tracking-wider mb-3`}>
-          {est.txt}
+        <div className="flex items-center gap-2 flex-wrap mb-3">
+          <div className={`inline-block px-3 py-1 rounded-full ${est.bg} ${est.fg} text-[10px] font-bold uppercase tracking-wider`}>
+            {est.txt}
+          </div>
+          {!isPyme && n.grupo_nombre && (
+            <div className="inline-block px-3 py-1 rounded-full bg-[var(--coral)] text-white text-[10px] font-bold uppercase tracking-wider">
+              {n.grupo_nombre}
+            </div>
+          )}
         </div>
         <h1 className="font-display font-black text-3xl leading-tight">{n.titulo}</h1>
         <div className="mt-3 flex items-center gap-3 text-xs text-[var(--cream)]/70 flex-wrap">
@@ -1133,8 +1146,9 @@ function OfertaCard({ o, misAlumnos, misVotos, onVote, onUnvote }) {
 }
 
 /* ===================== Publicar necesidad ===================== */
-function PublicarScreen({ profile, grupoId, onCancel, onPublicado }) {
+function PublicarScreen({ profile, grupoId, onChangeGrupo, onCancel, onPublicado }) {
   const [grupo, setGrupo] = useState(null);
+  const [misGrupos, setMisGrupos] = useState([]);
   const [esAdmin, setEsAdmin] = useState(false);
   const [categorias, setCategorias] = useState([]);
   const [categoriaId, setCategoriaId] = useState("");
@@ -1150,9 +1164,25 @@ function PublicarScreen({ profile, grupoId, onCancel, onPublicado }) {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Cargar lista de mis grupos una vez (para el selector)
+  useEffect(() => {
+    (async () => {
+      const { data } = await sb
+        .from("grupo_miembros")
+        .select("rol_en_grupo, grupos(id, nombre, zona, tipo, rango_familias)")
+        .eq("profile_id", profile.id);
+      const lista = (data || [])
+        .map(r => ({ ...r.grupos, rol_en_grupo: r.rol_en_grupo }))
+        .filter(g => g && g.id);
+      setMisGrupos(lista);
+    })();
+  }, [profile.id]);
+
+  // Cargar grupo activo + categorias + mi rol cada vez que cambia grupoId
   useEffect(() => {
     (async () => {
       if (!grupoId) { setLoading(false); return; }
+      setLoading(true);
       const [gRes, cRes, mRes] = await Promise.all([
         sb.from("grupos").select("id, nombre, zona, rango_familias").eq("id", grupoId).maybeSingle(),
         sb.from("categorias").select("id, slug, nombre, campos_obligatorios").eq("activa", true).order("orden"),
@@ -1161,7 +1191,7 @@ function PublicarScreen({ profile, grupoId, onCancel, onPublicado }) {
       if (gRes.data) setGrupo(gRes.data);
       if (cRes.data) {
         setCategorias(cRes.data);
-        if (cRes.data[0]) setCategoriaId(cRes.data[0].id);
+        if (cRes.data[0] && !categoriaId) setCategoriaId(cRes.data[0].id);
       }
       const rol = mRes.data?.rol_en_grupo;
       setEsAdmin(rol === "creador" || rol === "admin");
@@ -1297,9 +1327,31 @@ function PublicarScreen({ profile, grupoId, onCancel, onPublicado }) {
         Publicar <span className="font-display-italic">necesidad</span>
       </h1>
       <p className="text-sm text-[var(--ink)]/60 mt-2">
-        En <span className="font-bold">{grupo.nombre}</span> · {grupo.zona}. Las pymes lo verán anonimizado por zona.
+        Las pymes lo verán anonimizado por zona.
       </p>
       <div className="squiggle my-5"></div>
+
+      {/* Selector de grupo destino */}
+      <div className="mb-4 rounded-2xl border-[1.5px] border-[var(--ink)] bg-[var(--sun)]/40 p-4">
+        <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/70 mb-2">
+          Publicando para
+        </div>
+        {misGrupos.length > 1 ? (
+          <select
+            value={grupoId}
+            onChange={(e) => onChangeGrupo && onChangeGrupo(e.target.value)}
+            className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-semibold">
+            {misGrupos.map(g => (
+              <option key={g.id} value={g.id}>{g.nombre} · {g.zona}</option>
+            ))}
+          </select>
+        ) : (
+          <div>
+            <div className="font-display font-bold text-lg leading-tight">{grupo.nombre}</div>
+            <div className="text-xs text-[var(--ink)]/70">📍 {grupo.zona}</div>
+          </div>
+        )}
+      </div>
 
       {error && (
         <div className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700">{error}</div>
