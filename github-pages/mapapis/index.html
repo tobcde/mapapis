@@ -325,6 +325,27 @@ async function fetchPymeRating(pymeId) {
     .eq("pyme_id", pymeId).maybeSingle();
 }
 
+// Espejo de detectar_contacto_en_texto (db/019). Devuelve null si OK,
+// o un codigo de leak ('email','url','handle','cbu','telefono').
+function detectarContactoEnTexto(s) {
+  const v = (s || "").trim();
+  if (!v) return null;
+  if (/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i.test(v)) return "email";
+  if (/(https?:\/\/|www\.)[a-z0-9]/i.test(v)) return "url";
+  if (/(wa\.me\/|t\.me\/|@[a-z0-9._]{3,}|instagram\.com|facebook\.com|tiktok\.com|whatsapp)/i.test(v)) return "handle";
+  const norm = v.replace(/[\s\-\(\)\.\+]/g, "");
+  if (/[0-9]{22}/.test(norm)) return "cbu";
+  if (/[0-9]{8,}/.test(norm)) return "telefono";
+  return null;
+}
+const LEAK_MSG = {
+  telefono: "Sin teléfono en la descripción — el contacto se intercambia al adjudicar.",
+  email: "Sin emails en la descripción.",
+  cbu: "Sin CBU/CVU en la descripción — los datos de pago se comparten al adjudicar.",
+  url: "Sin links en la descripción.",
+  handle: "Sin @handles ni links de WhatsApp/redes en la descripción.",
+};
+
 /* ===================== ICONS (inline SVG) ===================== */
 const Icon = ({ d, className = "w-5 h-5", stroke = 2 }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" className={className}>{d}</svg>
@@ -698,6 +719,8 @@ function PymeOnboardingScreen({ profile, onDone }) {
     if (!algunLink) { setError("Sumá al menos un link (web, IG o FB) para que las familias puedan verificar tu negocio."); return; }
     if (catsSel.length === 0) { setError("Elegí al menos una categoría que cubrís."); return; }
     if (zonasSel.length === 0) { setError("Elegí al menos una zona donde operás."); return; }
+    const leak = detectarContactoEnTexto(descripcion);
+    if (leak) { setError(LEAK_MSG[leak]); return; }
 
     setSubmitting(true);
     const aniosNum = parseInt(aniosRubro, 10);
@@ -790,8 +813,11 @@ function PymeOnboardingScreen({ profile, onDone }) {
             </Field>
             <Field label="Descripción (opcional)">
               <textarea maxLength={600} rows={3} value={descripcion} onChange={(e) => setDescripcion(e.target.value)}
-                placeholder="Especialidad, diferenciales, etc."
+                placeholder="Especialidad, diferenciales. (Sin tel ni links: tenés campos dedicados arriba.)"
                 className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] resize-none focus:outline-none" />
+              {(() => { const leak = detectarContactoEnTexto(descripcion); return leak ? (
+                <p className="mt-1.5 text-[11px] text-rose-700 font-semibold">⚠ {LEAK_MSG[leak]}</p>
+              ) : null; })()}
             </Field>
             <Field label="Años en el rubro (opcional)">
               <input type="number" min="0" max="100" value={aniosRubro} onChange={(e) => setAniosRubro(e.target.value)}
@@ -2167,6 +2193,8 @@ function ReviewPanel({ necesidad: n, profile, ofertas }) {
   const submit = async (e) => {
     e.preventDefault();
     if (estrellas < 1) { setErr("Elegí entre 1 y 5 estrellas."); return; }
+    const leak = detectarContactoEnTexto(comentario);
+    if (leak) { setErr(LEAK_MSG[leak]); return; }
     setEnviando(true); setErr(null); setOkMsg(null);
     const { data, error } = await crearReviewPyme({
       necesidadId: n.id,
@@ -2205,6 +2233,9 @@ function ReviewPanel({ necesidad: n, profile, ofertas }) {
             <textarea maxLength={500} rows={3} value={comentario} onChange={(e) => setComentario(e.target.value)}
               placeholder="Calidad, puntualidad, cómo te trataron…"
               className="mt-2 w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[14px] focus:outline-none resize-none" />
+            {(() => { const leak = detectarContactoEnTexto(comentario); return leak ? (
+              <p className="mt-1.5 text-[11px] text-rose-700 font-semibold">⚠ {LEAK_MSG[leak]}</p>
+            ) : null; })()}
           </div>
 
           <button type="submit" disabled={enviando || estrellas < 1}
@@ -2255,6 +2286,8 @@ function PymeOfertaPanel({ necesidad: n, profile, ofertas, loading, onChanged })
     e.preventDefault();
     setEnviando(true); setErr(null);
     if (desc.trim().length < 10) { setErr("La descripción debe tener al menos 10 caracteres."); setEnviando(false); return; }
+    const leak = detectarContactoEnTexto(desc);
+    if (leak) { setErr(LEAK_MSG[leak]); setEnviando(false); return; }
     const { error } = await crearOferta({
       necesidadId: n.id,
       precioCentavos: Number(precio),
@@ -2313,8 +2346,11 @@ function PymeOfertaPanel({ necesidad: n, profile, ofertas, loading, onChanged })
             </Field>
             <Field label="Detalle de la oferta">
               <textarea required minLength={10} maxLength={1000} rows={3} value={desc} onChange={(e) => setDesc(e.target.value)}
-                placeholder="Material, calidad, condiciones, etc."
+                placeholder="Material, calidad, condiciones. Sin teléfono ni links: el contacto se intercambia al adjudicar."
                 className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-medium focus:outline-none resize-none" />
+              {(() => { const leak = detectarContactoEnTexto(desc); return leak ? (
+                <p className="mt-1.5 text-[11px] text-rose-700 font-semibold">⚠ {LEAK_MSG[leak]}</p>
+              ) : null; })()}
             </Field>
             <div className="grid grid-cols-2 gap-2">
               <button type="button" onClick={() => setShowForm(false)}
