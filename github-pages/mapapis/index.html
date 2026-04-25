@@ -194,8 +194,18 @@ async function joinGrupoByCode(code) {
 async function alumnoMatchByName(grupo, nombre) {
   return await sb.rpc("alumno_match_by_name", { p_grupo: grupo, p_nombre: nombre });
 }
-async function alumnoCreateWithTutor(grupo, nombre) {
-  return await sb.rpc("alumno_create_with_tutor", { p_grupo: grupo, p_nombre: nombre });
+async function alumnoMatchByDni(grupo, dni) {
+  return await sb.rpc("alumno_match_by_dni", { p_grupo: grupo, p_dni: dni });
+}
+async function alumnoCreateWithTutor(grupo, nombre, dni = null) {
+  return await sb.rpc("alumno_create_with_tutor", { p_grupo: grupo, p_nombre: nombre, p_dni: dni });
+}
+function normalizarDni(dni) {
+  return (dni || "").replace(/\D/g, "");
+}
+function validarDni(dni) {
+  const d = normalizarDni(dni);
+  return d.length === 7 || d.length === 8;
 }
 async function alumnoJoinAsTutor(alumnoId) {
   return await sb.rpc("alumno_join_as_tutor", { p_alumno: alumnoId });
@@ -2744,7 +2754,9 @@ function CrearGrupoScreen({ profile, onCreated, onCancel }) {
 function AlumnoStepScreen({ grupoId, grupoNombre, contexto, onDone }) {
   // contexto: 'creado' | 'unido' — cambia el copy
   const [nombre, setNombre] = useState("");
+  const [dni, setDni] = useState("");
   const [matches, setMatches] = useState(null);  // null = no buscado, [] = sin matches, [...] = matches
+  const [matchSource, setMatchSource] = useState(null); // 'dni' | 'name'
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [misAlumnos, setMisAlumnos] = useState([]);
@@ -2755,21 +2767,38 @@ function AlumnoStepScreen({ grupoId, grupoNombre, contexto, onDone }) {
   };
   useEffect(() => { refreshMisAlumnos(); }, [grupoId]);
 
-  const onCheckName = async (e) => {
+  const dniNorm = normalizarDni(dni);
+  const dniValido = !dni || validarDni(dni);
+
+  const onCheck = async (e) => {
     e.preventDefault();
     setLoading(true); setError(null);
-    const { data, error } = await alumnoMatchByName(grupoId, nombre);
+    // 1. Primary: match por DNI (si lo cargo).
+    if (dniNorm) {
+      if (!validarDni(dniNorm)) { setLoading(false); setError("DNI inválido (deben ser 7 u 8 dígitos)."); return; }
+      const { data, error: e1 } = await alumnoMatchByDni(grupoId, dniNorm);
+      if (e1) { setLoading(false); setError(e1.message); return; }
+      if (data && data.length > 0) {
+        setLoading(false);
+        setMatches(data);
+        setMatchSource("dni");
+        return;
+      }
+    }
+    // 2. Fallback: match por nombre (red de seguridad para alumnos cargados sin DNI).
+    const { data, error: e2 } = await alumnoMatchByName(grupoId, nombre);
     setLoading(false);
-    if (error) { setError(error.message); return; }
+    if (e2) { setError(e2.message); return; }
     setMatches(data || []);
+    setMatchSource((data || []).length > 0 ? "name" : null);
   };
 
   const onCreateNew = async () => {
     setLoading(true); setError(null);
-    const { error } = await alumnoCreateWithTutor(grupoId, nombre);
+    const { error } = await alumnoCreateWithTutor(grupoId, nombre, dniNorm || null);
     setLoading(false);
     if (error) { setError(error.message); return; }
-    setNombre(""); setMatches(null);
+    setNombre(""); setDni(""); setMatches(null); setMatchSource(null);
     refreshMisAlumnos();
   };
 
@@ -2778,7 +2807,7 @@ function AlumnoStepScreen({ grupoId, grupoNombre, contexto, onDone }) {
     const { error } = await alumnoJoinAsTutor(alumnoId);
     setLoading(false);
     if (error) { setError(error.message); return; }
-    setNombre(""); setMatches(null);
+    setNombre(""); setDni(""); setMatches(null); setMatchSource(null);
     refreshMisAlumnos();
   };
 
@@ -2807,14 +2836,22 @@ function AlumnoStepScreen({ grupoId, grupoNombre, contexto, onDone }) {
       )}
 
       {!matches && (
-        <form onSubmit={onCheckName} className="space-y-3">
+        <form onSubmit={onCheck} className="space-y-3">
           <Field label="Nombre del hijo/a">
             <input value={nombre} onChange={(e) => setNombre(e.target.value)} required minLength={2} maxLength={60}
               placeholder="Joaquín"
               className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-medium focus:outline-none" />
           </Field>
+          <Field label="DNI">
+            <input value={dni} onChange={(e) => setDni(e.target.value)} inputMode="numeric" maxLength={10}
+              placeholder="45123456"
+              className={`w-full px-4 py-3 rounded-xl border-[1.5px] bg-white text-[15px] font-medium focus:outline-none font-mono ${dni && !dniValido ? "border-rose-500" : "border-[var(--ink)]"}`} />
+            <p className="text-[11px] text-[var(--ink)]/60 mt-1.5 leading-snug">
+              🔒 Solo lo usamos para no duplicar al chico cuando otro tutor (papá/mamá/abuelos) lo carga después. <span className="font-bold">No se muestra a nadie</span>.
+            </p>
+          </Field>
           {error && <p className="text-xs text-rose-700 bg-rose-50 rounded-lg p-2 text-center font-semibold">{error}</p>}
-          <button type="submit" disabled={loading || nombre.length < 2}
+          <button type="submit" disabled={loading || nombre.length < 2 || (dni && !dniValido)}
             className="btn-pop w-full py-3 bg-[var(--coral)] text-white font-extrabold rounded-xl uppercase tracking-wider text-xs disabled:opacity-50">
             {loading ? "Buscando…" : "Continuar →"}
           </button>
@@ -2830,17 +2867,26 @@ function AlumnoStepScreen({ grupoId, grupoNombre, contexto, onDone }) {
             className="btn-pop w-full py-3 bg-[var(--coral)] text-white font-extrabold rounded-xl uppercase tracking-wider text-xs">
             {loading ? "Agregando…" : `Agregar ${nombre}`}
           </button>
-          <button onClick={() => { setMatches(null); setNombre(""); }} className="w-full py-2 text-xs font-bold uppercase tracking-wider text-[var(--ink)]/60">
-            Cambiar nombre
+          <button onClick={() => { setMatches(null); setMatchSource(null); setNombre(""); setDni(""); }} className="w-full py-2 text-xs font-bold uppercase tracking-wider text-[var(--ink)]/60">
+            Volver
           </button>
         </div>
       )}
 
       {matches && matches.length > 0 && (
         <div className="space-y-3">
-          <div className="bg-[var(--sun)]/30 rounded-2xl border-[1.5px] border-[var(--ink)] p-4">
-            <p className="text-sm font-bold">Ya hay {matches.length === 1 ? "un/a" : matches.length} <span>{nombre}</span> en este grupo.</p>
-            <p className="text-xs text-[var(--ink)]/70 mt-1">¿Es tu hijo/a? Sumate como co-tutor — los dos van a poder votar y dividir el pago.</p>
+          <div className={`rounded-2xl border-[1.5px] p-4 ${matchSource === "dni" ? "bg-[var(--sage)]/15 border-[var(--sage)]" : "bg-[var(--sun)]/30 border-[var(--ink)]"}`}>
+            {matchSource === "dni" ? (
+              <>
+                <p className="text-sm font-bold">✓ Encontramos al chico en este grupo</p>
+                <p className="text-xs text-[var(--ink)]/70 mt-1">El DNI coincide con un alumno ya cargado por otro tutor. Sumate como co-tutor — los dos van a poder votar y dividir el pago.</p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-bold">Ya hay {matches.length === 1 ? "un/a" : matches.length} <span>{nombre}</span> en este grupo.</p>
+                <p className="text-xs text-[var(--ink)]/70 mt-1">¿Es tu hijo/a? Sumate como co-tutor — los dos van a poder votar y dividir el pago.</p>
+              </>
+            )}
           </div>
           {matches.map(m => (
             <div key={m.alumno_id} className="bg-white rounded-2xl border-[1.5px] border-[var(--ink)] p-4 space-y-2">
@@ -2850,18 +2896,26 @@ function AlumnoStepScreen({ grupoId, grupoNombre, contexto, onDone }) {
                   <div className="text-[11px] text-[var(--ink)]/60">{m.tutores_count} tutor{m.tutores_count === 1 ? "" : "es"}: {(m.tutores_nombres || []).join(", ")}</div>
                 </div>
               </div>
-              <button onClick={() => onJoinExisting(m.alumno_id)} disabled={loading}
-                className="btn-pop w-full py-2.5 bg-[var(--ink)] text-white font-extrabold rounded-xl uppercase tracking-wider text-xs">
-                Sí, es mi hijo/a — sumarme como tutor
-              </button>
+              {m.ya_soy_tutor ? (
+                <div className="text-center text-[11px] font-bold uppercase tracking-wider text-[var(--sage)] py-2">
+                  Ya sos tutor de este alumno
+                </div>
+              ) : (
+                <button onClick={() => onJoinExisting(m.alumno_id)} disabled={loading}
+                  className="btn-pop w-full py-2.5 bg-[var(--ink)] text-white font-extrabold rounded-xl uppercase tracking-wider text-xs">
+                  Sí, es mi hijo/a — sumarme como tutor
+                </button>
+              )}
             </div>
           ))}
-          <button onClick={onCreateNew} disabled={loading}
-            className="btn-pop w-full py-2.5 bg-white text-[var(--ink)] font-extrabold rounded-xl uppercase tracking-wider text-xs border-[1.5px] border-[var(--ink)]">
-            No, es otro {nombre} → agregarlo aparte
-          </button>
-          <button onClick={() => { setMatches(null); setNombre(""); }} className="w-full py-2 text-xs font-bold uppercase tracking-wider text-[var(--ink)]/60">
-            Cambiar nombre
+          {matchSource !== "dni" && (
+            <button onClick={onCreateNew} disabled={loading}
+              className="btn-pop w-full py-2.5 bg-white text-[var(--ink)] font-extrabold rounded-xl uppercase tracking-wider text-xs border-[1.5px] border-[var(--ink)]">
+              No, es otro {nombre} → agregarlo aparte
+            </button>
+          )}
+          <button onClick={() => { setMatches(null); setMatchSource(null); setNombre(""); setDni(""); }} className="w-full py-2 text-xs font-bold uppercase tracking-wider text-[var(--ink)]/60">
+            Volver
           </button>
         </div>
       )}

@@ -96,6 +96,7 @@ erDiagram
 **Reglas distintivas:**
 
 - `alumno_tutores` es N:M → un alumno puede tener **varios tutores** (padres separados, abuelos, padrinos). Hasta 4 tutores por alumno. Ver §6.
+- `alumnos.dni` es la clave canónica de dedupe entre tutores que cargan al mismo chico desde cuentas distintas. **Nunca se muestra en la UI** (datos sensibles de menor). Ver §6.2.
 - `necesidades.modalidad ∈ { 'grupal', 'individual' }`. En **grupal** todos los miembros del grupo están implícitamente incluidos. En **individual** los tutores deben anotar a cada alumno (`necesidad_inscripciones`).
 - `necesidad_pagos` tiene **dos índices únicos parciales**:
   - Individual: `(necesidad_id, alumno_id) WHERE alumno_id IS NOT NULL`
@@ -129,29 +130,44 @@ Caso central del producto: un alumno puede ser representado por más de un adult
 
 `alumno_tutores (alumno_id, profile_id)` permite hasta **4 tutores por alumno**. Ningún tutor es "principal" — son simétricos.
 
-### 6.2 Cómo se vinculan
+### 6.2 Cómo se vinculan — match por DNI (decisión de producto)
+
+**Regla de producto:** al sumar un alumno al grupo, el tutor ingresa **nombre + DNI**. El DNI es el identificador canónico para detectar al mismo chico cuando otro tutor (papá separado, abuela, etc.) lo registra después. El **DNI nunca se muestra en la app** — es solo clave de match interna. El nombre se muestra como label, puede tener typos o variantes (Mateo / Mateo José / Mati) y eso es OK porque el match se resuelve por DNI.
 
 ```mermaid
 sequenceDiagram
     actor M as Mamá (creadora)
     actor P as Papá (separado)
-    M->>App: alumno_create_with_tutor("Mateo")
-    Note right of App: crea alumno + alumno_tutores(M, Mateo)
+    M->>App: AlumnoStepScreen<br/>nombre="Mateo Pérez", DNI=45.123.456
+    App->>App: alumno_create_with_tutor(grupo, nombre, dni)
+    Note right of App: crea alumno (dni guardado, oculto)<br/>+ alumno_tutores(M, Mateo)
     M->>P: comparte invite_code del grupo
     P->>App: join_grupo_by_code(code)
-    P->>App: alumno_match_by_name("Mateo")
-    Note right of App: detecta posible duplicado
-    P->>App: alumno_join_as_tutor(Mateo)
-    Note right of App: agrega alumno_tutores(P, Mateo)
+    P->>App: AlumnoStepScreen<br/>nombre="Matheo P." (con typo), DNI=45.123.456
+    App->>App: alumno_match_by_dni(grupo, dni)
+    Note right of App: encuentra al mismo alumno<br/>(aunque el nombre no coincida)
+    App->>P: "Encontramos a Mateo Pérez en este grupo<br/>¿sos co-tutor?"
+    P->>App: confirma → alumno_join_as_tutor(alumno)
+    Note right of App: agrega alumno_tutores(P, Mateo)<br/>peso de voto se reparte (ver §6.3)
 ```
 
-RPCs en `db/005_alumnos_tutores_institucion.sql`:
+**Por qué DNI y no solo nombre:** padres separados muchas veces escriben el nombre distinto (con o sin segundo nombre, con o sin apellido materno, con typos). Hacer el dedupe por nombre lleva a duplicados que después hay que `alumnos_merge` a mano. DNI es único, irrefutable, y sin fricción real (todo padre lo sabe de memoria).
 
-- `alumno_match_by_name(grupo, nombre)` — busca match case-insensitive antes de duplicar
-- `alumno_create_with_tutor(grupo, nombre)` — crea alumno + agrega caller como tutor
-- `alumno_join_as_tutor(alumno)` — caller se vincula como co-tutor
-- `alumno_leave_as_tutor(alumno)` — desvincularse; **si queda sin tutores, el alumno se borra**
-- `alumnos_merge(keep, merge)` — admin/creador fusiona dos alumnos duplicados, consolida tutores
+**Por qué oculto:** el DNI de un menor es dato sensible (Ley 25.326 datos personales). No agrega valor mostrarlo en ningún lado de la UI — solo necesitamos que el sistema lo use para matchear.
+
+**RPCs (en `db/005_alumnos_tutores_institucion.sql` + migración futura para DNI):**
+
+- `alumno_create_with_tutor(grupo, nombre, dni)` — crea alumno + agrega caller como tutor. **Pendiente**: agregar param `dni`.
+- `alumno_match_by_dni(grupo, dni)` — **pendiente**, será el match primario al sumarse un nuevo tutor.
+- `alumno_match_by_name(grupo, nombre)` — fallback case-insensitive, hoy es el único método. Queda como red secundaria si alguien no quiere ingresar DNI.
+- `alumno_join_as_tutor(alumno)` — caller se vincula como co-tutor (sin cambios).
+- `alumno_leave_as_tutor(alumno)` — desvincularse; **si queda sin tutores, el alumno se borra** (sin cambios).
+- `alumnos_merge(keep, merge)` — admin/creador fusiona dos alumnos duplicados, consolida tutores (queda como salida de emergencia si dos tutores cargaron DNIs distintos por error).
+
+**Estado de implementación (a 2026-04-25):**
+
+- 🟡 Pendiente: columna `alumnos.dni text` (nullable durante migración suave, NOT NULL en altas nuevas a futuro), índice único parcial `(grupo_id, dni) WHERE dni IS NOT NULL`, validación de formato (7-8 dígitos), RPC `alumno_match_by_dni`, UI en `AlumnoStepScreen` con campo DNI + nota "no se muestra a nadie".
+- 🟢 Hoy: match solo por nombre. Es frágil; planeamos que el DNI lo reemplace como primary match key en una próxima migración (`db/017_alumnos_dni.sql`).
 
 ### 6.3 Voto en modalidad individual
 
