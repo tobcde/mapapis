@@ -123,6 +123,10 @@
   @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
   .anim-in { animation: fadeUp .28s ease both; }
 
+  /* Custom dialog slide-up */
+  @keyframes slideUp { from { opacity: 0; transform: translateY(20px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+  .dialog-in { animation: slideUp .22s cubic-bezier(.2,.7,.3,1) both; }
+
   /* Marquee */
   @keyframes marq { from { transform: translateX(0); } to { transform: translateX(-50%); } }
   .marq-track { animation: marq 22s linear infinite; }
@@ -248,6 +252,75 @@ const IconCrown = (p) => <Icon {...p} d={<path d="M2 8l5 5 5-9 5 9 5-5-2 12H4z"/
 const IconTrash = (p) => <Icon {...p} d={<><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></>} />;
 const IconRefresh = (p) => <Icon {...p} d={<><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></>} />;
 
+/* ===================== DIALOG (reemplaza alert/confirm nativos) ===================== */
+const DialogContext = React.createContext(null);
+function useDialog() { return React.useContext(DialogContext); }
+
+function CustomDialog({ dialog, onConfirm, onCancel }) {
+  const isConfirm = dialog.type === "confirm";
+  return (
+    <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center px-4 pb-8 sm:pb-0">
+      <div
+        className="absolute inset-0 bg-[var(--ink)]/50 backdrop-blur-sm"
+        onClick={isConfirm ? onCancel : onConfirm}
+      />
+      <div
+        className="relative w-full max-w-sm bg-[var(--cream)] rounded-3xl border-[1.5px] border-[var(--ink)] p-6 dialog-in"
+        style={{ boxShadow: "4px 4px 0 var(--ink)" }}
+      >
+        <div className={`w-11 h-11 rounded-2xl flex items-center justify-center mb-4 ${isConfirm ? "bg-[var(--sun)]" : "bg-[var(--ink)]"}`}>
+          {isConfirm
+            ? <IconSparkles className="w-5 h-5 text-[var(--ink)]" />
+            : <IconCheck className="w-5 h-5 text-[var(--cream)]" />}
+        </div>
+        <p className="font-display font-semibold text-[var(--ink)] text-base leading-snug mb-6">
+          {dialog.message}
+        </p>
+        <div className="flex gap-3">
+          {isConfirm && (
+            <button
+              onClick={onCancel}
+              className="flex-1 py-3 rounded-xl border-[1.5px] border-[var(--ink)] font-bold text-sm uppercase tracking-wide bg-white text-[var(--ink)]"
+            >
+              Cancelar
+            </button>
+          )}
+          <button
+            onClick={onConfirm}
+            className={`flex-1 py-3 rounded-xl border-[1.5px] border-[var(--ink)] font-extrabold text-sm uppercase tracking-wide btn-pop ${
+              isConfirm ? "bg-[var(--coral)] text-white" : "bg-[var(--ink)] text-[var(--cream)]"
+            }`}
+          >
+            {isConfirm ? "Confirmar" : "Entendido"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DialogProvider({ children }) {
+  const [dialog, setDialog] = useState(null);
+
+  const showAlert = (message) => new Promise(resolve => {
+    setDialog({ type: "alert", message, resolve });
+  });
+
+  const showConfirm = (message) => new Promise(resolve => {
+    setDialog({ type: "confirm", message, resolve });
+  });
+
+  const handleConfirm = () => { dialog?.resolve(true); setDialog(null); };
+  const handleCancel  = () => { dialog?.resolve(false); setDialog(null); };
+
+  return (
+    <DialogContext.Provider value={{ showAlert, showConfirm }}>
+      {children}
+      {dialog && <CustomDialog dialog={dialog} onConfirm={handleConfirm} onCancel={handleCancel} />}
+    </DialogContext.Provider>
+  );
+}
+
 /* ===================== MOCK DATA (marketplace) ===================== */
 const ZONAS_BY_REGION = {
   "GBA Norte": [
@@ -358,6 +431,7 @@ function AuthGate() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [joinBanner, setJoinBanner] = useState(null);  // { nombre, zona, code } cuando hay ?join=
+  const { showAlert } = useDialog();
 
   const refetchProfile = async (s) => {
     if (!s) return setProfile(null);
@@ -403,7 +477,7 @@ function AuthGate() {
       const { data, error } = await joinGrupoByCode(code);
       if (error) {
         console.warn("join error:", error.message);
-        alert("No pudimos sumarte al grupo: " + error.message);
+        await showAlert("No pudimos sumarte al grupo: " + error.message);
         setPendingJoinCode("");
         return;
       }
@@ -412,7 +486,7 @@ function AuthGate() {
         setActiveGrupo(result.grupo_id);
         setPendingJoinCode("");
         clearJoinFromUrl();
-        if (!result.ya_era_miembro) alert(`Te sumaste a "${result.nombre}" 🎉`);
+        if (!result.ya_era_miembro) await showAlert(`Te sumaste a "${result.nombre}" 🎉`);
       }
     })();
   }, [session, profile?.role]);
@@ -816,6 +890,7 @@ function AppRoot({ session, profile, onProfileChange }) {
 }
 
 function BottomNav({ screen, setScreen, isPyme }) {
+  const { showAlert } = useDialog();
   return (
     <div className="fixed bottom-0 left-0 right-0 z-30 flex justify-center pointer-events-none">
       <div className="w-full max-w-md px-4 pb-3 pointer-events-auto">
@@ -831,7 +906,7 @@ function BottomNav({ screen, setScreen, isPyme }) {
               <IconPlus className="w-7 h-7 text-white" stroke={2.5} />
             </button>
           )}
-          {isPyme && <NavBtn IconCmp={IconBolt} label="Mis ofertas" active={false} onClick={() => alert("Próximamente: tus ofertas presentadas")} />}
+          {isPyme && <NavBtn IconCmp={IconBolt} label="Mis ofertas" active={false} onClick={async () => { await showAlert("Próximamente: tus ofertas presentadas"); }} />}
           <NavBtn IconCmp={IconUser} label="Perfil" active={screen === "perfil"} onClick={() => setScreen("perfil")} />
         </div>
       </div>
@@ -1078,6 +1153,7 @@ function DetalleScreen({ necesidad: n, profile, onBack }) {
   const [cerrandoBusy, setCerrandoBusy] = useState(false);
   const [inscripcionCerradaAt, setInscripcionCerradaAt] = useState(n.inscripcion_cerrada_at || null);
   const [loading, setLoading] = useState(true);
+  const { showAlert, showConfirm } = useDialog();
 
   const aliveRef = React.useRef(true);
   const fetchData = async () => {
@@ -1158,31 +1234,31 @@ function DetalleScreen({ necesidad: n, profile, onBack }) {
 
   const onVote = async (alumnoId, ofertaId) => {
     const { error } = await voteOferta(alumnoId, ofertaId);
-    if (error) { alert("Error al votar: " + error.message); return; }
+    if (error) { await showAlert("Error al votar: " + error.message); return; }
     fetchData();
   };
   const onUnvote = async (alumnoId, ofertaId) => {
     const { error } = await unvoteOferta(alumnoId, ofertaId);
-    if (error) { alert("Error al revocar voto: " + error.message); return; }
+    if (error) { await showAlert("Error al revocar voto: " + error.message); return; }
     fetchData();
   };
 
   const esAdminGrupo = miRol === "creador" || miRol === "admin";
   const inscripcionCerrada = !!inscripcionCerradaAt;
   const handleCerrar = async () => {
-    if (!confirm("Cerrar inscripciones? Las pymes podran ofertar con la cantidad final firme. Las familias ya no podran sumarse.")) return;
+    if (!await showConfirm("¿Cerrar inscripciones? Las pymes podrán ofertar con la cantidad final firme. Las familias ya no podrán sumarse.")) return;
     setCerrandoBusy(true);
     const { error } = await cerrarInscripcion(n.id);
     setCerrandoBusy(false);
-    if (error) { alert("Error: " + error.message); return; }
+    if (error) { await showAlert("Error: " + error.message); return; }
     fetchData();
   };
   const handleReabrir = async () => {
-    if (!confirm("Reabrir inscripciones?")) return;
+    if (!await showConfirm("¿Reabrir inscripciones?")) return;
     setCerrandoBusy(true);
     const { error } = await reabrirInscripcion(n.id);
     setCerrandoBusy(false);
-    if (error) { alert("Error: " + error.message); return; }
+    if (error) { await showAlert("Error: " + error.message); return; }
     fetchData();
   };
 
@@ -1483,13 +1559,14 @@ function OfertaCard({ o, necesidad: n, misAlumnos, misVotos, onVote, onUnvote, e
   const esGanadora = o.estado === "ganadora";
   const esDescartada = o.estado === "descartada";
   const [adjudicandoBusy, setAdjudicandoBusy] = useState(false);
+  const { showAlert, showConfirm } = useDialog();
 
   const onAdjudicar = async () => {
-    if (!confirm(`Adjudicar a "${pymeNombre}" por ${fmt(monto)}? Las demás ofertas quedan descartadas.`)) return;
+    if (!await showConfirm(`¿Adjudicar a "${pymeNombre}" por ${fmt(monto)}? Las demás ofertas quedan descartadas.`)) return;
     setAdjudicandoBusy(true);
     const { error } = await adjudicarOferta(o.id);
     setAdjudicandoBusy(false);
-    if (error) { alert("Error: " + error.message); return; }
+    if (error) { await showAlert("Error: " + error.message); return; }
     onChanged && onChanged();
   };
 
@@ -1561,6 +1638,7 @@ function OfertaCard({ o, necesidad: n, misAlumnos, misVotos, onVote, onUnvote, e
 function InscripcionPanel({ necesidad: n, misAlumnos, inscripciones, inscripcionCerrada, onChanged }) {
   const inscriptosSet = new Set(inscripciones.map(i => i.alumno_id));
   const [busy, setBusy] = useState(null);
+  const { showAlert } = useDialog();
 
   const toggle = async (alumnoId, yaInscripto) => {
     if (inscripcionCerrada) return;
@@ -1569,7 +1647,7 @@ function InscripcionPanel({ necesidad: n, misAlumnos, inscripciones, inscripcion
       ? await desinscribirAlumno(n.id, alumnoId)
       : await inscribirAlumno(n.id, alumnoId);
     setBusy(null);
-    if (error) { alert("Error: " + error.message); return; }
+    if (error) { await showAlert("Error: " + error.message); return; }
     onChanged();
   };
 
@@ -2382,6 +2460,7 @@ function GrupoScreen({ profile, grupoId, onChangeGrupo }) {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [view, setView] = useState("home"); // 'home' | 'crear' | 'unirse' | 'agregar-alumno'
+  const { showAlert, showConfirm } = useDialog();
 
   const aliveRef = React.useRef(true);
   const fetchAll = async () => {
@@ -2447,37 +2526,37 @@ function GrupoScreen({ profile, grupoId, onChangeGrupo }) {
   };
 
   const onPromote = async (targetId) => {
-    if (!confirm("¿Promover a admin? Va a poder gestionar el grupo y publicar necesidades.")) return;
+    if (!await showConfirm("¿Promover a admin? Va a poder gestionar el grupo y publicar necesidades.")) return;
     const { error } = await sb.rpc("promote_to_admin", { p_grupo: grupo.id, p_target: targetId });
-    if (error) return alert(error.message);
+    if (error) { await showAlert(error.message); return; }
     fetchAll();
   };
 
   const onDemote = async (targetId) => {
     const { error } = await sb.rpc("demote_admin", { p_grupo: grupo.id, p_target: targetId });
-    if (error) return alert(error.message);
+    if (error) { await showAlert(error.message); return; }
     fetchAll();
   };
 
   const onKick = async (targetId, nombre) => {
-    if (!confirm(`¿Eliminar a ${nombre || "este miembro"} del grupo?`)) return;
+    if (!await showConfirm(`¿Eliminar a ${nombre || "este miembro"} del grupo?`)) return;
     const { error } = await sb.rpc("kick_miembro", { p_grupo: grupo.id, p_target: targetId });
-    if (error) return alert(error.message);
+    if (error) { await showAlert(error.message); return; }
     fetchAll();
   };
 
   const onLeave = async () => {
-    if (!confirm(`¿Salir de "${grupo.nombre}"?`)) return;
+    if (!await showConfirm(`¿Salir de "${grupo.nombre}"?`)) return;
     const { error } = await sb.rpc("leave_grupo", { p_grupo: grupo.id });
-    if (error) return alert(error.message);
+    if (error) { await showAlert(error.message); return; }
     setActiveGrupo("");
     onChangeGrupo(null);
   };
 
   const onRegenerate = async () => {
-    if (!confirm("¿Generar un código nuevo? El link anterior dejará de funcionar.")) return;
+    if (!await showConfirm("¿Generar un código nuevo? El link anterior dejará de funcionar.")) return;
     const { data, error } = await sb.rpc("regenerate_invite_code", { p_grupo: grupo.id });
-    if (error) return alert(error.message);
+    if (error) { await showAlert(error.message); return; }
     fetchAll();
   };
 
@@ -2584,9 +2663,9 @@ function GrupoScreen({ profile, grupoId, onChangeGrupo }) {
   })();
 
   const onMerge = async (keepId, mergeId, nombre) => {
-    if (!confirm(`Fusionar ambos "${nombre}" en uno solo? Los tutores se combinan, no se pierde nada.`)) return;
+    if (!await showConfirm(`¿Fusionar ambos "${nombre}" en uno solo? Los tutores se combinan, no se pierde nada.`)) return;
     const { error } = await alumnosMerge(keepId, mergeId);
-    if (error) return alert(error.message);
+    if (error) { await showAlert(error.message); return; }
     fetchAll();
   };
 
@@ -2784,6 +2863,7 @@ function PerfilScreen({ profile, onProfileChange }) {
   const [editing, setEditing] = useState(false);
   const [nombre, setNombre] = useState(profile.nombre || "");
   const [saving, setSaving] = useState(false);
+  const { showAlert, showConfirm } = useDialog();
 
   const guardarNombre = async () => {
     setSaving(true);
@@ -2794,9 +2874,9 @@ function PerfilScreen({ profile, onProfileChange }) {
   };
 
   const cambiarRol = async () => {
-    if (!confirm("¿Cambiar de rol? Vas a volver al onboarding.")) return;
+    if (!await showConfirm("¿Cambiar de rol? Vas a volver al onboarding.")) return;
     const { error } = await sb.from("profiles").update({ role: null }).eq("id", profile.id);
-    if (error) { alert("No se pudo cambiar el rol: " + error.message); return; }
+    if (error) { await showAlert("No se pudo cambiar el rol: " + error.message); return; }
     onProfileChange();
   };
 
@@ -2866,7 +2946,9 @@ function PerfilScreen({ profile, onProfileChange }) {
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<AuthGate />);
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <DialogProvider><AuthGate /></DialogProvider>
+);
 </script>
 </body>
 </html>
