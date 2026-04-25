@@ -519,11 +519,22 @@ const ESTADO_LABEL = {
 };
 
 const TIER_LABEL = {
-  0: { txt: "Nueva", color: "bg-slate-100 text-slate-700" },
-  1: { txt: "Verificada", color: "bg-sky-100 text-sky-700" },
-  2: { txt: "Confiable", color: "bg-emerald-100 text-emerald-700" },
-  3: { txt: "Premium", color: "bg-amber-100 text-amber-800" },
+  0: { txt: "Nueva", color: "bg-slate-100 text-slate-700", icon: "" },
+  1: { txt: "Verificada", color: "bg-sky-100 text-sky-700", icon: "✓" },
+  2: { txt: "Confiable", color: "bg-emerald-100 text-emerald-700", icon: "✓✓" },
+  3: { txt: "Premium", color: "bg-amber-100 text-amber-800", icon: "★" },
 };
+
+function TierBadge({ tier, size = "sm" }) {
+  const t = TIER_LABEL[tier ?? 0] || TIER_LABEL[0];
+  const cls = size === "md" ? "text-[11px] px-2.5 py-1" : "text-[10px] px-2 py-0.5";
+  return (
+    <span className={`font-bold uppercase tracking-wider rounded-full ${t.color} ${cls}`}>
+      {t.icon && <span className="mr-1">{t.icon}</span>}
+      {t.txt}
+    </span>
+  );
+}
 
 const ROLES_INFO = {
   familia: { label: "Familia", short: "Soy parte de un grupo de padres", icon: IconUsers, color: "var(--coral)" },
@@ -1625,19 +1636,23 @@ function MisOfertasScreen({ profile, onOpen }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("activas");
+  const [pymeRow, setPymeRow] = useState(null);
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
     (async () => {
-      const { data, error } = await sb
-        .from("ofertas")
-        .select("id, estado, precio_total_centavos, tiempo_entrega_dias, descripcion, created_at, necesidad:necesidades(id, titulo, zona, estado, modalidad, fecha_limite, ofertas_count, creador_tipo, foto_url, categorias(nombre))")
-        .eq("pyme_id", profile.id)
-        .order("created_at", { ascending: false });
+      const [ofertasRes, pymeRes] = await Promise.all([
+        sb.from("ofertas")
+          .select("id, estado, precio_total_centavos, tiempo_entrega_dias, descripcion, created_at, necesidad:necesidades(id, titulo, zona, estado, modalidad, fecha_limite, ofertas_count, creador_tipo, foto_url, categorias(nombre))")
+          .eq("pyme_id", profile.id)
+          .order("created_at", { ascending: false }),
+        sb.from("pymes").select("tier, estado").eq("profile_id", profile.id).maybeSingle(),
+      ]);
       if (!alive) return;
-      if (error) { console.error("[MisOfertas] fetch:", error); setItems([]); }
-      else setItems(data || []);
+      if (ofertasRes.error) { console.error("[MisOfertas] fetch:", ofertasRes.error); setItems([]); }
+      else setItems(ofertasRes.data || []);
+      setPymeRow(pymeRes.data || null);
       setLoading(false);
     })();
     return () => { alive = false; };
@@ -1675,6 +1690,15 @@ function MisOfertasScreen({ profile, onOpen }) {
           <h1 className="font-display font-black text-[44px] leading-[0.95] mt-2">
             Mis <span className="font-display-italic">ofertas</span>
           </h1>
+          {pymeRow && (
+            <div className="mt-3 flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/55">Tu nivel:</span>
+              <TierBadge tier={pymeRow.tier} size="md" />
+              {pymeRow.estado === "suspendida" && (
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">Suspendida</span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -2714,6 +2738,7 @@ function OfertaCard({ o, necesidad: n, misAlumnos, misVotos, onVote, onUnvote, e
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="font-display font-bold text-lg">{pymeNombre}</h3>
+            {pyme && <TierBadge tier={pyme.tier} />}
             {esGanadora && (
               <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[var(--sage)] text-white">Ganadora</span>
             )}
