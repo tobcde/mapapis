@@ -236,91 +236,9 @@ const ZONAS = Object.values(ZONAS_BY_REGION).flat();
 const CATEGORIAS = ["Materiales didácticos", "Indumentaria", "Servicios", "Alimentación", "Salidas / eventos", "Tecnología"];
 const RANGOS_FAMILIAS = ["10-20 familias", "15-30 familias", "25-40 familias"];
 
-const NECESIDADES_MOCK = [
-  {
-    id: "n1",
-    titulo: "25 mapas políticos de Argentina, plastificados A3",
-    categoria: "Materiales didácticos",
-    tipo: "compra",
-    zona: "Belgrano",
-    rango: "20-30 familias",
-    presupuesto_min: 30000,
-    presupuesto_max: 50000,
-    estado: "recibiendo_ofertas",
-    ofertas: 3,
-    creador_tipo: "institucion",
-    fecha_limite: "2026-05-15",
-    descripcion: "Necesitamos mapas políticos de Argentina A3 plastificados para la sala. Entrega antes del 15 de mayo."
-  },
-  {
-    id: "n2",
-    titulo: "Pelotas de fútbol nº4 para clase de educación física",
-    categoria: "Materiales didácticos",
-    tipo: "compra",
-    zona: "Caballito",
-    rango: "15-30 familias",
-    presupuesto_min: 80000,
-    presupuesto_max: 140000,
-    estado: "en_votacion",
-    ofertas: 5,
-    creador_tipo: "familia",
-    fecha_limite: "2026-05-08",
-    descripcion: "Pelotas resistentes para uso intensivo en horario de educación física."
-  },
-  {
-    id: "n3",
-    titulo: "Catering para fiesta de fin de trimestre (60 pers.)",
-    categoria: "Alimentación",
-    tipo: "servicio",
-    zona: "Palermo",
-    rango: "25-40 familias",
-    presupuesto_min: 350000,
-    presupuesto_max: 500000,
-    estado: "recibiendo_ofertas",
-    ofertas: 7,
-    creador_tipo: "familia",
-    fecha_limite: "2026-06-20",
-    descripcion: "Almuerzo informal para 60 personas (45 chicos + 15 adultos). Opciones celíacas."
-  },
-  {
-    id: "n4",
-    titulo: "Buzos de egresados con bordado",
-    categoria: "Indumentaria",
-    tipo: "compra",
-    zona: "Núñez",
-    rango: "20-30 familias",
-    presupuesto_min: 600000,
-    presupuesto_max: 950000,
-    estado: "adjudicada",
-    ofertas: 4,
-    creador_tipo: "familia",
-    fecha_limite: "2026-05-30",
-    descripcion: "Buzos talle XS a XL con bordado del logo del cole."
-  },
-  {
-    id: "n5",
-    titulo: "Salida didáctica al planetario",
-    categoria: "Salidas / eventos",
-    tipo: "servicio",
-    zona: "Recoleta",
-    rango: "15-30 familias",
-    presupuesto_min: 180000,
-    presupuesto_max: 280000,
-    estado: "recibiendo_ofertas",
-    ofertas: 2,
-    creador_tipo: "institucion",
-    fecha_limite: "2026-05-22",
-    descripcion: "Transporte ida y vuelta + entradas para grupo escolar."
-  },
-];
+const NECESIDADES_MOCK = [];
 
-const OFERTAS_MOCK = {
-  n1: [
-    { id: "o1", pyme: "Imprenta Vega", monto: 45000, tiempo_dias: 7, rating: 4.7, reviews: 23, tier: 2, descripcion: "Mapas A3 papel ilustración 250g, plastificado mate, listos en 5-7 días." },
-    { id: "o2", pyme: "Editorial Pampa", monto: 38000, tiempo_dias: 10, rating: 4.9, reviews: 81, tier: 3, descripcion: "Edición educativa con leyenda actualizada 2025. Plastificado UV." },
-    { id: "o3", pyme: "Librería del Norte", monto: 42000, tiempo_dias: 5, rating: 4.5, reviews: 12, tier: 1, descripcion: "Mapas estándar, plastificado simple. Despacho 2 días." },
-  ],
-};
+const OFERTAS_MOCK = {};
 
 const ESTADO_LABEL = {
   recibiendo_ofertas: { txt: "Recibiendo ofertas", bg: "bg-[var(--sun)]", fg: "text-[var(--ink)]" },
@@ -732,7 +650,14 @@ function FeedFamiliaScreen({ profile, onOpen }) {
 
       {/* Lista */}
       <div className="space-y-3">
-        {necesidades.map(n => <NecesidadCard key={n.id} n={n} onClick={() => onOpen(n)} mode="familia" />)}
+        {necesidades.length === 0 ? (
+          <div className="bg-white rounded-2xl border-[1.5px] border-dashed border-[var(--ink)]/30 p-8 text-center">
+            <p className="text-sm text-[var(--ink)]/70">Todavía no hay necesidades.</p>
+            <p className="text-xs text-[var(--ink)]/50 mt-1">Tocá <span className="font-bold">+</span> abajo para publicar la primera.</p>
+          </div>
+        ) : (
+          necesidades.map(n => <NecesidadCard key={n.id} n={n} onClick={() => onOpen(n)} mode="familia" />)
+        )}
       </div>
     </div>
   );
