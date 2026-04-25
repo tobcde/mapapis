@@ -879,7 +879,7 @@ function AppRoot({ session, profile, onProfileChange }) {
           ? <FeedPymeScreen profile={profile} onOpen={goDetalle} />
           : <FeedFamiliaScreen profile={profile} onOpen={goDetalle} />)}
         {screen === "publicar" && <PublicarScreen profile={profile} grupoId={activeGrupoId} onChangeGrupo={onChangeGrupo} onCancel={goBack} onPublicado={goBack} />}
-        {screen === "grupo" && <GrupoScreen profile={profile} grupoId={activeGrupoId} onChangeGrupo={onChangeGrupo} />}
+        {screen === "grupo" && <GrupoScreen profile={profile} grupoId={activeGrupoId} onChangeGrupo={onChangeGrupo} onBack={() => setScreen("feed")} />}
         {screen === "detalle" && <DetalleScreen necesidad={selected} profile={profile} onBack={goBack} />}
         {screen === "perfil" && <PerfilScreen profile={profile} onProfileChange={onProfileChange} />}
 
@@ -2452,7 +2452,7 @@ function InviteCard({ grupo, copied, soyCreador, onCopyLink, onShareWhatsApp, on
   );
 }
 
-function GrupoScreen({ profile, grupoId, onChangeGrupo }) {
+function GrupoScreen({ profile, grupoId, onChangeGrupo, onBack }) {
   const [grupo, setGrupo] = useState(null);
   const [miembros, setMiembros] = useState([]);
   const [alumnos, setAlumnos] = useState([]);
@@ -2582,6 +2582,12 @@ function GrupoScreen({ profile, grupoId, onChangeGrupo }) {
   if (!grupo && misGrupos.length === 0) {
     return (
       <div className="px-5 pt-8 anim-in">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1 text-sm font-semibold text-[var(--ink)]/60 mb-4 -ml-1"
+        >
+          <IconArrowLeft className="w-4 h-4" /> Volver
+        </button>
         <h1 className="font-display font-black text-4xl leading-none">Tu <span className="font-display-italic">grupo</span></h1>
         <div className="bg-white rounded-3xl border-[1.5px] border-[var(--ink)] p-6 mt-6" style={{boxShadow: "4px 4px 0 var(--ink)"}}>
           <div className="text-5xl mb-3">👋</div>
@@ -2606,6 +2612,12 @@ function GrupoScreen({ profile, grupoId, onChangeGrupo }) {
   if (!grupo) {
     return (
       <div className="px-5 pt-8 anim-in">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1 text-sm font-semibold text-[var(--ink)]/60 mb-4 -ml-1"
+        >
+          <IconArrowLeft className="w-4 h-4" /> Volver
+        </button>
         <h1 className="font-display font-black text-4xl leading-none">Mis <span className="font-display-italic">grupos</span></h1>
         <div className="space-y-2 mt-5">
           {misGrupos.map(g => (
