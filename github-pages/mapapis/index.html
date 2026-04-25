@@ -195,6 +195,12 @@ async function inscribirAlumno(necesidadId, alumnoId) {
 async function desinscribirAlumno(necesidadId, alumnoId) {
   return await sb.rpc("desinscribir_alumno", { p_necesidad: necesidadId, p_alumno: alumnoId });
 }
+async function cerrarInscripcion(necesidadId) {
+  return await sb.rpc("cerrar_inscripcion", { p_necesidad: necesidadId });
+}
+async function reabrirInscripcion(necesidadId) {
+  return await sb.rpc("reabrir_inscripcion", { p_necesidad: necesidadId });
+}
 
 /* ===================== ICONS (inline SVG) ===================== */
 const Icon = ({ d, className = "w-5 h-5", stroke = 2 }) => (
@@ -278,6 +284,10 @@ function normalizeNecesidad(row) {
     inscriptos_count: row.inscriptos_count
       ?? row.necesidad_inscripciones?.[0]?.count
       ?? 0,
+    total_alumnos: row.total_alumnos
+      ?? row.grupos?.alumnos?.[0]?.count
+      ?? null,
+    inscripcion_cerrada_at: row.inscripcion_cerrada_at || null,
     grupo_id: row.grupo_id,
     grupo_nombre: row.grupos?.nombre,
     foto_url: row.foto_url || null,
@@ -691,7 +701,7 @@ function FeedFamiliaScreen({ profile, onOpen }) {
       try {
         const { data, error } = await sb
           .from("necesidades")
-          .select("*, categorias(nombre, slug), grupos(nombre, rango_familias), necesidad_inscripciones(count)")
+          .select("*, categorias(nombre, slug), grupos(nombre, rango_familias, alumnos(count)), necesidad_inscripciones(count)")
           .order("created_at", { ascending: false });
         if (!alive) return;
         if (error) console.error("[FeedFamilia] fetch error:", error);
@@ -903,6 +913,10 @@ function DetalleScreen({ necesidad: n, profile, onBack }) {
   const [misAlumnos, setMisAlumnos] = useState([]);
   const [misVotos, setMisVotos] = useState({}); // { alumnoId: ofertaId }
   const [inscripciones, setInscripciones] = useState([]); // { alumno_id, inscripto_por }
+  const [miRol, setMiRol] = useState(null);
+  const [totalAlumnos, setTotalAlumnos] = useState(n.total_alumnos ?? null);
+  const [cerrandoBusy, setCerrandoBusy] = useState(false);
+  const [inscripcionCerradaAt, setInscripcionCerradaAt] = useState(n.inscripcion_cerrada_at || null);
   const [loading, setLoading] = useState(true);
 
   const aliveRef = React.useRef(true);
@@ -918,23 +932,43 @@ function DetalleScreen({ necesidad: n, profile, onBack }) {
         .select("alumno_id, inscripto_por")
         .eq("necesidad_id", n.id);
 
+      const necesidadReq = sb.from("necesidades")
+        .select("inscripcion_cerrada_at")
+        .eq("id", n.id)
+        .maybeSingle();
+
       if (isPyme) {
-        const [oRes, iRes] = await Promise.all([ofertasReq, inscripcionesReq]);
+        const [oRes, iRes, nRes] = await Promise.all([ofertasReq, inscripcionesReq, necesidadReq]);
         if (!aliveRef.current) return;
         setOfertas(oRes.data || []);
         setInscripciones(iRes.data || []);
+        setInscripcionCerradaAt(nRes.data?.inscripcion_cerrada_at || null);
       } else {
-        const [oRes, aRes, iRes] = await Promise.all([
+        const totalAlumnosReq = sb.from("alumnos")
+          .select("id", { count: "exact", head: true })
+          .eq("grupo_id", n.grupo_id);
+        const miRolReq = sb.from("grupo_miembros")
+          .select("rol_en_grupo")
+          .eq("grupo_id", n.grupo_id)
+          .eq("profile_id", profile.id)
+          .maybeSingle();
+        const [oRes, aRes, iRes, nRes, tRes, rRes] = await Promise.all([
           ofertasReq,
           sb.from("alumnos")
             .select("id, nombre, alumno_tutores!inner(profile_id)")
             .eq("grupo_id", n.grupo_id)
             .eq("alumno_tutores.profile_id", profile.id),
           inscripcionesReq,
+          necesidadReq,
+          totalAlumnosReq,
+          miRolReq,
         ]);
         if (!aliveRef.current) return;
         setOfertas(oRes.data || []);
         setInscripciones(iRes.data || []);
+        setInscripcionCerradaAt(nRes.data?.inscripcion_cerrada_at || null);
+        setTotalAlumnos(typeof tRes.count === "number" ? tRes.count : null);
+        setMiRol(rRes.data?.rol_en_grupo || null);
         const alumnos = aRes.data || [];
         setMisAlumnos(alumnos);
 
@@ -972,6 +1006,25 @@ function DetalleScreen({ necesidad: n, profile, onBack }) {
   const onUnvote = async (alumnoId, ofertaId) => {
     const { error } = await unvoteOferta(alumnoId, ofertaId);
     if (error) { alert("Error al revocar voto: " + error.message); return; }
+    fetchData();
+  };
+
+  const esAdminGrupo = miRol === "creador" || miRol === "admin";
+  const inscripcionCerrada = !!inscripcionCerradaAt;
+  const handleCerrar = async () => {
+    if (!confirm("Cerrar inscripciones? Las pymes podran ofertar con la cantidad final firme. Las familias ya no podran sumarse.")) return;
+    setCerrandoBusy(true);
+    const { error } = await cerrarInscripcion(n.id);
+    setCerrandoBusy(false);
+    if (error) { alert("Error: " + error.message); return; }
+    fetchData();
+  };
+  const handleReabrir = async () => {
+    if (!confirm("Reabrir inscripciones?")) return;
+    setCerrandoBusy(true);
+    const { error } = await reabrirInscripcion(n.id);
+    setCerrandoBusy(false);
+    if (error) { alert("Error: " + error.message); return; }
     fetchData();
   };
 
@@ -1062,13 +1115,36 @@ function DetalleScreen({ necesidad: n, profile, onBack }) {
             </div>
 
             {n.modalidad === "individual" && (
-              <div className="mt-3 p-3 rounded-xl bg-[var(--violet)]/10 border-[1.5px] border-[var(--violet)]/30">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--violet)]">Inscripción en curso</div>
+              <div className={`mt-3 p-3 rounded-xl border-[1.5px] ${
+                inscripcionCerrada
+                  ? "bg-[var(--sage)]/15 border-[var(--sage)]"
+                  : "bg-[var(--violet)]/10 border-[var(--violet)]/30"
+              }`}>
+                <div className={`text-[10px] font-bold uppercase tracking-wider ${
+                  inscripcionCerrada ? "text-[var(--sage)]" : "text-[var(--violet)]"
+                }`}>
+                  {inscripcionCerrada ? "Inscripciones cerradas" : "Inscripción abierta"}
+                </div>
                 <div className="text-sm font-bold mt-1">
-                  {inscripciones.length} alumno{inscripciones.length === 1 ? "" : "s"} anotado{inscripciones.length === 1 ? "" : "s"}
-                  {" · total actual: "}
+                  {inscripciones.length}{totalAlumnos != null ? `/${totalAlumnos}` : ""} alumno{inscripciones.length === 1 ? "" : "s"} anotado{inscripciones.length === 1 ? "" : "s"}
+                  {" · "}{inscripcionCerrada ? "cantidad final" : "total actual"}{": "}
                   <span className="font-mono">{(inscripciones.length) * Number(n.cantidad_por_alumno || 1)}</span>
                 </div>
+                {!isPyme && esAdminGrupo && (
+                  <div className="mt-3 flex gap-2 flex-wrap">
+                    {!inscripcionCerrada ? (
+                      <button onClick={handleCerrar} disabled={cerrandoBusy}
+                        className="px-3 py-1.5 rounded-lg bg-[var(--ink)] text-white text-[11px] font-bold uppercase tracking-wider disabled:opacity-50">
+                        {cerrandoBusy ? "Cerrando..." : "Cerrar inscripciones"}
+                      </button>
+                    ) : (
+                      <button onClick={handleReabrir} disabled={cerrandoBusy}
+                        className="px-3 py-1.5 rounded-lg bg-white border-[1.5px] border-[var(--ink)]/40 text-[11px] font-bold uppercase tracking-wider text-[var(--ink)]/80 disabled:opacity-50">
+                        {cerrandoBusy ? "..." : "Reabrir"}
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1081,6 +1157,7 @@ function DetalleScreen({ necesidad: n, profile, onBack }) {
           necesidad={n}
           misAlumnos={misAlumnos}
           inscripciones={inscripciones}
+          inscripcionCerrada={inscripcionCerrada}
           onChanged={fetchData}
         />
       )}
@@ -1262,11 +1339,12 @@ function OfertaCard({ o, misAlumnos, misVotos, onVote, onUnvote }) {
 }
 
 /* ===================== Familia: panel de inscripción (modalidad individual) ===================== */
-function InscripcionPanel({ necesidad: n, misAlumnos, inscripciones, onChanged }) {
+function InscripcionPanel({ necesidad: n, misAlumnos, inscripciones, inscripcionCerrada, onChanged }) {
   const inscriptosSet = new Set(inscripciones.map(i => i.alumno_id));
   const [busy, setBusy] = useState(null);
 
   const toggle = async (alumnoId, yaInscripto) => {
+    if (inscripcionCerrada) return;
     setBusy(alumnoId);
     const { error } = yaInscripto
       ? await desinscribirAlumno(n.id, alumnoId)
@@ -1280,19 +1358,22 @@ function InscripcionPanel({ necesidad: n, misAlumnos, inscripciones, onChanged }
     <div className="px-5 mt-6">
       <h2 className="font-display font-bold text-xl mb-2">Anotar a tus hijos/as</h2>
       <p className="text-xs text-[var(--ink)]/65 mb-3">
-        Cada alumno anotado suma <span className="font-bold">{n.cantidad_por_alumno}</span> unidad{n.cantidad_por_alumno === 1 ? "" : "es"} al total del pedido.
+        {inscripcionCerrada
+          ? "Las inscripciones ya están cerradas. La cantidad final quedó firme para que las pymes oferten."
+          : <>Cada alumno anotado suma <span className="font-bold">{n.cantidad_por_alumno}</span> unidad{n.cantidad_por_alumno === 1 ? "" : "es"} al total del pedido.</>}
       </p>
       <div className="space-y-2">
         {misAlumnos.map(a => {
           const yaInscripto = inscriptosSet.has(a.id);
           const isBusy = busy === a.id;
+          const disabled = isBusy || inscripcionCerrada;
           return (
-            <button key={a.id} onClick={() => toggle(a.id, yaInscripto)} disabled={isBusy}
+            <button key={a.id} onClick={() => toggle(a.id, yaInscripto)} disabled={disabled}
               className={`w-full flex items-center justify-between p-3 rounded-xl border-[1.5px] transition ${
                 yaInscripto
                   ? "bg-[var(--sage)]/15 border-[var(--sage)]"
                   : "bg-white border-[var(--ink)]/30"
-              } disabled:opacity-50`}>
+              } ${disabled ? "opacity-60 cursor-not-allowed" : ""}`}>
               <div className="flex items-center gap-2">
                 <span className={`w-5 h-5 rounded-md border-[1.5px] flex items-center justify-center text-xs ${
                   yaInscripto ? "bg-[var(--sage)] border-[var(--sage)] text-white" : "border-[var(--ink)]/40 bg-white"
@@ -1302,7 +1383,7 @@ function InscripcionPanel({ necesidad: n, misAlumnos, inscripciones, onChanged }
                 <span className="font-semibold text-sm">{a.nombre}</span>
               </div>
               <span className="text-[10px] uppercase tracking-wider font-bold text-[var(--ink)]/60">
-                {isBusy ? "..." : yaInscripto ? "Anotado" : "Anotar"}
+                {isBusy ? "..." : inscripcionCerrada ? (yaInscripto ? "Anotado" : "—") : yaInscripto ? "Anotado" : "Anotar"}
               </span>
             </button>
           );
