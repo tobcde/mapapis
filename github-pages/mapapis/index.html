@@ -260,6 +260,8 @@ function normalizeNecesidad(row) {
     fecha_limite: row.fecha_limite,
     grupo_id: row.grupo_id,
     grupo_nombre: row.grupos?.nombre,
+    foto_url: row.foto_url || null,
+    campos: row.campos || {},
   };
 }
 
@@ -759,6 +761,8 @@ function NecesidadCard({ n, onClick, mode }) {
   const tipoSolicitante = n.creador_tipo === "institucion" ? "Institución educativa" : "Grupo de padres";
   const garantiaPago = n.creador_tipo === "institucion";
 
+  const cantidadCampo = n.campos?.cantidad ?? n.campos?.cantidad_personas;
+  const fotoUrl = n.foto_url;
   return (
     <button onClick={onClick} className="card-hover block w-full text-left bg-white rounded-3xl border-[1.5px] border-[var(--ink)] overflow-hidden" style={{boxShadow: "3px 3px 0 var(--ink)"}}>
       {/* Top strip de estado */}
@@ -767,12 +771,21 @@ function NecesidadCard({ n, onClick, mode }) {
         <span>{n.ofertas} {n.ofertas === 1 ? "oferta" : "ofertas"}</span>
       </div>
 
+      {fotoUrl && (
+        <img src={fotoUrl} alt="" className="w-full h-36 object-cover border-b-[1.5px] border-[var(--ink)]" />
+      )}
+
       <div className="p-4">
-        {/* Categoría + tipo solicitante */}
+        {/* Categoría + tipo solicitante + cantidad */}
         <div className="flex items-center gap-2 flex-wrap mb-2">
           <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[var(--mist)] text-[var(--ink)]">
             {n.categoria}
           </span>
+          {cantidadCampo != null && (
+            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[var(--sun)] text-[var(--ink)]">
+              ×{cantidadCampo}
+            </span>
+          )}
           {isPyme && (
             <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[var(--ink)] text-[var(--cream)]">
               {tipoSolicitante}
@@ -789,11 +802,11 @@ function NecesidadCard({ n, onClick, mode }) {
 
         <div className="mt-3 flex items-center gap-3 text-xs text-[var(--ink)]/70 flex-wrap">
           <span className="flex items-center gap-1"><IconMapPin className="w-3.5 h-3.5" /> {n.zona}</span>
-          <span className="flex items-center gap-1"><IconUsers className="w-3.5 h-3.5" /> {n.rango}</span>
+          {n.rango && <span className="flex items-center gap-1"><IconUsers className="w-3.5 h-3.5" /> {n.rango}</span>}
         </div>
 
         <div className="mt-3 flex items-center justify-between">
-          <span className="font-mono text-sm font-bold">{fmtRange(n.presupuesto_min, n.presupuesto_max)}</span>
+          <span className="font-mono text-sm font-bold">{n.presupuesto_min || n.presupuesto_max ? fmtRange(n.presupuesto_min, n.presupuesto_max) : "Sin presupuesto"}</span>
           <IconArrowRight className="w-4 h-4 text-[var(--coral)]" />
         </div>
       </div>
@@ -821,24 +834,43 @@ function DetalleScreen({ necesidad: n, profile, onBack }) {
         <h1 className="font-display font-black text-3xl leading-tight">{n.titulo}</h1>
         <div className="mt-3 flex items-center gap-3 text-xs text-[var(--cream)]/70 flex-wrap">
           <span className="flex items-center gap-1"><IconMapPin className="w-3.5 h-3.5" /> {n.zona}</span>
-          <span className="flex items-center gap-1"><IconUsers className="w-3.5 h-3.5" /> {n.rango}</span>
-          <span className="flex items-center gap-1"><IconClock className="w-3.5 h-3.5" /> hasta {n.fecha_limite}</span>
+          {n.rango && <span className="flex items-center gap-1"><IconUsers className="w-3.5 h-3.5" /> {n.rango}</span>}
+          {n.fecha_limite && <span className="flex items-center gap-1"><IconClock className="w-3.5 h-3.5" /> hasta {n.fecha_limite}</span>}
         </div>
       </div>
 
       <div className="px-5 -mt-5">
-        <div className="bg-white rounded-3xl border-[1.5px] border-[var(--ink)] p-5" style={{boxShadow: "3px 3px 0 var(--ink)"}}>
-          <h3 className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/60">Descripción</h3>
-          <p className="mt-2 text-sm text-[var(--ink)]/85">{n.descripcion}</p>
+        <div className="bg-white rounded-3xl border-[1.5px] border-[var(--ink)] overflow-hidden" style={{boxShadow: "3px 3px 0 var(--ink)"}}>
+          {n.foto_url && (
+            <img src={n.foto_url} alt="" className="w-full max-h-72 object-cover border-b-[1.5px] border-[var(--ink)]" />
+          )}
+          <div className="p-5">
+            <h3 className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/60">Descripción</h3>
+            <p className="mt-2 text-sm text-[var(--ink)]/85 whitespace-pre-wrap">{n.descripcion}</p>
 
-          <div className="mt-5 grid grid-cols-2 gap-3">
-            <div>
-              <h3 className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/60">Presupuesto</h3>
-              <p className="font-mono text-sm font-bold mt-1">{fmtRange(n.presupuesto_min, n.presupuesto_max)}</p>
-            </div>
-            <div>
-              <h3 className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/60">Categoría</h3>
-              <p className="text-sm font-semibold mt-1">{n.categoria}</p>
+            {n.campos && Object.keys(n.campos).length > 0 && (
+              <div className="mt-5">
+                <h3 className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/60 mb-2">Detalle del pedido</h3>
+                <div className="space-y-1.5 text-sm">
+                  {Object.entries(n.campos).map(([k, v]) => (
+                    <div key={k} className="flex items-baseline gap-2">
+                      <span className="text-[var(--ink)]/55 capitalize">{k.replace(/_/g, " ")}:</span>
+                      <span className="font-semibold">{String(v)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <div>
+                <h3 className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/60">Presupuesto</h3>
+                <p className="font-mono text-sm font-bold mt-1">{n.presupuesto_min || n.presupuesto_max ? fmtRange(n.presupuesto_min, n.presupuesto_max) : "—"}</p>
+              </div>
+              <div>
+                <h3 className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/60">Categoría</h3>
+                <p className="text-sm font-semibold mt-1">{n.categoria}</p>
+              </div>
             </div>
           </div>
         </div>
@@ -916,6 +948,9 @@ function PublicarScreen({ profile, grupoId, onCancel, onPublicado }) {
   const [presupuestoMax, setPresupuestoMax] = useState("");
   const [fechaLimite, setFechaLimite] = useState("");
   const [descripcion, setDescripcion] = useState("");
+  const [campos, setCampos] = useState({});
+  const [foto, setFoto] = useState(null); // File
+  const [fotoPreview, setFotoPreview] = useState(null);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -925,7 +960,7 @@ function PublicarScreen({ profile, grupoId, onCancel, onPublicado }) {
       if (!grupoId) { setLoading(false); return; }
       const [gRes, cRes, mRes] = await Promise.all([
         sb.from("grupos").select("id, nombre, zona, rango_familias").eq("id", grupoId).maybeSingle(),
-        sb.from("categorias").select("id, slug, nombre").eq("activa", true).order("orden"),
+        sb.from("categorias").select("id, slug, nombre, campos_obligatorios").eq("activa", true).order("orden"),
         sb.from("grupo_miembros").select("rol_en_grupo").eq("grupo_id", grupoId).eq("profile_id", profile.id).maybeSingle(),
       ]);
       if (gRes.data) setGrupo(gRes.data);
@@ -939,6 +974,30 @@ function PublicarScreen({ profile, grupoId, onCancel, onPublicado }) {
     })();
   }, [grupoId, profile.id]);
 
+  // Reset campos cuando cambia categoría
+  useEffect(() => { setCampos({}); }, [categoriaId]);
+
+  const categoriaActual = categorias.find(c => c.id === categoriaId);
+  const schemaCampos = categoriaActual?.campos_obligatorios || [];
+
+  const setCampo = (key, value) => setCampos(prev => ({ ...prev, [key]: value }));
+
+  const onPickFoto = (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (f.size > 5 * 1024 * 1024) { setError("La foto no puede pesar más de 5 MB."); return; }
+    if (!f.type.startsWith("image/")) { setError("Solo se aceptan imágenes."); return; }
+    setError(null);
+    setFoto(f);
+    setFotoPreview(URL.createObjectURL(f));
+  };
+
+  const removeFoto = () => {
+    setFoto(null);
+    if (fotoPreview) URL.revokeObjectURL(fotoPreview);
+    setFotoPreview(null);
+  };
+
   const submit = async (e) => {
     e.preventDefault();
     setEnviando(true); setError(null);
@@ -950,10 +1009,42 @@ function PublicarScreen({ profile, grupoId, onCancel, onPublicado }) {
     if (descTrim.length < 10 || descTrim.length > 1200) {
       setError("La descripción debe tener entre 10 y 1200 caracteres."); setEnviando(false); return;
     }
+    // Validar campos requeridos del schema
+    for (const c of schemaCampos) {
+      if (c.required) {
+        const v = campos[c.key];
+        if (v == null || v === "") {
+          setError(`Falta completar: ${c.label}`); setEnviando(false); return;
+        }
+        if (c.type === "int" && (Number.isNaN(Number(v)) || Number(v) < (c.min ?? 0))) {
+          setError(`${c.label}: debe ser un número${c.min ? ` mayor o igual a ${c.min}` : ""}.`); setEnviando(false); return;
+        }
+      }
+    }
     const min = presupuestoMin ? Number(presupuestoMin) : null;
     const max = presupuestoMax ? Number(presupuestoMax) : null;
     if (min != null && max != null && min > max) {
       setError("El mínimo no puede ser mayor que el máximo."); setEnviando(false); return;
+    }
+
+    // 1. Subir foto a Storage si hay
+    let fotoUrl = null;
+    if (foto) {
+      const ext = (foto.name.split(".").pop() || "jpg").toLowerCase();
+      const path = `${grupoId}/${profile.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const { error: upErr } = await sb.storage.from("necesidad-fotos").upload(path, foto, { contentType: foto.type, upsert: false });
+      if (upErr) { setError("Error subiendo foto: " + upErr.message); setEnviando(false); return; }
+      const { data: pub } = sb.storage.from("necesidad-fotos").getPublicUrl(path);
+      fotoUrl = pub?.publicUrl || null;
+    }
+
+    // 2. Insertar necesidad
+    // Convertir int strings a números antes de guardar
+    const camposClean = {};
+    for (const c of schemaCampos) {
+      const v = campos[c.key];
+      if (v == null || v === "") continue;
+      camposClean[c.key] = c.type === "int" ? Number(v) : v;
     }
     const { error: errInsert } = await sb.from("necesidades").insert({
       grupo_id: grupoId,
@@ -966,6 +1057,8 @@ function PublicarScreen({ profile, grupoId, onCancel, onPublicado }) {
       presupuesto_min_centavos: min,
       presupuesto_max_centavos: max,
       fecha_limite: fechaLimite || null,
+      campos: camposClean,
+      foto_url: fotoUrl,
     });
     setEnviando(false);
     if (errInsert) { setError(errInsert.message); return; }
@@ -1028,6 +1121,57 @@ function PublicarScreen({ profile, grupoId, onCancel, onPublicado }) {
             className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-medium">
             {categorias.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
           </select>
+        </Field>
+
+        {/* Campos dinámicos según categoría */}
+        {schemaCampos.length > 0 && (
+          <div className="rounded-2xl border-[1.5px] border-[var(--ink)]/20 bg-[var(--mist)] p-4 space-y-3">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/70">
+              Detalle del pedido
+            </div>
+            {schemaCampos.map(c => (
+              <Field key={c.key} label={c.label + (c.required ? " *" : "")}>
+                {c.type === "int" && (
+                  <input type="number" min={c.min ?? 0} value={campos[c.key] ?? ""}
+                    onChange={(e) => setCampo(c.key, e.target.value)}
+                    required={c.required} placeholder={c.placeholder || ""}
+                    className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-mono" />
+                )}
+                {c.type === "date" && (
+                  <input type="date" value={campos[c.key] ?? ""}
+                    onChange={(e) => setCampo(c.key, e.target.value)}
+                    required={c.required}
+                    className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-medium" />
+                )}
+                {c.type === "text" && (
+                  <input type="text" value={campos[c.key] ?? ""}
+                    onChange={(e) => setCampo(c.key, e.target.value)}
+                    required={c.required} placeholder={c.placeholder || ""}
+                    className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-medium focus:outline-none" />
+                )}
+                {c.help && <p className="text-[10px] text-[var(--ink)]/55 mt-1">{c.help}</p>}
+              </Field>
+            ))}
+          </div>
+        )}
+
+        {/* Foto de referencia */}
+        <Field label="Foto de referencia (opcional)">
+          {fotoPreview ? (
+            <div className="relative">
+              <img src={fotoPreview} alt="preview" className="w-full max-h-60 object-cover rounded-xl border-[1.5px] border-[var(--ink)]" />
+              <button type="button" onClick={removeFoto}
+                className="absolute top-2 right-2 px-3 py-1 rounded-full bg-white border-[1.5px] border-[var(--ink)] text-[10px] font-bold uppercase tracking-wider">
+                Quitar
+              </button>
+            </div>
+          ) : (
+            <label className="block w-full p-4 rounded-xl border-[1.5px] border-dashed border-[var(--ink)]/40 bg-white text-center cursor-pointer hover:bg-[var(--mist)]">
+              <input type="file" accept="image/*" onChange={onPickFoto} className="hidden" />
+              <span className="text-sm text-[var(--ink)]/70 font-semibold">📷 Subir foto</span>
+              <p className="text-[10px] text-[var(--ink)]/50 mt-1">JPG/PNG · máx 5 MB</p>
+            </label>
+          )}
         </Field>
 
         <div className="grid grid-cols-2 gap-3">
