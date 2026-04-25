@@ -275,7 +275,9 @@ function normalizeNecesidad(row) {
     link_referencia: row.link_referencia || null,
     modalidad: row.modalidad || "grupal",
     cantidad_por_alumno: row.cantidad_por_alumno || null,
-    inscriptos_count: row.inscriptos_count ?? 0,
+    inscriptos_count: row.inscriptos_count
+      ?? row.necesidad_inscripciones?.[0]?.count
+      ?? 0,
     grupo_id: row.grupo_id,
     grupo_nombre: row.grupos?.nombre,
     foto_url: row.foto_url || null,
@@ -682,17 +684,26 @@ function FeedFamiliaScreen({ profile, onOpen }) {
   const [necesidades, setNecesidades] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchAll = async () => {
+  useEffect(() => {
+    let alive = true;
     setLoading(true);
-    // RLS ya filtra a las necesidades de mis grupos
-    const { data, error } = await sb
-      .from("necesidades")
-      .select("*, categorias(nombre, slug), grupos(nombre, rango_familias)")
-      .order("created_at", { ascending: false });
-    if (!error && data) setNecesidades(data.map(normalizeNecesidad));
-    setLoading(false);
-  };
-  useEffect(() => { fetchAll(); }, []);
+    (async () => {
+      try {
+        const { data, error } = await sb
+          .from("necesidades")
+          .select("*, categorias(nombre, slug), grupos(nombre, rango_familias), necesidad_inscripciones(count)")
+          .order("created_at", { ascending: false });
+        if (!alive) return;
+        if (error) console.error("[FeedFamilia] fetch error:", error);
+        setNecesidades(!error && data ? data.map(normalizeNecesidad) : []);
+      } catch (e) {
+        console.error("[FeedFamilia] exception:", e);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [profile.id]);
 
   const activas = necesidades.filter(n => !["completada", "cumplida", "cancelada"].includes(n.estado)).length;
   const enVotacion = necesidades.filter(n => n.estado === "en_votacion").length;
@@ -753,16 +764,21 @@ function FeedPymeScreen({ profile, onOpen }) {
 
   useEffect(() => {
     let alive = true;
+    setLoading(true);
     (async () => {
-      setLoading(true);
-      const { data, error } = await sb
-        .from("necesidades_publicas")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (!alive) return;
-      if (error) { console.error(error); setItems([]); }
-      else setItems((data || []).map(normalizeNecesidad));
-      setLoading(false);
+      try {
+        const { data, error } = await sb
+          .from("necesidades_publicas")
+          .select("*")
+          .order("created_at", { ascending: false });
+        if (!alive) return;
+        if (error) console.error("[FeedPyme] fetch error:", error);
+        setItems(!error && data ? data.map(normalizeNecesidad) : []);
+      } catch (e) {
+        console.error("[FeedPyme] exception:", e);
+      } finally {
+        if (alive) setLoading(false);
+      }
     })();
     return () => { alive = false; };
   }, []);
@@ -889,51 +905,64 @@ function DetalleScreen({ necesidad: n, profile, onBack }) {
   const [inscripciones, setInscripciones] = useState([]); // { alumno_id, inscripto_por }
   const [loading, setLoading] = useState(true);
 
+  const aliveRef = React.useRef(true);
   const fetchData = async () => {
     setLoading(true);
-    const ofertasReq = sb.from("ofertas")
-      .select("*, profiles!ofertas_pyme_id_fkey(nombre, email)")
-      .eq("necesidad_id", n.id)
-      .order("created_at", { ascending: true });
+    try {
+      const ofertasReq = sb.from("ofertas")
+        .select("*, profiles!ofertas_pyme_id_fkey(nombre, email)")
+        .eq("necesidad_id", n.id)
+        .order("created_at", { ascending: true });
 
-    const inscripcionesReq = sb.from("necesidad_inscripciones")
-      .select("alumno_id, inscripto_por")
-      .eq("necesidad_id", n.id);
+      const inscripcionesReq = sb.from("necesidad_inscripciones")
+        .select("alumno_id, inscripto_por")
+        .eq("necesidad_id", n.id);
 
-    if (isPyme) {
-      const [oRes, iRes] = await Promise.all([ofertasReq, inscripcionesReq]);
-      setOfertas(oRes.data || []);
-      setInscripciones(iRes.data || []);
-    } else {
-      const [oRes, aRes, iRes] = await Promise.all([
-        ofertasReq,
-        sb.from("alumnos")
-          .select("id, nombre, alumno_tutores!inner(profile_id)")
-          .eq("grupo_id", n.grupo_id)
-          .eq("alumno_tutores.profile_id", profile.id),
-        inscripcionesReq,
-      ]);
-      setOfertas(oRes.data || []);
-      setInscripciones(iRes.data || []);
-      const alumnos = aRes.data || [];
-      setMisAlumnos(alumnos);
+      if (isPyme) {
+        const [oRes, iRes] = await Promise.all([ofertasReq, inscripcionesReq]);
+        if (!aliveRef.current) return;
+        setOfertas(oRes.data || []);
+        setInscripciones(iRes.data || []);
+      } else {
+        const [oRes, aRes, iRes] = await Promise.all([
+          ofertasReq,
+          sb.from("alumnos")
+            .select("id, nombre, alumno_tutores!inner(profile_id)")
+            .eq("grupo_id", n.grupo_id)
+            .eq("alumno_tutores.profile_id", profile.id),
+          inscripcionesReq,
+        ]);
+        if (!aliveRef.current) return;
+        setOfertas(oRes.data || []);
+        setInscripciones(iRes.data || []);
+        const alumnos = aRes.data || [];
+        setMisAlumnos(alumnos);
 
-      if (alumnos.length > 0 && (oRes.data || []).length > 0) {
-        const ofertaIds = (oRes.data || []).map(o => o.id);
-        const alumnoIds = alumnos.map(a => a.id);
-        const vRes = await sb.from("votos_oferta")
-          .select("oferta_id, alumno_id")
-          .in("oferta_id", ofertaIds)
-          .in("alumno_id", alumnoIds)
-          .eq("votante_id", profile.id);
-        const map = {};
-        (vRes.data || []).forEach(v => { map[v.alumno_id] = v.oferta_id; });
-        setMisVotos(map);
+        if (alumnos.length > 0 && (oRes.data || []).length > 0) {
+          const ofertaIds = (oRes.data || []).map(o => o.id);
+          const alumnoIds = alumnos.map(a => a.id);
+          const vRes = await sb.from("votos_oferta")
+            .select("oferta_id, alumno_id")
+            .in("oferta_id", ofertaIds)
+            .in("alumno_id", alumnoIds)
+            .eq("votante_id", profile.id);
+          if (!aliveRef.current) return;
+          const map = {};
+          (vRes.data || []).forEach(v => { map[v.alumno_id] = v.oferta_id; });
+          setMisVotos(map);
+        }
       }
+    } catch (e) {
+      console.error("[Detalle] exception:", e);
+    } finally {
+      if (aliveRef.current) setLoading(false);
     }
-    setLoading(false);
   };
-  useEffect(() => { fetchData(); }, [n.id]);
+  useEffect(() => {
+    aliveRef.current = true;
+    fetchData();
+    return () => { aliveRef.current = false; };
+  }, [n.id]);
 
   const onVote = async (alumnoId, ofertaId) => {
     const { error } = await voteOferta(alumnoId, ofertaId);
@@ -1322,23 +1351,31 @@ function PublicarScreen({ profile, grupoId, onChangeGrupo, onCancel, onPublicado
 
   // Cargar grupo activo + categorias + mi rol cada vez que cambia grupoId
   useEffect(() => {
+    if (!grupoId) { setLoading(false); return; }
+    let alive = true;
+    setLoading(true);
     (async () => {
-      if (!grupoId) { setLoading(false); return; }
-      setLoading(true);
-      const [gRes, cRes, mRes] = await Promise.all([
-        sb.from("grupos").select("id, nombre, zona, rango_familias").eq("id", grupoId).maybeSingle(),
-        sb.from("categorias").select("id, slug, nombre, campos_obligatorios").eq("activa", true).order("orden"),
-        sb.from("grupo_miembros").select("rol_en_grupo").eq("grupo_id", grupoId).eq("profile_id", profile.id).maybeSingle(),
-      ]);
-      if (gRes.data) setGrupo(gRes.data);
-      if (cRes.data) {
-        setCategorias(cRes.data);
-        if (cRes.data[0] && !categoriaId) setCategoriaId(cRes.data[0].id);
+      try {
+        const [gRes, cRes, mRes] = await Promise.all([
+          sb.from("grupos").select("id, nombre, zona, rango_familias").eq("id", grupoId).maybeSingle(),
+          sb.from("categorias").select("id, slug, nombre, campos_obligatorios").eq("activa", true).order("orden"),
+          sb.from("grupo_miembros").select("rol_en_grupo").eq("grupo_id", grupoId).eq("profile_id", profile.id).maybeSingle(),
+        ]);
+        if (!alive) return;
+        if (gRes.data) setGrupo(gRes.data);
+        if (cRes.data) {
+          setCategorias(cRes.data);
+          if (cRes.data[0] && !categoriaId) setCategoriaId(cRes.data[0].id);
+        }
+        const rol = mRes.data?.rol_en_grupo;
+        setEsAdmin(rol === "creador" || rol === "admin");
+      } catch (e) {
+        console.error("[Publicar] exception:", e);
+      } finally {
+        if (alive) setLoading(false);
       }
-      const rol = mRes.data?.rol_en_grupo;
-      setEsAdmin(rol === "creador" || rol === "admin");
-      setLoading(false);
     })();
+    return () => { alive = false; };
   }, [grupoId, profile.id]);
 
   // Reset campos cuando cambia categoría
@@ -1995,40 +2032,55 @@ function GrupoScreen({ profile, grupoId, onChangeGrupo }) {
   const [copied, setCopied] = useState(false);
   const [view, setView] = useState("home"); // 'home' | 'crear' | 'unirse' | 'agregar-alumno'
 
+  const aliveRef = React.useRef(true);
   const fetchAll = async () => {
     setLoading(true);
-    // Mis grupos (todos donde soy miembro)
-    const { data: mgs } = await sb.from("grupo_miembros")
-      .select("rol_en_grupo, grupos(id, nombre, zona, tipo, invite_code, creado_por, institucion_nombre, institucion_direccion)")
-      .eq("profile_id", profile.id);
-    const grupos = (mgs || []).map(m => ({ ...m.grupos, miRol: m.rol_en_grupo })).filter(Boolean);
-    setMisGrupos(grupos);
+    try {
+      const { data: mgs } = await sb.from("grupo_miembros")
+        .select("rol_en_grupo, grupos(id, nombre, zona, tipo, invite_code, creado_por, institucion_nombre, institucion_direccion)")
+        .eq("profile_id", profile.id);
+      if (!aliveRef.current) return;
+      const grupos = (mgs || []).map(m => ({ ...m.grupos, miRol: m.rol_en_grupo })).filter(Boolean);
+      setMisGrupos(grupos);
 
-    if (grupoId) {
-      const g = grupos.find(x => x.id === grupoId);
-      setGrupo(g || null);
-      if (g) {
-        const [{ data: mbs }, { data: als }] = await Promise.all([
-          sb.from("grupo_miembros")
-            .select("profile_id, rol_en_grupo, profiles(id, nombre, email)")
-            .eq("grupo_id", grupoId),
-          sb.from("alumnos")
-            .select("id, nombre, alumno_tutores(profile_id, profiles(id, nombre, email))")
-            .eq("grupo_id", grupoId)
-            .order("nombre")
-        ]);
-        setMiembros(mbs || []);
-        setAlumnos(als || []);
+      if (grupoId) {
+        const g = grupos.find(x => x.id === grupoId);
+        setGrupo(g || null);
+        if (g) {
+          const [{ data: mbs }, { data: als }] = await Promise.all([
+            sb.from("grupo_miembros")
+              .select("profile_id, rol_en_grupo, profiles(id, nombre, email)")
+              .eq("grupo_id", grupoId),
+            sb.from("alumnos")
+              .select("id, nombre, alumno_tutores(profile_id, profiles(id, nombre, email))")
+              .eq("grupo_id", grupoId)
+              .order("nombre")
+          ]);
+          if (!aliveRef.current) return;
+          setMiembros(mbs || []);
+          setAlumnos(als || []);
+        } else {
+          setMiembros([]);
+          setAlumnos([]);
+        }
+      } else {
+        setGrupo(null);
+        setMiembros([]);
+        setAlumnos([]);
       }
-    } else {
-      setGrupo(null);
-      setMiembros([]);
-      setAlumnos([]);
+    } catch (e) {
+      console.error("[Grupo] exception:", e);
+    } finally {
+      if (aliveRef.current) setLoading(false);
     }
-    setLoading(false);
   };
 
-  useEffect(() => { fetchAll(); /* eslint-disable-next-line */ }, [grupoId]);
+  useEffect(() => {
+    aliveRef.current = true;
+    fetchAll();
+    return () => { aliveRef.current = false; };
+    /* eslint-disable-next-line */
+  }, [grupoId]);
 
   const onCopyLink = async () => {
     if (!grupo) return;
