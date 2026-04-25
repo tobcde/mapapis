@@ -694,23 +694,24 @@ function PymeProfileGate({ profile, session, onProfileChange }) {
     );
   }
   if (!pymeRow) return <PymeOnboardingScreen profile={profile} onDone={() => setReloadKey(k => k + 1)} />;
-  return <AppRoot session={session} profile={profile} pyme={pymeRow} onProfileChange={onProfileChange} />;
+  return <AppRoot session={session} profile={profile} pyme={pymeRow} onProfileChange={onProfileChange} onPymeReload={() => setReloadKey(k => k + 1)} />;
 }
 
-function PymeOnboardingScreen({ profile, onDone }) {
-  const [nombre, setNombre] = useState("");
-  const [razonSocial, setRazonSocial] = useState("");
-  const [cuit, setCuit] = useState("");
-  const [descripcion, setDescripcion] = useState("");
-  const [telefono, setTelefono] = useState("");
-  const [aniosRubro, setAniosRubro] = useState("");
-  const [webUrl, setWebUrl] = useState("");
-  const [instagram, setInstagram] = useState("");
-  const [facebook, setFacebook] = useState("");
-  const [cbu, setCbu] = useState("");
-  const [aliasCbu, setAliasCbu] = useState("");
-  const [zonasSel, setZonasSel] = useState([]);
-  const [catsSel, setCatsSel] = useState([]);
+function PymeOnboardingScreen({ profile, onDone, initialPyme = null, onCancel }) {
+  const isEdit = !!initialPyme;
+  const [nombre, setNombre] = useState(initialPyme?.nombre_comercial || "");
+  const [razonSocial, setRazonSocial] = useState(initialPyme?.razon_social || "");
+  const [cuit, setCuit] = useState(initialPyme?.cuit || "");
+  const [descripcion, setDescripcion] = useState(initialPyme?.descripcion || "");
+  const [telefono, setTelefono] = useState(initialPyme?.telefono || "");
+  const [aniosRubro, setAniosRubro] = useState(initialPyme?.anios_rubro != null ? String(initialPyme.anios_rubro) : "");
+  const [webUrl, setWebUrl] = useState(initialPyme?.web_url || "");
+  const [instagram, setInstagram] = useState(initialPyme?.instagram || "");
+  const [facebook, setFacebook] = useState(initialPyme?.facebook || "");
+  const [cbu, setCbu] = useState(initialPyme?.cbu || "");
+  const [aliasCbu, setAliasCbu] = useState(initialPyme?.alias_cbu || "");
+  const [zonasSel, setZonasSel] = useState(Array.isArray(initialPyme?.zonas) ? initialPyme.zonas : []);
+  const [catsSel, setCatsSel] = useState(Array.isArray(initialPyme?.categorias_ids) ? initialPyme.categorias_ids : []);
   const [categorias, setCategorias] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
@@ -764,15 +765,22 @@ function PymeOnboardingScreen({ profile, onDone }) {
   return (
     <div className="min-h-screen bg-[var(--cream)] bg-dots">
       <div className="px-6 pt-12 pb-6 max-w-md mx-auto anim-in">
+        {isEdit && onCancel && (
+          <button onClick={onCancel} className="text-xs font-bold uppercase tracking-wider text-[var(--ink)]/60 mb-3 flex items-center gap-1">
+            <IconArrowLeft className="w-3.5 h-3.5" /> Volver
+          </button>
+        )}
         <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-[0.2em] text-[var(--sage)]">
           <span className="inline-block w-6 h-[2px] bg-[var(--sage)]"></span>
-          <span>Pyme · Onboarding</span>
+          <span>{isEdit ? "Pyme · Editar perfil" : "Pyme · Onboarding"}</span>
         </div>
         <h1 className="font-display font-black text-4xl leading-tight tracking-tight mt-4">
-          Contanos de tu negocio
+          {isEdit ? "Editá tu negocio" : "Contanos de tu negocio"}
         </h1>
         <p className="text-[15px] text-[var(--ink)]/70 mt-3">
-          Pedimos esta info para validar que la pyme es real. Los datos sensibles (CUIT, CBU) no se muestran a las familias salvo que ganes la oferta.
+          {isEdit
+            ? "Actualizá los datos de tu pyme. Los cambios en CUIT/CBU pueden requerir nueva validación."
+            : "Pedimos esta info para validar que la pyme es real. Los datos sensibles (CUIT, CBU) no se muestran a las familias salvo que ganes la oferta."}
         </p>
       </div>
       <div className="px-6 pb-16 max-w-md mx-auto">
@@ -888,11 +896,13 @@ function PymeOnboardingScreen({ profile, onDone }) {
 
           <button type="submit" disabled={submitting}
             className="btn-pop w-full py-3.5 bg-[var(--ink)] text-[var(--sun)] font-extrabold rounded-xl border-[1.5px] border-[var(--ink)] uppercase tracking-wider text-sm disabled:opacity-50">
-            {submitting ? "Guardando…" : "Guardar y empezar a ofertar →"}
+            {submitting ? "Guardando…" : (isEdit ? "Guardar cambios →" : "Guardar y empezar a ofertar →")}
           </button>
-          <p className="text-[11px] text-[var(--ink)]/50 text-center">
-            Al guardar quedás como <span className="font-bold">Tier 0 — Registrada</span>. Para ofertar más alto vas a tener que validar CUIT contra AFIP (próximamente).
-          </p>
+          {!isEdit && (
+            <p className="text-[11px] text-[var(--ink)]/50 text-center">
+              Al guardar quedás como <span className="font-bold">Tier 0 — Registrada</span>. Para ofertar más alto vas a tener que validar CUIT contra AFIP (próximamente).
+            </p>
+          )}
         </form>
       </div>
     </div>
@@ -1386,7 +1396,7 @@ function FounderNecesidades() {
 }
 
 /* ===================== APP ROOT — bottom nav + screens ===================== */
-function AppRoot({ session, profile, onProfileChange }) {
+function AppRoot({ session, profile, pyme, onProfileChange, onPymeReload }) {
   const [screen, setScreen] = useState("feed");
   const [selected, setSelected] = useState(null);
   const [activeGrupoId, setActiveGrupoIdState] = useState(getActiveGrupo() || null);
@@ -1428,7 +1438,15 @@ function AppRoot({ session, profile, onProfileChange }) {
         {screen === "publicar" && <PublicarScreen profile={profile} grupoId={activeGrupoId} onChangeGrupo={onChangeGrupo} onCancel={goBack} onPublicado={goBack} />}
         {screen === "grupo" && <GrupoScreen profile={profile} grupoId={activeGrupoId} onChangeGrupo={onChangeGrupo} onBack={() => setScreen("feed")} />}
         {screen === "detalle" && <DetalleScreen necesidad={selected} profile={profile} onBack={goBack} />}
-        {screen === "perfil" && <PerfilScreen profile={profile} onProfileChange={onProfileChange} />}
+        {screen === "perfil" && <PerfilScreen profile={profile} pyme={pyme} onProfileChange={onProfileChange} onEditarPyme={() => setScreen("editar-pyme")} />}
+        {screen === "editar-pyme" && isPyme && (
+          <PymeOnboardingScreen
+            profile={profile}
+            initialPyme={pyme}
+            onDone={() => { if (onPymeReload) onPymeReload(); setScreen("perfil"); }}
+            onCancel={() => setScreen("perfil")}
+          />
+        )}
 
         <BottomNav screen={screen} setScreen={goToScreen} isPyme={isPyme} />
       </div>
@@ -3385,6 +3403,7 @@ function AlumnoStepScreen({ grupoId, grupoNombre, contexto, onDone }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [misAlumnos, setMisAlumnos] = useState([]);
+  const [justAdded, setJustAdded] = useState(null); // {nombre} | null — pantalla de éxito post-agregar
 
   const refreshMisAlumnos = async () => {
     const { data } = await sb.from("mis_alumnos").select("*").eq("grupo_id", grupoId);
@@ -3423,16 +3442,19 @@ function AlumnoStepScreen({ grupoId, grupoNombre, contexto, onDone }) {
     const { error } = await alumnoCreateWithTutor(grupoId, nombre, dniNorm || null);
     setLoading(false);
     if (error) { setError(error.message); return; }
+    const nombreAgregado = nombre;
     setNombre(""); setDni(""); setMatches(null); setMatchSource(null);
+    setJustAdded({ nombre: nombreAgregado });
     refreshMisAlumnos();
   };
 
-  const onJoinExisting = async (alumnoId) => {
+  const onJoinExisting = async (alumnoId, alumnoNombre) => {
     setLoading(true); setError(null);
     const { error } = await alumnoJoinAsTutor(alumnoId);
     setLoading(false);
     if (error) { setError(error.message); return; }
     setNombre(""); setDni(""); setMatches(null); setMatchSource(null);
+    setJustAdded({ nombre: alumnoNombre });
     refreshMisAlumnos();
   };
 
@@ -3460,7 +3482,25 @@ function AlumnoStepScreen({ grupoId, grupoNombre, contexto, onDone }) {
         </div>
       )}
 
-      {!matches && (
+      {justAdded && (
+        <div className="space-y-3 anim-in">
+          <div className="bg-[var(--sage)]/15 border-[1.5px] border-[var(--sage)] rounded-2xl p-4 text-center">
+            <div className="text-2xl mb-1">✓</div>
+            <p className="font-display font-bold text-lg leading-tight"><span>{justAdded.nombre}</span> sumado/a al grupo</p>
+            <p className="text-xs text-[var(--ink)]/70 mt-1">¿Tenés más hijos/as en este grupo, o querés ir al grupo ahora?</p>
+          </div>
+          <button onClick={() => setJustAdded(null)}
+            className="btn-pop w-full py-3 bg-white text-[var(--ink)] font-extrabold rounded-xl uppercase tracking-wider text-xs border-[1.5px] border-[var(--ink)]">
+            Agregar otro hijo/a
+          </button>
+          <button onClick={onDone}
+            className="btn-pop w-full py-3 bg-[var(--sage)] text-white font-extrabold rounded-xl uppercase tracking-wider text-xs">
+            Ir al grupo →
+          </button>
+        </div>
+      )}
+
+      {!justAdded && !matches && (
         <form onSubmit={onCheck} className="space-y-3">
           <Field label="Nombre del hijo/a">
             <input value={nombre} onChange={(e) => setNombre(e.target.value)} required minLength={2} maxLength={60}
@@ -3483,7 +3523,7 @@ function AlumnoStepScreen({ grupoId, grupoNombre, contexto, onDone }) {
         </form>
       )}
 
-      {matches && matches.length === 0 && (
+      {!justAdded && matches && matches.length === 0 && (
         <div className="space-y-3">
           <div className="bg-white rounded-2xl border-[1.5px] border-[var(--ink)] p-4">
             <p className="text-sm">Vamos a agregar a <span className="font-bold">{nombre}</span> al grupo.</p>
@@ -3498,7 +3538,7 @@ function AlumnoStepScreen({ grupoId, grupoNombre, contexto, onDone }) {
         </div>
       )}
 
-      {matches && matches.length > 0 && (
+      {!justAdded && matches && matches.length > 0 && (
         <div className="space-y-3">
           <div className={`rounded-2xl border-[1.5px] p-4 ${matchSource === "dni" ? "bg-[var(--sage)]/15 border-[var(--sage)]" : "bg-[var(--sun)]/30 border-[var(--ink)]"}`}>
             {matchSource === "dni" ? (
@@ -3526,7 +3566,7 @@ function AlumnoStepScreen({ grupoId, grupoNombre, contexto, onDone }) {
                   Ya sos tutor de este alumno
                 </div>
               ) : (
-                <button onClick={() => onJoinExisting(m.alumno_id)} disabled={loading}
+                <button onClick={() => onJoinExisting(m.alumno_id, m.nombre)} disabled={loading}
                   className="btn-pop w-full py-2.5 bg-[var(--ink)] text-white font-extrabold rounded-xl uppercase tracking-wider text-xs">
                   Sí, es mi hijo/a — sumarme como tutor
                 </button>
@@ -3545,15 +3585,14 @@ function AlumnoStepScreen({ grupoId, grupoNombre, contexto, onDone }) {
         </div>
       )}
 
-      <div className="mt-6 pt-5 border-t border-[var(--ink)]/10">
-        <button onClick={onDone}
-          className="btn-pop w-full py-3 bg-[var(--sage)] text-white font-extrabold rounded-xl uppercase tracking-wider text-xs">
-          {misAlumnos.length === 0 ? "Saltar por ahora →" : "Listo, ir al grupo →"}
-        </button>
-        {misAlumnos.length > 0 && !matches && (
-          <p className="text-[11px] text-center text-[var(--ink)]/60 mt-2">Tenés más hijos/as en este grupo? Escribí otro nombre arriba.</p>
-        )}
-      </div>
+      {!justAdded && (
+        <div className="mt-6 pt-5 border-t border-[var(--ink)]/10">
+          <button onClick={onDone}
+            className="btn-pop w-full py-3 bg-[var(--sage)] text-white font-extrabold rounded-xl uppercase tracking-wider text-xs">
+            {misAlumnos.length === 0 ? "Saltar por ahora →" : "Listo, ir al grupo →"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -4083,7 +4122,7 @@ function GrupoScreen({ profile, grupoId, onChangeGrupo, onBack }) {
 }
 
 /* ===================== Perfil ===================== */
-function PerfilScreen({ profile, onProfileChange }) {
+function PerfilScreen({ profile, pyme, onProfileChange, onEditarPyme }) {
   const [editing, setEditing] = useState(false);
   const [nombre, setNombre] = useState(profile.nombre || "");
   const [saving, setSaving] = useState(false);
@@ -4157,6 +4196,31 @@ function PerfilScreen({ profile, onProfileChange }) {
         </div>
         <button onClick={cambiarRol} className="mt-4 text-xs font-bold uppercase tracking-wider text-[var(--coral)]">Cambiar de rol →</button>
       </div>
+
+      {/* Mi negocio (solo pymes) */}
+      {profile.role === "pyme" && pyme && onEditarPyme && (
+        <div className="bg-white rounded-3xl border-[1.5px] border-[var(--ink)] p-5 mb-4" style={{boxShadow: "3px 3px 0 var(--ink)"}}>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/60 mb-2">Mi negocio</div>
+          <div className="flex items-center gap-3 mb-3">
+            {pyme.logo_url ? (
+              <img src={pyme.logo_url} alt="" className="w-12 h-12 rounded-xl object-cover border-[1.5px] border-[var(--ink)]" />
+            ) : (
+              <div className="w-12 h-12 rounded-xl bg-[var(--cream)] border-[1.5px] border-[var(--ink)] flex items-center justify-center font-display font-bold text-lg">
+                {(pyme.nombre_comercial || "?")[0]?.toUpperCase()}
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="font-display font-bold text-lg truncate">{pyme.nombre_comercial}</div>
+              <div className="text-[11px] text-[var(--ink)]/60 truncate">
+                Tier {pyme.tier ?? 0} · {(pyme.zonas || []).length} zona{(pyme.zonas || []).length === 1 ? "" : "s"}
+              </div>
+            </div>
+          </div>
+          <button onClick={onEditarPyme} className="btn-pop w-full py-2.5 bg-[var(--sage)] text-white font-extrabold rounded-xl border-[1.5px] border-[var(--ink)] uppercase tracking-wider text-xs">
+            Editar mi negocio →
+          </button>
+        </div>
+      )}
 
       {/* Logout */}
       <button onClick={logout} className="btn-pop w-full py-3.5 bg-white text-[var(--ink)] font-extrabold rounded-xl border-[1.5px] border-[var(--ink)] uppercase tracking-wider text-sm flex items-center justify-center gap-2">
