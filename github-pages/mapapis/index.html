@@ -183,6 +183,12 @@ async function alumnoLeaveAsTutor(alumnoId) {
 async function alumnosMerge(keepId, mergeId) {
   return await sb.rpc("alumnos_merge", { p_alumno_keep: keepId, p_alumno_merge: mergeId });
 }
+async function voteOferta(alumnoId, ofertaId) {
+  return await sb.rpc("vote_oferta", { p_alumno: alumnoId, p_oferta: ofertaId });
+}
+async function unvoteOferta(alumnoId, ofertaId) {
+  return await sb.rpc("unvote_oferta", { p_alumno: alumnoId, p_oferta: ofertaId });
+}
 
 /* ===================== ICONS (inline SVG) ===================== */
 const Icon = ({ d, className = "w-5 h-5", stroke = 2 }) => (
@@ -715,9 +721,27 @@ function StatChip({ num, label, color }) {
 
 /* ===================== FEED — Pyme ===================== */
 function FeedPymeScreen({ profile, onOpen }) {
-  const visibles = NECESIDADES_MOCK.filter(n => n.estado === "recibiendo_ofertas" || n.estado === "en_votacion");
   const [filtroZona, setFiltroZona] = useState("todas");
-  const filtradas = filtroZona === "todas" ? visibles : visibles.filter(n => n.zona === filtroZona);
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      setLoading(true);
+      const { data, error } = await sb
+        .from("necesidades_publicas")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (!alive) return;
+      if (error) { console.error(error); setItems([]); }
+      else setItems((data || []).map(normalizeNecesidad));
+      setLoading(false);
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const filtradas = filtroZona === "todas" ? items : items.filter(n => n.zona === filtroZona);
 
   return (
     <div className="px-5 pt-8 anim-in">
@@ -738,9 +762,11 @@ function FeedPymeScreen({ profile, onOpen }) {
       <div className="squiggle mb-5"></div>
 
       <div className="space-y-3">
-        {filtradas.length === 0
-          ? <div className="text-center text-sm text-[var(--ink)]/60 py-8">No hay necesidades en esta zona ahora.</div>
-          : filtradas.map(n => <NecesidadCard key={n.id} n={n} onClick={() => onOpen(n)} mode="pyme" />)}
+        {loading
+          ? <div className="text-center text-sm text-[var(--ink)]/60 py-8">Cargando…</div>
+          : filtradas.length === 0
+            ? <div className="text-center text-sm text-[var(--ink)]/60 py-8">No hay necesidades en esta zona ahora.</div>
+            : filtradas.map(n => <NecesidadCard key={n.id} n={n} onClick={() => onOpen(n)} mode="pyme" />)}
       </div>
     </div>
   );
@@ -819,7 +845,61 @@ function DetalleScreen({ necesidad: n, profile, onBack }) {
   if (!n) return <div className="p-6">Sin necesidad seleccionada.</div>;
   const est = ESTADO_LABEL[n.estado];
   const isPyme = profile.role === "pyme";
-  const ofertas = OFERTAS_MOCK[n.id] || [];
+  const [ofertas, setOfertas] = useState([]);
+  const [misAlumnos, setMisAlumnos] = useState([]);
+  const [misVotos, setMisVotos] = useState({}); // { alumnoId: ofertaId }
+  const [loading, setLoading] = useState(true);
+
+  const fetchData = async () => {
+    setLoading(true);
+    const ofertasReq = sb.from("ofertas")
+      .select("*, profiles!ofertas_pyme_id_fkey(nombre, email)")
+      .eq("necesidad_id", n.id)
+      .order("created_at", { ascending: true });
+
+    if (isPyme) {
+      const oRes = await ofertasReq;
+      setOfertas(oRes.data || []);
+    } else {
+      // Para familia: alumnos del grupo donde soy tutor + mis votos
+      const [oRes, aRes] = await Promise.all([
+        ofertasReq,
+        sb.from("alumnos")
+          .select("id, nombre, alumno_tutores!inner(profile_id)")
+          .eq("grupo_id", n.grupo_id)
+          .eq("alumno_tutores.profile_id", profile.id),
+      ]);
+      setOfertas(oRes.data || []);
+      const alumnos = aRes.data || [];
+      setMisAlumnos(alumnos);
+
+      if (alumnos.length > 0 && (oRes.data || []).length > 0) {
+        const ofertaIds = (oRes.data || []).map(o => o.id);
+        const alumnoIds = alumnos.map(a => a.id);
+        const vRes = await sb.from("votos_oferta")
+          .select("oferta_id, alumno_id")
+          .in("oferta_id", ofertaIds)
+          .in("alumno_id", alumnoIds)
+          .eq("votante_id", profile.id);
+        const map = {};
+        (vRes.data || []).forEach(v => { map[v.alumno_id] = v.oferta_id; });
+        setMisVotos(map);
+      }
+    }
+    setLoading(false);
+  };
+  useEffect(() => { fetchData(); }, [n.id]);
+
+  const onVote = async (alumnoId, ofertaId) => {
+    const { error } = await voteOferta(alumnoId, ofertaId);
+    if (error) { alert("Error al votar: " + error.message); return; }
+    fetchData();
+  };
+  const onUnvote = async (alumnoId, ofertaId) => {
+    const { error } = await unvoteOferta(alumnoId, ofertaId);
+    if (error) { alert("Error al revocar voto: " + error.message); return; }
+    fetchData();
+  };
 
   return (
     <div className="anim-in">
@@ -876,33 +956,18 @@ function DetalleScreen({ necesidad: n, profile, onBack }) {
         </div>
       </div>
 
-      {/* Acción según rol */}
+      {/* Sección rol */}
       {isPyme ? (
-        <div className="px-5 mt-6">
-          <h2 className="font-display font-bold text-xl mb-3">¿Cubrís este pedido?</h2>
-          <div className="bg-[var(--sun)] rounded-3xl border-[1.5px] border-[var(--ink)] p-5" style={{boxShadow: "3px 3px 0 var(--ink)"}}>
-            <p className="text-sm font-semibold">Las ofertas son <span className="hl-coral">selladas</span> — el grupo no ve el resto hasta que vence el plazo.</p>
-            <button
-              onClick={() => alert("Próximamente: formulario para presentar oferta")}
-              className="btn-pop mt-4 w-full py-3.5 bg-[var(--ink)] text-[var(--sun)] font-extrabold rounded-xl border-[1.5px] border-[var(--ink)] uppercase tracking-wider text-sm"
-            >
-              Presentar oferta →
-            </button>
-          </div>
-        </div>
+        <PymeOfertaPanel necesidad={n} profile={profile} ofertas={ofertas} loading={loading} onChanged={fetchData} />
       ) : (
-        <div className="px-5 mt-6">
-          <h2 className="font-display font-bold text-xl mb-3">Ofertas recibidas <span className="text-[var(--ink)]/40">({ofertas.length})</span></h2>
-          {ofertas.length === 0 ? (
-            <div className="bg-[var(--mist)] rounded-3xl p-5 text-center text-sm text-[var(--ink)]/70">
-              Esperando ofertas. Te avisamos cuando lleguen.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {ofertas.map(o => <OfertaCard key={o.id} o={o} />)}
-            </div>
-          )}
-        </div>
+        <FamiliaOfertasPanel
+          ofertas={ofertas}
+          loading={loading}
+          misAlumnos={misAlumnos}
+          misVotos={misVotos}
+          onVote={onVote}
+          onUnvote={onUnvote}
+        />
       )}
 
       <div className="h-8"></div>
@@ -910,29 +975,159 @@ function DetalleScreen({ necesidad: n, profile, onBack }) {
   );
 }
 
-function OfertaCard({ o }) {
-  const tier = TIER_LABEL[o.tier];
+/* ===================== Pyme: presentar oferta ===================== */
+function PymeOfertaPanel({ necesidad: n, profile, ofertas, loading, onChanged }) {
+  const miOferta = ofertas.find(o => o.pyme_id === profile.id);
+  const [showForm, setShowForm] = useState(false);
+  const [precio, setPrecio] = useState("");
+  const [dias, setDias] = useState("");
+  const [desc, setDesc] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setEnviando(true); setErr(null);
+    if (desc.trim().length < 10) { setErr("La descripción debe tener al menos 10 caracteres."); setEnviando(false); return; }
+    const { error } = await sb.from("ofertas").insert({
+      necesidad_id: n.id,
+      pyme_id: profile.id,
+      precio_total_centavos: Number(precio),
+      tiempo_entrega_dias: dias ? Number(dias) : null,
+      descripcion: desc.trim(),
+    });
+    setEnviando(false);
+    if (error) { setErr(error.message); return; }
+    setShowForm(false);
+    setPrecio(""); setDias(""); setDesc("");
+    onChanged();
+  };
+
+  if (loading) {
+    return <div className="px-5 mt-6 text-sm text-[var(--ink)]/60">Cargando…</div>;
+  }
+
+  if (miOferta) {
+    return (
+      <div className="px-5 mt-6">
+        <h2 className="font-display font-bold text-xl mb-3">Tu oferta</h2>
+        <div className="bg-[var(--sage)]/10 rounded-3xl border-[1.5px] border-[var(--sage)] p-4">
+          <div className="flex items-baseline justify-between gap-3 mb-2">
+            <span className="font-mono font-extrabold text-2xl">{fmt(Number(miOferta.precio_total_centavos))}</span>
+            {miOferta.tiempo_entrega_dias && (
+              <span className="text-[10px] uppercase tracking-wider font-bold text-[var(--ink)]/60">{miOferta.tiempo_entrega_dias} días</span>
+            )}
+          </div>
+          <p className="text-sm text-[var(--ink)]/85 whitespace-pre-wrap">{miOferta.descripcion}</p>
+          <p className="text-[10px] uppercase tracking-wider font-bold text-[var(--sage)] mt-3">✓ Presentada</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-5 mt-6">
+      <h2 className="font-display font-bold text-xl mb-3">¿Cubrís este pedido?</h2>
+      <div className="bg-[var(--sun)] rounded-3xl border-[1.5px] border-[var(--ink)] p-5" style={{boxShadow: "3px 3px 0 var(--ink)"}}>
+        <p className="text-sm font-semibold">Las ofertas son <span className="hl-coral">selladas</span> — el grupo elige al cierre.</p>
+        {!showForm ? (
+          <button onClick={() => setShowForm(true)}
+            className="btn-pop mt-4 w-full py-3.5 bg-[var(--ink)] text-[var(--sun)] font-extrabold rounded-xl border-[1.5px] border-[var(--ink)] uppercase tracking-wider text-sm">
+            Presentar oferta →
+          </button>
+        ) : (
+          <form onSubmit={submit} className="mt-4 space-y-3">
+            {err && <div className="p-2 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700">{err}</div>}
+            <Field label="Precio total ($)">
+              <input type="number" min="1" required value={precio} onChange={(e) => setPrecio(e.target.value)} placeholder="45000"
+                className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-mono" />
+            </Field>
+            <Field label="Tiempo de entrega (días)">
+              <input type="number" min="1" value={dias} onChange={(e) => setDias(e.target.value)} placeholder="7"
+                className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-mono" />
+            </Field>
+            <Field label="Detalle de la oferta">
+              <textarea required minLength={10} maxLength={1000} rows={3} value={desc} onChange={(e) => setDesc(e.target.value)}
+                placeholder="Material, calidad, condiciones, etc."
+                className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-medium focus:outline-none resize-none" />
+            </Field>
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => setShowForm(false)}
+                className="py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-xs font-bold uppercase tracking-wider">Cancelar</button>
+              <button type="submit" disabled={enviando}
+                className="btn-pop py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-[var(--ink)] text-[var(--sun)] text-xs font-bold uppercase tracking-wider disabled:opacity-50">
+                {enviando ? "Enviando…" : "Enviar"}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ===================== Familia: lista de ofertas + voto ===================== */
+function FamiliaOfertasPanel({ ofertas, loading, misAlumnos, misVotos, onVote, onUnvote }) {
+  if (loading) {
+    return <div className="px-5 mt-6 text-sm text-[var(--ink)]/60">Cargando ofertas…</div>;
+  }
+  return (
+    <div className="px-5 mt-6">
+      <h2 className="font-display font-bold text-xl mb-3">
+        Ofertas recibidas <span className="text-[var(--ink)]/40">({ofertas.length})</span>
+      </h2>
+      {ofertas.length === 0 ? (
+        <div className="bg-[var(--mist)] rounded-3xl p-5 text-center text-sm text-[var(--ink)]/70">
+          Esperando ofertas. Te avisamos cuando lleguen.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {ofertas.map(o => (
+            <OfertaCard key={o.id} o={o} misAlumnos={misAlumnos} misVotos={misVotos} onVote={onVote} onUnvote={onUnvote} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OfertaCard({ o, misAlumnos, misVotos, onVote, onUnvote }) {
+  const pymeNombre = o.profiles?.nombre || (o.profiles?.email ? o.profiles.email.split("@")[0] : "Pyme");
+  const monto = Number(o.precio_total_centavos);
+  const dias = o.tiempo_entrega_dias;
   return (
     <div className="bg-white rounded-3xl border-[1.5px] border-[var(--ink)] p-4" style={{boxShadow: "3px 3px 0 var(--ink)"}}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="font-display font-bold text-lg">{o.pyme}</h3>
-            <span className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${tier.color}`}>{tier.txt}</span>
-          </div>
-          <div className="flex items-center gap-1 text-xs mt-1">
-            <IconStar className="w-3.5 h-3.5 text-[var(--sun)] fill-[var(--sun)]" stroke={1.5} />
-            <span className="font-bold">{o.rating}</span>
-            <span className="text-[var(--ink)]/50">({o.reviews} reviews)</span>
-          </div>
+          <h3 className="font-display font-bold text-lg">{pymeNombre}</h3>
+          {o.estado && o.estado !== "presentada" && (
+            <span className="text-[10px] uppercase tracking-wider font-bold text-[var(--ink)]/55">{o.estado}</span>
+          )}
         </div>
         <div className="text-right shrink-0">
-          <div className="font-mono font-extrabold text-xl">{fmt(o.monto)}</div>
-          <div className="text-[10px] uppercase tracking-wider text-[var(--ink)]/60">{o.tiempo_dias} días</div>
+          <div className="font-mono font-extrabold text-xl">{fmt(monto)}</div>
+          {dias != null && <div className="text-[10px] uppercase tracking-wider text-[var(--ink)]/60">{dias} días</div>}
         </div>
       </div>
-      <p className="text-sm text-[var(--ink)]/75 mt-3">{o.descripcion}</p>
-      <button className="mt-3 text-xs font-bold text-[var(--coral)] uppercase tracking-wider hover:underline">Ver perfil de la pyme →</button>
+      <p className="text-sm text-[var(--ink)]/75 mt-3 whitespace-pre-wrap">{o.descripcion}</p>
+
+      {misAlumnos && misAlumnos.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-[var(--ink)]/10">
+          <div className="text-[10px] uppercase tracking-wider font-bold text-[var(--ink)]/55 mb-2">Tu voto</div>
+          <div className="flex flex-wrap gap-2">
+            {misAlumnos.map(a => {
+              const voto = misVotos[a.id];
+              const yaVotoEsta = voto === o.id;
+              return (
+                <button key={a.id} onClick={() => yaVotoEsta ? onUnvote(a.id, o.id) : onVote(a.id, o.id)}
+                  className={`px-3 py-1.5 rounded-full border-[1.5px] text-xs font-bold ${yaVotoEsta ? 'bg-[var(--coral)] text-white border-[var(--ink)]' : 'bg-white text-[var(--ink)] border-[var(--ink)]/30'}`}>
+                  {yaVotoEsta ? "✓ " : ""}{a.nombre}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
