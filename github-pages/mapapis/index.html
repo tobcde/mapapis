@@ -1562,10 +1562,10 @@ function FeedFamiliaScreen({ profile, onOpen }) {
         {loading ? (
           <div className="text-center text-sm text-[var(--ink)]/60 py-8">Cargando…</div>
         ) : necesidades.length === 0 ? (
-          <div className="bg-white rounded-2xl border-[1.5px] border-dashed border-[var(--ink)]/30 p-8 text-center">
-            <p className="text-sm text-[var(--ink)]/70">Todavía no hay necesidades.</p>
-            <p className="text-xs text-[var(--ink)]/50 mt-1">Tocá <span className="font-bold">+</span> abajo para publicar la primera.</p>
-          </div>
+          <EmptyState
+            icon="📝"
+            title="Todavía no hay necesidades"
+            subtitle="Tocá el botón + grande de abajo para publicar la primera y recibir ofertas de pymes cercanas." />
         ) : (
           necesidades.map(n => <NecesidadCard key={n.id} n={n} onClick={() => onOpen(n)} mode="familia" />)
         )}
@@ -1579,6 +1579,24 @@ function StatChip({ num, label, color }) {
     <div className="bg-white rounded-2xl border-[1.5px] border-[var(--ink)] p-3 flex flex-col items-start" style={{boxShadow: "3px 3px 0 var(--ink)"}}>
       <span className="font-display font-black text-3xl leading-none" style={{color}}>{num}</span>
       <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/70 mt-1">{label}</span>
+    </div>
+  );
+}
+
+/* ===================== EmptyState reusable ===================== */
+function EmptyState({ icon = "✨", title, subtitle, ctaLabel, onCta, ctaColor = "var(--coral)" }) {
+  return (
+    <div className="bg-white rounded-3xl border-[1.5px] border-dashed border-[var(--ink)]/30 px-6 py-8 text-center">
+      <div className="text-4xl mb-2 leading-none">{icon}</div>
+      <h3 className="font-display font-bold text-lg leading-tight">{title}</h3>
+      {subtitle && <p className="text-sm text-[var(--ink)]/60 mt-1.5 leading-snug">{subtitle}</p>}
+      {ctaLabel && onCta && (
+        <button onClick={onCta}
+          className="btn-pop mt-4 px-5 py-2.5 text-white font-extrabold rounded-xl uppercase tracking-wider text-xs border-[1.5px] border-[var(--ink)]"
+          style={{background: ctaColor, boxShadow: "3px 3px 0 var(--ink)"}}>
+          {ctaLabel}
+        </button>
+      )}
     </div>
   );
 }
@@ -1634,7 +1652,12 @@ function FeedPymeScreen({ profile, onOpen }) {
         {loading
           ? <div className="text-center text-sm text-[var(--ink)]/60 py-8">Cargando…</div>
           : filtradas.length === 0
-            ? <div className="text-center text-sm text-[var(--ink)]/60 py-8">No hay necesidades en esta zona ahora.</div>
+            ? <EmptyState
+                icon="🔍"
+                title={filtroZona === "todas" ? "Sin necesidades por ahora" : `Sin necesidades en ${filtroZona}`}
+                subtitle={filtroZona === "todas"
+                  ? "Cuando un grupo publique algo cerca tuyo, aparece acá. Volvé a chequear más tarde."
+                  : "Probá con otra zona o seleccioná \"Todas las zonas\" para ver todo."} />
             : filtradas.map(n => <NecesidadCard key={n.id} n={n} onClick={() => onOpen(n)} mode="pyme" />)}
       </div>
     </div>
@@ -1737,13 +1760,16 @@ function MisOfertasScreen({ profile, onOpen }) {
         {loading ? (
           <div className="text-center text-sm text-[var(--ink)]/60 py-8">Cargando…</div>
         ) : visibles.length === 0 ? (
-          <div className="bg-white rounded-2xl border-[1.5px] border-dashed border-[var(--ink)]/30 p-8 text-center">
-            <p className="text-sm text-[var(--ink)]/70">
-              {tab === "activas" && "No tenés ofertas activas. Mirá el feed para presentar."}
-              {tab === "ganadas" && "Todavía no ganaste ninguna. ¡Suerte con las activas!"}
-              {tab === "perdidas" && "Sin ofertas perdidas. ✨"}
-            </p>
-          </div>
+          tab === "activas" ? (
+            <EmptyState icon="⚡" title="No tenés ofertas activas"
+              subtitle="Andá al Feed para ver pedidos de familias cercanas y presentar tu primera oferta." />
+          ) : tab === "ganadas" ? (
+            <EmptyState icon="🏆" title="Todavía no ganaste ninguna"
+              subtitle="Cuando una familia te elija, va a aparecer acá con los datos para coordinar la entrega." />
+          ) : (
+            <EmptyState icon="✨" title="Sin ofertas perdidas"
+              subtitle="Las ofertas que no salieron elegidas aparecen acá. Por ahora todo bien." />
+          )
         ) : (
           visibles.map(o => <MiOfertaCard key={o.id} oferta={o} onClick={() => o.necesidad && onOpen(normalizeNecesidad(o.necesidad))} />)
         )}
@@ -3997,9 +4023,13 @@ function GrupoScreen({ profile, grupoId, onChangeGrupo, onBack }) {
       </div>
 
       {alumnos.length === 0 ? (
-        <div className="text-center text-sm text-[var(--ink)]/60 py-6 bg-white rounded-2xl border-[1.5px] border-[var(--ink)]/20">
-          Todavía no hay chicos cargados.
-        </div>
+        <EmptyState
+          icon="🎒"
+          title="Todavía no hay chicos cargados"
+          subtitle="Sumá a tu hijo/a para empezar a votar y dividir gastos del grupo."
+          ctaLabel="Agregar mi hijo/a"
+          onCta={() => setView("agregar-alumno")}
+          ctaColor="var(--coral)" />
       ) : (
         <div className="space-y-2">
           {alumnos.map(a => {
