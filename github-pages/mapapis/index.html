@@ -189,6 +189,12 @@ async function voteOferta(alumnoId, ofertaId) {
 async function unvoteOferta(alumnoId, ofertaId) {
   return await sb.rpc("unvote_oferta", { p_alumno: alumnoId, p_oferta: ofertaId });
 }
+async function inscribirAlumno(necesidadId, alumnoId) {
+  return await sb.rpc("inscribir_alumno", { p_necesidad: necesidadId, p_alumno: alumnoId });
+}
+async function desinscribirAlumno(necesidadId, alumnoId) {
+  return await sb.rpc("desinscribir_alumno", { p_necesidad: necesidadId, p_alumno: alumnoId });
+}
 
 /* ===================== ICONS (inline SVG) ===================== */
 const Icon = ({ d, className = "w-5 h-5", stroke = 2 }) => (
@@ -264,6 +270,12 @@ function normalizeNecesidad(row) {
     ofertas: row.ofertas_count ?? row.ofertas ?? 0,
     creador_tipo: row.creador_tipo,
     fecha_limite: row.fecha_limite,
+    fecha_limite_inscripcion: row.fecha_limite_inscripcion || null,
+    fecha_limite_entrega: row.fecha_limite_entrega || null,
+    link_referencia: row.link_referencia || null,
+    modalidad: row.modalidad || "grupal",
+    cantidad_por_alumno: row.cantidad_por_alumno || null,
+    inscriptos_count: row.inscriptos_count ?? 0,
     grupo_id: row.grupo_id,
     grupo_nombre: row.grupos?.nombre,
     foto_url: row.foto_url || null,
@@ -294,6 +306,20 @@ const ROLES_INFO = {
 
 const fmt = (n) => "$" + new Intl.NumberFormat("es-AR").format(n);
 const fmtRange = (a, b) => `${fmt(a)} – ${fmt(b)}`;
+const fmtFechaHora = (iso) => {
+  if (!iso) return "";
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
+  } catch { return iso; }
+};
+function cantidadVisible(n) {
+  if (n.modalidad === "individual" && n.cantidad_por_alumno) {
+    const k = Number(n.inscriptos_count || 0);
+    return k * Number(n.cantidad_por_alumno);
+  }
+  return n.campos?.cantidad ?? n.campos?.cantidad_personas ?? null;
+}
 
 /* ===================== AUTH GATE ===================== */
 function AuthGate() {
@@ -787,8 +813,9 @@ function NecesidadCard({ n, onClick, mode }) {
   const tipoSolicitante = n.creador_tipo === "institucion" ? "Institución educativa" : "Grupo de padres";
   const garantiaPago = n.creador_tipo === "institucion";
 
-  const cantidadCampo = n.campos?.cantidad ?? n.campos?.cantidad_personas;
+  const cantidadCampo = cantidadVisible(n);
   const fotoUrl = n.foto_url;
+  const esIndividual = n.modalidad === "individual";
   return (
     <button onClick={onClick} className="card-hover block w-full text-left bg-white rounded-3xl border-[1.5px] border-[var(--ink)] overflow-hidden" style={{boxShadow: "3px 3px 0 var(--ink)"}}>
       {/* Top strip de estado */}
@@ -815,7 +842,12 @@ function NecesidadCard({ n, onClick, mode }) {
           </span>
           {cantidadCampo != null && (
             <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[var(--sun)] text-[var(--ink)]">
-              ×{cantidadCampo}
+              ×{cantidadCampo}{esIndividual ? " (en curso)" : ""}
+            </span>
+          )}
+          {esIndividual && (
+            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[var(--violet)] text-white">
+              Individual · {n.inscriptos_count || 0} anotados
             </span>
           )}
           {isPyme && (
@@ -854,6 +886,7 @@ function DetalleScreen({ necesidad: n, profile, onBack }) {
   const [ofertas, setOfertas] = useState([]);
   const [misAlumnos, setMisAlumnos] = useState([]);
   const [misVotos, setMisVotos] = useState({}); // { alumnoId: ofertaId }
+  const [inscripciones, setInscripciones] = useState([]); // { alumno_id, inscripto_por }
   const [loading, setLoading] = useState(true);
 
   const fetchData = async () => {
@@ -863,19 +896,25 @@ function DetalleScreen({ necesidad: n, profile, onBack }) {
       .eq("necesidad_id", n.id)
       .order("created_at", { ascending: true });
 
+    const inscripcionesReq = sb.from("necesidad_inscripciones")
+      .select("alumno_id, inscripto_por")
+      .eq("necesidad_id", n.id);
+
     if (isPyme) {
-      const oRes = await ofertasReq;
+      const [oRes, iRes] = await Promise.all([ofertasReq, inscripcionesReq]);
       setOfertas(oRes.data || []);
+      setInscripciones(iRes.data || []);
     } else {
-      // Para familia: alumnos del grupo donde soy tutor + mis votos
-      const [oRes, aRes] = await Promise.all([
+      const [oRes, aRes, iRes] = await Promise.all([
         ofertasReq,
         sb.from("alumnos")
           .select("id, nombre, alumno_tutores!inner(profile_id)")
           .eq("grupo_id", n.grupo_id)
           .eq("alumno_tutores.profile_id", profile.id),
+        inscripcionesReq,
       ]);
       setOfertas(oRes.data || []);
+      setInscripciones(iRes.data || []);
       const alumnos = aRes.data || [];
       setMisAlumnos(alumnos);
 
@@ -928,7 +967,20 @@ function DetalleScreen({ necesidad: n, profile, onBack }) {
         <div className="mt-3 flex items-center gap-3 text-xs text-[var(--cream)]/70 flex-wrap">
           <span className="flex items-center gap-1"><IconMapPin className="w-3.5 h-3.5" /> {n.zona}</span>
           {n.rango && <span className="flex items-center gap-1"><IconUsers className="w-3.5 h-3.5" /> {n.rango}</span>}
-          {n.fecha_limite && <span className="flex items-center gap-1"><IconClock className="w-3.5 h-3.5" /> hasta {n.fecha_limite}</span>}
+        </div>
+        <div className="mt-3 grid gap-1 text-xs text-[var(--cream)]/80">
+          {n.fecha_limite_inscripcion && (
+            <div className="flex items-center gap-1.5">
+              <IconClock className="w-3.5 h-3.5 shrink-0" />
+              <span>Inscripción hasta <span className="font-bold">{fmtFechaHora(n.fecha_limite_inscripcion)}</span></span>
+            </div>
+          )}
+          {n.fecha_limite_entrega && (
+            <div className="flex items-center gap-1.5">
+              <IconClock className="w-3.5 h-3.5 shrink-0" />
+              <span>Entrega hasta <span className="font-bold">{fmtFechaHora(n.fecha_limite_entrega)}</span></span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -955,19 +1007,54 @@ function DetalleScreen({ necesidad: n, profile, onBack }) {
               </div>
             )}
 
+            {n.link_referencia && (
+              <div className="mt-5">
+                <h3 className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/60 mb-2">Referencia</h3>
+                <a href={n.link_referencia} target="_blank" rel="noopener noreferrer"
+                   className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[var(--mist)] border-[1.5px] border-[var(--ink)]/20 text-xs font-semibold text-[var(--ink)] hover:bg-[var(--sun)]/40 break-all">
+                  🔗 Ver ejemplo / link
+                </a>
+              </div>
+            )}
+
             <div className="mt-5 grid grid-cols-2 gap-3">
               <div>
                 <h3 className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/60">Presupuesto</h3>
                 <p className="font-mono text-sm font-bold mt-1">{n.presupuesto_min || n.presupuesto_max ? fmtRange(n.presupuesto_min, n.presupuesto_max) : "—"}</p>
               </div>
               <div>
-                <h3 className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/60">Categoría</h3>
-                <p className="text-sm font-semibold mt-1">{n.categoria}</p>
+                <h3 className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/60">Modalidad</h3>
+                <p className="text-sm font-semibold mt-1 capitalize">
+                  {n.modalidad === "individual"
+                    ? `Individual · ${n.cantidad_por_alumno || 1}/alumno`
+                    : "Grupal"}
+                </p>
               </div>
             </div>
+
+            {n.modalidad === "individual" && (
+              <div className="mt-3 p-3 rounded-xl bg-[var(--violet)]/10 border-[1.5px] border-[var(--violet)]/30">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--violet)]">Inscripción en curso</div>
+                <div className="text-sm font-bold mt-1">
+                  {inscripciones.length} alumno{inscripciones.length === 1 ? "" : "s"} anotado{inscripciones.length === 1 ? "" : "s"}
+                  {" · total actual: "}
+                  <span className="font-mono">{(inscripciones.length) * Number(n.cantidad_por_alumno || 1)}</span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Inscripción para familia (modalidad individual) */}
+      {!isPyme && n.modalidad === "individual" && misAlumnos.length > 0 && (
+        <InscripcionPanel
+          necesidad={n}
+          misAlumnos={misAlumnos}
+          inscripciones={inscripciones}
+          onChanged={fetchData}
+        />
+      )}
 
       {/* Sección rol */}
       {isPyme ? (
@@ -1145,6 +1232,57 @@ function OfertaCard({ o, misAlumnos, misVotos, onVote, onUnvote }) {
   );
 }
 
+/* ===================== Familia: panel de inscripción (modalidad individual) ===================== */
+function InscripcionPanel({ necesidad: n, misAlumnos, inscripciones, onChanged }) {
+  const inscriptosSet = new Set(inscripciones.map(i => i.alumno_id));
+  const [busy, setBusy] = useState(null);
+
+  const toggle = async (alumnoId, yaInscripto) => {
+    setBusy(alumnoId);
+    const { error } = yaInscripto
+      ? await desinscribirAlumno(n.id, alumnoId)
+      : await inscribirAlumno(n.id, alumnoId);
+    setBusy(null);
+    if (error) { alert("Error: " + error.message); return; }
+    onChanged();
+  };
+
+  return (
+    <div className="px-5 mt-6">
+      <h2 className="font-display font-bold text-xl mb-2">Anotar a tus hijos/as</h2>
+      <p className="text-xs text-[var(--ink)]/65 mb-3">
+        Cada alumno anotado suma <span className="font-bold">{n.cantidad_por_alumno}</span> unidad{n.cantidad_por_alumno === 1 ? "" : "es"} al total del pedido.
+      </p>
+      <div className="space-y-2">
+        {misAlumnos.map(a => {
+          const yaInscripto = inscriptosSet.has(a.id);
+          const isBusy = busy === a.id;
+          return (
+            <button key={a.id} onClick={() => toggle(a.id, yaInscripto)} disabled={isBusy}
+              className={`w-full flex items-center justify-between p-3 rounded-xl border-[1.5px] transition ${
+                yaInscripto
+                  ? "bg-[var(--sage)]/15 border-[var(--sage)]"
+                  : "bg-white border-[var(--ink)]/30"
+              } disabled:opacity-50`}>
+              <div className="flex items-center gap-2">
+                <span className={`w-5 h-5 rounded-md border-[1.5px] flex items-center justify-center text-xs ${
+                  yaInscripto ? "bg-[var(--sage)] border-[var(--sage)] text-white" : "border-[var(--ink)]/40 bg-white"
+                }`}>
+                  {yaInscripto ? "✓" : ""}
+                </span>
+                <span className="font-semibold text-sm">{a.nombre}</span>
+              </div>
+              <span className="text-[10px] uppercase tracking-wider font-bold text-[var(--ink)]/60">
+                {isBusy ? "..." : yaInscripto ? "Anotado" : "Anotar"}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /* ===================== Publicar necesidad ===================== */
 function PublicarScreen({ profile, grupoId, onChangeGrupo, onCancel, onPublicado }) {
   const [grupo, setGrupo] = useState(null);
@@ -1155,7 +1293,11 @@ function PublicarScreen({ profile, grupoId, onChangeGrupo, onCancel, onPublicado
   const [titulo, setTitulo] = useState("");
   const [presupuestoMin, setPresupuestoMin] = useState("");
   const [presupuestoMax, setPresupuestoMax] = useState("");
-  const [fechaLimite, setFechaLimite] = useState("");
+  const [fechaInscripcion, setFechaInscripcion] = useState("");
+  const [fechaEntrega, setFechaEntrega] = useState("");
+  const [linkRef, setLinkRef] = useState("");
+  const [modalidad, setModalidad] = useState("grupal"); // 'grupal' | 'individual'
+  const [cantidadPorAlumno, setCantidadPorAlumno] = useState("");
   const [descripcion, setDescripcion] = useState("");
   const [campos, setCampos] = useState({});
   const [foto, setFoto] = useState(null); // File
@@ -1251,6 +1393,25 @@ function PublicarScreen({ profile, grupoId, onChangeGrupo, onCancel, onPublicado
     if (min != null && max != null && min > max) {
       setError("El mínimo no puede ser mayor que el máximo."); setEnviando(false); return;
     }
+    // Validar link
+    const linkTrim = (linkRef || "").trim();
+    if (linkTrim && !/^https?:\/\//i.test(linkTrim)) {
+      setError("El link debe empezar con http:// o https://."); setEnviando(false); return;
+    }
+    // Validar fechas
+    const fIns = fechaInscripcion ? new Date(fechaInscripcion) : null;
+    const fEnt = fechaEntrega ? new Date(fechaEntrega) : null;
+    if (fIns && fEnt && fIns > fEnt) {
+      setError("La fecha de inscripción no puede ser posterior a la de entrega."); setEnviando(false); return;
+    }
+    // Validar modalidad
+    let cpa = null;
+    if (modalidad === "individual") {
+      if (!cantidadPorAlumno || Number(cantidadPorAlumno) < 1) {
+        setError("Definí cuántas unidades suma cada alumno que se anote."); setEnviando(false); return;
+      }
+      cpa = Number(cantidadPorAlumno);
+    }
 
     // 1. Subir foto a Storage si hay
     let fotoUrl = null;
@@ -1281,7 +1442,11 @@ function PublicarScreen({ profile, grupoId, onChangeGrupo, onCancel, onPublicado
       zona: grupo.zona,
       presupuesto_min_centavos: min,
       presupuesto_max_centavos: max,
-      fecha_limite: fechaLimite || null,
+      fecha_limite_inscripcion: fIns ? fIns.toISOString() : null,
+      fecha_limite_entrega: fEnt ? fEnt.toISOString() : null,
+      link_referencia: linkTrim || null,
+      modalidad,
+      cantidad_por_alumno: cpa,
       campos: camposClean,
       foto_url: fotoUrl,
     });
@@ -1370,6 +1535,32 @@ function PublicarScreen({ profile, grupoId, onChangeGrupo, onCancel, onPublicado
           </select>
         </Field>
 
+        {/* Modalidad: grupal vs individual */}
+        <div>
+          <label className="block text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/70 mb-2">¿Cómo se compra?</label>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => setModalidad("grupal")}
+              className={`text-left p-3 rounded-xl border-[1.5px] ${modalidad === "grupal" ? "border-[var(--ink)] bg-[var(--sun)]" : "border-[var(--ink)]/30 bg-white"}`}>
+              <div className="text-sm font-bold">Grupal</div>
+              <div className="text-[11px] text-[var(--ink)]/70 mt-0.5">Cantidad fija para todo el grupo (ej: 50 vasos).</div>
+            </button>
+            <button type="button" onClick={() => setModalidad("individual")}
+              className={`text-left p-3 rounded-xl border-[1.5px] ${modalidad === "individual" ? "border-[var(--ink)] bg-[var(--sun)]" : "border-[var(--ink)]/30 bg-white"}`}>
+              <div className="text-sm font-bold">Individual</div>
+              <div className="text-[11px] text-[var(--ink)]/70 mt-0.5">Cada familia se anota — la cantidad sube con cada inscripto.</div>
+            </button>
+          </div>
+        </div>
+
+        {modalidad === "individual" && (
+          <Field label="Cantidad por alumno *">
+            <input type="number" min="1" required value={cantidadPorAlumno}
+              onChange={(e) => setCantidadPorAlumno(e.target.value)} placeholder="2"
+              className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-mono" />
+            <p className="text-[10px] text-[var(--ink)]/55 mt-1">Cuántas unidades suma cada alumno que se anote (ej: 2 lápices por alumno).</p>
+          </Field>
+        )}
+
         {/* Campos dinámicos según categoría */}
         {schemaCampos.length > 0 && (
           <div className="rounded-2xl border-[1.5px] border-[var(--ink)]/20 bg-[var(--mist)] p-4 space-y-3">
@@ -1432,9 +1623,23 @@ function PublicarScreen({ profile, grupoId, onChangeGrupo, onCancel, onPublicado
           </Field>
         </div>
 
-        <Field label="Fecha límite (opcional)">
-          <input type="date" value={fechaLimite} onChange={(e) => setFechaLimite(e.target.value)}
+        <Field label="Cierre de inscripción del grupo (opcional)">
+          <input type="datetime-local" value={fechaInscripcion} onChange={(e) => setFechaInscripcion(e.target.value)}
             className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-medium" />
+          <p className="text-[10px] text-[var(--ink)]/55 mt-1">Hasta cuándo las familias del grupo pueden anotarse / decidir.</p>
+        </Field>
+
+        <Field label="Fecha y hora de entrega (opcional)">
+          <input type="datetime-local" value={fechaEntrega} onChange={(e) => setFechaEntrega(e.target.value)}
+            className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-medium" />
+          <p className="text-[10px] text-[var(--ink)]/55 mt-1">Cuándo se necesita en mano. Las pymes lo ven al ofertar.</p>
+        </Field>
+
+        <Field label="Link de referencia (opcional)">
+          <input type="url" value={linkRef} onChange={(e) => setLinkRef(e.target.value)}
+            placeholder="https://articulo.mercadolibre.com.ar/..."
+            className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-medium" />
+          <p className="text-[10px] text-[var(--ink)]/55 mt-1">Pegá un link de Mercado Libre, una foto online o referencia para que se entienda mejor.</p>
         </Field>
 
         <Field label="Descripción">
