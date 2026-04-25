@@ -1726,10 +1726,20 @@ function GrupoScreen({ profile, grupoId, onChangeGrupo }) {
 
       {/* Acciones bottom */}
       <div className="mt-6 space-y-2">
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={() => setView("crear")}
+            className="btn-pop py-2.5 bg-[var(--ink)] text-white font-extrabold rounded-xl uppercase tracking-wider text-[11px]">
+            + Otro grupo
+          </button>
+          <button onClick={() => setView("unirse")}
+            className="btn-pop py-2.5 bg-white text-[var(--ink)] font-extrabold rounded-xl uppercase tracking-wider text-[11px] border-[1.5px] border-[var(--ink)]">
+            Pegar código
+          </button>
+        </div>
         {misGrupos.length > 1 && (
           <button onClick={() => onChangeGrupo(null)}
             className="w-full py-2.5 text-xs font-bold uppercase tracking-wider text-[var(--ink)]/70">
-            Ver todos mis grupos
+            Ver todos mis grupos ({misGrupos.length})
           </button>
         )}
         {!soyCreador && (
