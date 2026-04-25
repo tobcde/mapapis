@@ -112,6 +112,25 @@
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
+  /* === Theming por rol: cambia color de fondo + accent variable === */
+  [data-role] { --role-accent: var(--coral); }
+  [data-role="familia"] {
+    --role-accent: var(--coral);
+    background: linear-gradient(180deg, #FFE9DC 0%, var(--cream) 320px);
+  }
+  [data-role="institucion"] {
+    --role-accent: var(--violet);
+    background: linear-gradient(180deg, #E6E2FF 0%, var(--cream) 320px);
+  }
+  [data-role="pyme"] {
+    --role-accent: var(--sage);
+    background: linear-gradient(180deg, #D7F4E7 0%, var(--cream) 320px);
+  }
+  [data-role] .role-stripe {
+    height: 6px; background: var(--role-accent);
+    border-bottom: 1.5px solid var(--ink);
+  }
+
   /* Card hover lift */
   .card-hover { transition: transform .2s cubic-bezier(.2,.7,.3,1), box-shadow .2s ease, border-color .2s ease; }
   .card-hover:hover {
@@ -205,13 +224,39 @@ async function cerrarInscripcion(necesidadId) {
 async function reabrirInscripcion(necesidadId) {
   return await sb.rpc("reabrir_inscripcion", { p_necesidad: necesidadId });
 }
-async function actualizarPyme({ nombre, descripcion, telefono, zonas }) {
+async function actualizarPyme(p) {
   return await sb.rpc("actualizar_pyme", {
-    p_nombre: nombre,
-    p_descripcion: descripcion || null,
-    p_telefono: telefono || null,
-    p_zonas: Array.isArray(zonas) ? zonas : null,
+    p_nombre: p.nombre,
+    p_descripcion: p.descripcion || null,
+    p_telefono: p.telefono || null,
+    p_zonas: Array.isArray(p.zonas) ? p.zonas : null,
+    p_cuit: p.cuit || null,
+    p_razon_social: p.razonSocial || null,
+    p_categorias_ids: Array.isArray(p.categoriasIds) ? p.categoriasIds : null,
+    p_web_url: p.webUrl || null,
+    p_instagram: p.instagram || null,
+    p_facebook: p.facebook || null,
+    p_logo_url: p.logoUrl || null,
+    p_anios_rubro: Number.isFinite(p.aniosRubro) ? p.aniosRubro : null,
+    p_cbu: p.cbu || null,
+    p_alias_cbu: p.aliasCbu || null,
   });
+}
+
+// Validador CUIT cliente (espejo de validar_cuit en SQL)
+function validarCuit(cuit) {
+  if (!cuit) return false;
+  const clean = String(cuit).replace(/[^0-9]/g, "");
+  if (clean.length !== 11) return false;
+  const prefix = parseInt(clean.slice(0, 2), 10);
+  if (![20,23,24,25,26,27,30,33,34].includes(prefix)) return false;
+  const mults = [5,4,3,2,7,6,5,4,3,2];
+  let sum = 0;
+  for (let i = 0; i < 10; i++) sum += parseInt(clean[i], 10) * mults[i];
+  let dv = 11 - (sum % 11);
+  if (dv === 11) dv = 0;
+  if (dv === 10) return false;
+  return dv === parseInt(clean[10], 10);
 }
 async function crearOferta({ necesidadId, precioCentavos, tiempoDias, descripcion }) {
   return await sb.rpc("crear_oferta", {
@@ -562,25 +607,65 @@ function PymeProfileGate({ profile, session, onProfileChange }) {
 
 function PymeOnboardingScreen({ profile, onDone }) {
   const [nombre, setNombre] = useState("");
+  const [razonSocial, setRazonSocial] = useState("");
+  const [cuit, setCuit] = useState("");
   const [descripcion, setDescripcion] = useState("");
   const [telefono, setTelefono] = useState("");
+  const [aniosRubro, setAniosRubro] = useState("");
+  const [webUrl, setWebUrl] = useState("");
+  const [instagram, setInstagram] = useState("");
+  const [facebook, setFacebook] = useState("");
+  const [cbu, setCbu] = useState("");
+  const [aliasCbu, setAliasCbu] = useState("");
+  const [zonasSel, setZonasSel] = useState([]);
+  const [catsSel, setCatsSel] = useState([]);
+  const [categorias, setCategorias] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    sb.from("categorias").select("id, nombre, slug").eq("activa", true).order("orden")
+      .then(({ data }) => { if (alive && data) setCategorias(data); });
+    return () => { alive = false; };
+  }, []);
+
+  const cuitOk = cuit.trim() === "" || validarCuit(cuit);
+  const algunLink = [webUrl, instagram, facebook].some(s => s.trim().length > 0);
 
   const submit = async (e) => {
     e.preventDefault();
     setError(null);
     if (nombre.trim().length < 2) { setError("El nombre comercial es obligatorio."); return; }
+    if (cuit.trim() && !validarCuit(cuit)) { setError("CUIT inválido (verificá el dígito verificador)."); return; }
+    if (!algunLink) { setError("Sumá al menos un link (web, IG o FB) para que las familias puedan verificar tu negocio."); return; }
+    if (catsSel.length === 0) { setError("Elegí al menos una categoría que cubrís."); return; }
+    if (zonasSel.length === 0) { setError("Elegí al menos una zona donde operás."); return; }
+
     setSubmitting(true);
+    const aniosNum = parseInt(aniosRubro, 10);
     const { error: err } = await actualizarPyme({
       nombre: nombre.trim(),
       descripcion: descripcion.trim() || null,
       telefono: telefono.trim() || null,
+      zonas: zonasSel,
+      cuit: cuit.trim() || null,
+      razonSocial: razonSocial.trim() || null,
+      categoriasIds: catsSel,
+      webUrl: webUrl.trim() || null,
+      instagram: instagram.trim() || null,
+      facebook: facebook.trim() || null,
+      aniosRubro: Number.isFinite(aniosNum) && aniosNum >= 0 ? aniosNum : null,
+      cbu: cbu.trim() || null,
+      aliasCbu: aliasCbu.trim() || null,
     });
     setSubmitting(false);
     if (err) { setError(err.message); return; }
     onDone();
   };
+
+  const toggleZona = (z) => setZonasSel(prev => prev.includes(z) ? prev.filter(x => x !== z) : [...prev, z]);
+  const toggleCat = (id) => setCatsSel(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
 
   return (
     <div className="min-h-screen bg-[var(--cream)] bg-dots">
@@ -593,33 +678,135 @@ function PymeOnboardingScreen({ profile, onDone }) {
           Contanos de tu negocio
         </h1>
         <p className="text-[15px] text-[var(--ink)]/70 mt-3">
-          Las familias ven este nombre cuando ofertás. Podés ajustarlo después desde tu perfil.
+          Pedimos esta info para validar que la pyme es real. Los datos sensibles (CUIT, CBU) no se muestran a las familias salvo que ganes la oferta.
         </p>
       </div>
       <div className="px-6 pb-16 max-w-md mx-auto">
-        <form onSubmit={submit} className="bg-white rounded-3xl border-[1.5px] border-[var(--ink)] p-6 space-y-4" style={{boxShadow: "4px 4px 0 var(--ink)"}}>
+        <form onSubmit={submit} className="bg-white rounded-3xl border-[1.5px] border-[var(--ink)] p-6 space-y-5" style={{boxShadow: "4px 4px 0 var(--ink)"}}>
           {error && <div className="p-2 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700">{error}</div>}
-          <Field label="Nombre comercial *">
-            <input type="text" required minLength={2} maxLength={80} value={nombre} onChange={(e) => setNombre(e.target.value)}
-              placeholder="Ej: Imprenta Olivos / Catering Sabor Sur"
-              className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-medium focus:outline-none" />
-          </Field>
-          <Field label="Descripción (opcional)">
-            <textarea maxLength={600} rows={3} value={descripcion} onChange={(e) => setDescripcion(e.target.value)}
-              placeholder="Qué ofrecés, especialidad, años en el rubro, etc."
-              className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] resize-none focus:outline-none" />
-          </Field>
-          <Field label="Teléfono / WhatsApp (opcional)">
-            <input type="tel" maxLength={30} value={telefono} onChange={(e) => setTelefono(e.target.value)}
-              placeholder="+54 9 11 ..."
-              className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-mono focus:outline-none" />
-          </Field>
+
+          {/* Bloque 1 — Identidad */}
+          <div className="space-y-3">
+            <SectionLabel n={1} text="Identidad" />
+            <Field label="Nombre comercial / fantasía *">
+              <input type="text" required minLength={2} maxLength={80} value={nombre} onChange={(e) => setNombre(e.target.value)}
+                placeholder="Ej: Imprenta Olivos"
+                className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-medium focus:outline-none" />
+            </Field>
+            <Field label="Razón social (opcional)">
+              <input type="text" maxLength={120} value={razonSocial} onChange={(e) => setRazonSocial(e.target.value)}
+                placeholder="Tal como figura en AFIP"
+                className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] focus:outline-none" />
+            </Field>
+            <Field label="CUIT">
+              <input type="text" maxLength={13} value={cuit} onChange={(e) => setCuit(e.target.value)}
+                placeholder="30-12345678-9"
+                className={`w-full px-4 py-3 rounded-xl border-[1.5px] bg-white text-[15px] font-mono focus:outline-none ${cuit.trim() && !cuitOk ? 'border-rose-500' : 'border-[var(--ink)]'}`} />
+              {cuit.trim() && !cuitOk && <p className="text-[11px] text-rose-700 mt-1">CUIT inválido</p>}
+              {cuit.trim() && cuitOk && <p className="text-[11px] text-[var(--sage)] mt-1">✓ formato válido (validamos contra AFIP en breve)</p>}
+            </Field>
+          </div>
+
+          {/* Bloque 2 — Qué ofrecés */}
+          <div className="space-y-3">
+            <SectionLabel n={2} text="Qué ofrecés" />
+            <Field label="Categorías que cubrís *">
+              <div className="flex flex-wrap gap-2">
+                {categorias.map(c => (
+                  <button type="button" key={c.id} onClick={() => toggleCat(c.id)}
+                    className={`text-[12px] font-bold px-3 py-1.5 rounded-full border-[1.5px] ${catsSel.includes(c.id) ? 'bg-[var(--sage)] text-white border-[var(--ink)]' : 'bg-white text-[var(--ink)] border-[var(--ink)]/30'}`}>
+                    {c.nombre}
+                  </button>
+                ))}
+                {categorias.length === 0 && <span className="text-xs text-[var(--ink)]/50">Cargando categorías…</span>}
+              </div>
+            </Field>
+            <Field label="Zonas donde operás *">
+              <div className="flex flex-wrap gap-2">
+                {ZONAS.map(z => (
+                  <button type="button" key={z} onClick={() => toggleZona(z)}
+                    className={`text-[12px] font-bold px-3 py-1.5 rounded-full border-[1.5px] ${zonasSel.includes(z) ? 'bg-[var(--sage)] text-white border-[var(--ink)]' : 'bg-white text-[var(--ink)] border-[var(--ink)]/30'}`}>
+                    {z}
+                  </button>
+                ))}
+              </div>
+            </Field>
+            <Field label="Descripción (opcional)">
+              <textarea maxLength={600} rows={3} value={descripcion} onChange={(e) => setDescripcion(e.target.value)}
+                placeholder="Especialidad, diferenciales, etc."
+                className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] resize-none focus:outline-none" />
+            </Field>
+            <Field label="Años en el rubro (opcional)">
+              <input type="number" min="0" max="100" value={aniosRubro} onChange={(e) => setAniosRubro(e.target.value)}
+                placeholder="Ej: 5"
+                className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] focus:outline-none" />
+            </Field>
+          </div>
+
+          {/* Bloque 3 — Presencia online (al menos uno) */}
+          <div className="space-y-3">
+            <SectionLabel n={3} text="Presencia online (al menos uno) *" />
+            <Field label="Sitio web">
+              <input type="url" maxLength={200} value={webUrl} onChange={(e) => setWebUrl(e.target.value)}
+                placeholder="https://miempresa.com.ar"
+                className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] focus:outline-none" />
+            </Field>
+            <Field label="Instagram">
+              <input type="text" maxLength={100} value={instagram} onChange={(e) => setInstagram(e.target.value)}
+                placeholder="@miempresa o https://instagram.com/..."
+                className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] focus:outline-none" />
+            </Field>
+            <Field label="Facebook">
+              <input type="text" maxLength={200} value={facebook} onChange={(e) => setFacebook(e.target.value)}
+                placeholder="https://facebook.com/..."
+                className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] focus:outline-none" />
+            </Field>
+          </div>
+
+          {/* Bloque 4 — Contacto */}
+          <div className="space-y-3">
+            <SectionLabel n={4} text="Contacto" />
+            <Field label="Teléfono / WhatsApp (opcional)">
+              <input type="tel" maxLength={30} value={telefono} onChange={(e) => setTelefono(e.target.value)}
+                placeholder="+54 9 11 ..."
+                className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-mono focus:outline-none" />
+            </Field>
+          </div>
+
+          {/* Bloque 5 — Cobros (opcional ahora) */}
+          <div className="space-y-3">
+            <SectionLabel n={5} text="Cobros (opcional)" />
+            <p className="text-[11px] text-[var(--ink)]/60 -mt-1">Vas a poder cargarlo después. Cuando habilitemos pagos por la plataforma, se vuelve obligatorio.</p>
+            <Field label="CBU">
+              <input type="text" maxLength={22} value={cbu} onChange={(e) => setCbu(e.target.value)}
+                placeholder="22 dígitos"
+                className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-mono focus:outline-none" />
+            </Field>
+            <Field label="Alias">
+              <input type="text" maxLength={40} value={aliasCbu} onChange={(e) => setAliasCbu(e.target.value)}
+                placeholder="mi.alias.mp"
+                className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-mono focus:outline-none" />
+            </Field>
+          </div>
+
           <button type="submit" disabled={submitting}
             className="btn-pop w-full py-3.5 bg-[var(--ink)] text-[var(--sun)] font-extrabold rounded-xl border-[1.5px] border-[var(--ink)] uppercase tracking-wider text-sm disabled:opacity-50">
-            {submitting ? "Guardando…" : "Empezar a ofertar →"}
+            {submitting ? "Guardando…" : "Guardar y empezar a ofertar →"}
           </button>
+          <p className="text-[11px] text-[var(--ink)]/50 text-center">
+            Al guardar quedás como <span className="font-bold">Tier 0 — Registrada</span>. Para ofertar más alto vas a tener que validar CUIT contra AFIP (próximamente).
+          </p>
         </form>
       </div>
+    </div>
+  );
+}
+
+function SectionLabel({ n, text }) {
+  return (
+    <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--sage)] mb-1">
+      <span className="w-5 h-5 rounded-full bg-[var(--sage)] text-white flex items-center justify-center text-[11px] font-extrabold">{n}</span>
+      {text}
     </div>
   );
 }
@@ -873,8 +1060,10 @@ function AppRoot({ session, profile, onProfileChange }) {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--cream)] flex justify-center">
+    <div className="min-h-screen flex justify-center" data-role={profile.role}>
       <div className="w-full max-w-md flex flex-col min-h-screen relative pb-24">
+        <div className="role-stripe"></div>
+        <RoleBadge profile={profile} onClick={() => setScreen("perfil")} />
         {screen === "feed" && (isPyme
           ? <FeedPymeScreen profile={profile} onOpen={goDetalle} />
           : <FeedFamiliaScreen profile={profile} onOpen={goDetalle} />)}
@@ -889,19 +1078,37 @@ function AppRoot({ session, profile, onProfileChange }) {
   );
 }
 
+function RoleBadge({ profile, onClick }) {
+  const info = ROLES_INFO[profile.role];
+  if (!info) return null;
+  const Icon = info.icon;
+  return (
+    <button
+      onClick={onClick}
+      className="fixed top-3 right-3 z-40 flex items-center gap-1.5 px-2.5 py-1 rounded-full border-[1.5px] border-[var(--ink)] bg-white text-[10px] font-bold uppercase tracking-wider"
+      style={{boxShadow: "2px 2px 0 var(--ink)"}}
+      title="Cambiar de rol en perfil"
+    >
+      <span className="w-2 h-2 rounded-full" style={{background: info.color}}></span>
+      <Icon className="w-3 h-3" />
+      <span>{info.label}</span>
+    </button>
+  );
+}
+
 function BottomNav({ screen, setScreen, isPyme }) {
   const { showAlert } = useDialog();
   return (
     <div className="fixed bottom-0 left-0 right-0 z-30 flex justify-center pointer-events-none">
       <div className="w-full max-w-md px-4 pb-3 pointer-events-auto">
-        <div className="bg-[var(--ink)] text-white rounded-3xl px-3 py-2.5 flex items-center justify-around" style={{boxShadow: "4px 4px 0 var(--coral)"}}>
+        <div className="bg-[var(--ink)] text-white rounded-3xl px-3 py-2.5 flex items-center justify-around" style={{boxShadow: "4px 4px 0 var(--role-accent, var(--coral))"}}>
           <NavBtn IconCmp={IconHome} label="Feed" active={screen === "feed"} onClick={() => setScreen("feed")} />
           {!isPyme && <NavBtn IconCmp={IconUsers} label="Grupo" active={screen === "grupo"} onClick={() => { setScreen("grupo"); }} />}
           {!isPyme && (
             <button
               onClick={() => setScreen("publicar")}
-              className="-mt-7 w-14 h-14 bg-[var(--coral)] rounded-2xl flex items-center justify-center border-[1.5px] border-[var(--ink)]"
-              style={{boxShadow: "3px 3px 0 var(--ink)"}}
+              className="-mt-7 w-14 h-14 rounded-2xl flex items-center justify-center border-[1.5px] border-[var(--ink)]"
+              style={{boxShadow: "3px 3px 0 var(--ink)", background: "var(--role-accent, var(--coral))"}}
             >
               <IconPlus className="w-7 h-7 text-white" stroke={2.5} />
             </button>
