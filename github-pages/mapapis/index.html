@@ -269,6 +269,12 @@ async function crearOferta({ necesidadId, precioCentavos, tiempoDias, descripcio
 async function adjudicarOferta(ofertaId) {
   return await sb.rpc("adjudicar_oferta", { p_oferta: ofertaId });
 }
+async function marcarCumplida(necesidadId) {
+  return await sb.rpc("marcar_cumplida", { p_necesidad: necesidadId });
+}
+async function revertirCumplida(necesidadId) {
+  return await sb.rpc("revertir_cumplida", { p_necesidad: necesidadId });
+}
 
 /* ===================== ICONS (inline SVG) ===================== */
 const Icon = ({ d, className = "w-5 h-5", stroke = 2 }) => (
@@ -425,6 +431,8 @@ function normalizeNecesidad(row) {
       ?? row.grupos?.alumnos?.[0]?.count
       ?? null,
     inscripcion_cerrada_at: row.inscripcion_cerrada_at || null,
+    cumplida_at: row.cumplida_at || null,
+    cumplida_por: row.cumplida_por || null,
     grupo_id: row.grupo_id,
     grupo_nombre: row.grupos?.nombre,
     foto_url: row.foto_url || null,
@@ -1346,8 +1354,9 @@ function NecesidadCard({ n, onClick, mode }) {
 }
 
 /* ===================== Detalle de necesidad ===================== */
-function DetalleScreen({ necesidad: n, profile, onBack }) {
-  if (!n) return <div className="p-6">Sin necesidad seleccionada.</div>;
+function DetalleScreen({ necesidad: necProp, profile, onBack }) {
+  if (!necProp) return <div className="p-6">Sin necesidad seleccionada.</div>;
+  const [n, setN] = useState(necProp);
   const est = ESTADO_LABEL[n.estado];
   const isPyme = profile.role === "pyme";
   const [ofertas, setOfertas] = useState([]);
@@ -1376,6 +1385,13 @@ function DetalleScreen({ necesidad: n, profile, onBack }) {
         .eq("necesidad_id", n.id);
 
       const progresoReq = sb.rpc("necesidad_progreso", { p_necesidad: n.id });
+
+      // Refresh de la necesidad para detectar cambios de estado (adjudicada/cumplida)
+      const necRefreshReq = sb.from("necesidades").select("estado, cumplida_at, cumplida_por, inscripcion_cerrada_at").eq("id", n.id).maybeSingle();
+      necRefreshReq.then(({ data }) => {
+        if (!aliveRef.current || !data) return;
+        setN(prev => ({ ...prev, ...data }));
+      });
 
       if (isPyme) {
         const [oRes, iRes, pRes] = await Promise.all([ofertasReq, inscripcionesReq, progresoReq]);
@@ -1608,6 +1624,17 @@ function DetalleScreen({ necesidad: n, profile, onBack }) {
         />
       )}
 
+      {/* Panel de cumplida: visible cuando adjudicada o cumplida */}
+      {(n.estado === "adjudicada" || n.estado === "cumplida") && (
+        <CumplidaPanel
+          necesidad={n}
+          profile={profile}
+          ofertas={ofertas}
+          esAdminGrupo={esAdminGrupo}
+          onChanged={fetchData}
+        />
+      )}
+
       {/* Sección rol */}
       {isPyme ? (
         <PymeOfertaPanel necesidad={n} profile={profile} ofertas={ofertas} loading={loading} onChanged={fetchData} />
@@ -1626,6 +1653,75 @@ function DetalleScreen({ necesidad: n, profile, onBack }) {
       )}
 
       <div className="h-8"></div>
+    </div>
+  );
+}
+
+/* ===================== Panel de cumplida (adjudicada/cumplida) ===================== */
+function CumplidaPanel({ necesidad: n, profile, ofertas, esAdminGrupo, onChanged }) {
+  const [busy, setBusy] = useState(false);
+  const { showAlert, showConfirm } = useDialog();
+  const ganadora = ofertas.find(o => o.estado === "ganadora");
+  const soyPymeGanadora = ganadora && ganadora.pyme_id === profile.id;
+  const puedeMarcar = n.estado === "adjudicada" && (esAdminGrupo || soyPymeGanadora);
+
+  const cumplidaAt = n.cumplida_at ? new Date(n.cumplida_at) : null;
+  const dentroDeVentana = cumplidaAt && (Date.now() - cumplidaAt.getTime() < 24 * 60 * 60 * 1000);
+
+  const handleMarcar = async () => {
+    if (!await showConfirm("¿Confirmás que la entrega ya se concretó? Vas a poder revertirlo durante 24hs.")) return;
+    setBusy(true);
+    const { error } = await marcarCumplida(n.id);
+    setBusy(false);
+    if (error) { await showAlert("Error: " + error.message); return; }
+    onChanged();
+  };
+  const handleRevertir = async () => {
+    if (!await showConfirm("¿Revertir la confirmación? La necesidad vuelve a 'adjudicada'.")) return;
+    setBusy(true);
+    const { error } = await revertirCumplida(n.id);
+    setBusy(false);
+    if (error) { await showAlert("Error: " + error.message); return; }
+    onChanged();
+  };
+
+  return (
+    <div className="px-5 mt-6">
+      {n.estado === "cumplida" ? (
+        <div className="bg-[var(--sage)]/10 rounded-3xl border-[1.5px] border-[var(--sage)] p-5">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--sage)] mb-1">✓ Cumplida</div>
+          <div className="font-display font-bold text-lg">Entrega confirmada</div>
+          {cumplidaAt && (
+            <div className="text-xs text-[var(--ink)]/70 mt-1">
+              {cumplidaAt.toLocaleString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" })}
+            </div>
+          )}
+          {esAdminGrupo && dentroDeVentana && (
+            <button onClick={handleRevertir} disabled={busy}
+              className="mt-3 text-[11px] font-bold uppercase tracking-wider text-[var(--coral)] underline disabled:opacity-50">
+              {busy ? "..." : "Revertir (24hs)"}
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="bg-[var(--sun)]/30 rounded-3xl border-[1.5px] border-[var(--ink)] p-5">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)] mb-1">Adjudicada</div>
+          <div className="font-display font-bold text-lg">¿Ya se concretó la entrega?</div>
+          <p className="text-xs text-[var(--ink)]/70 mt-1">
+            Cuando reciban el pedido, el admin del grupo o la pyme ganadora pueden marcarla como cumplida.
+          </p>
+          {puedeMarcar ? (
+            <button onClick={handleMarcar} disabled={busy}
+              className="btn-pop mt-3 w-full py-3 bg-[var(--ink)] text-[var(--sun)] font-extrabold rounded-xl uppercase tracking-wider text-xs disabled:opacity-50">
+              {busy ? "..." : "Confirmar entrega →"}
+            </button>
+          ) : (
+            <p className="mt-3 text-[11px] uppercase tracking-wider font-bold text-[var(--ink)]/50">
+              Esperando confirmación del admin o la pyme
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
