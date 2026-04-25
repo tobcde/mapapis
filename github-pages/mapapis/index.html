@@ -1050,16 +1050,20 @@ function CrearGrupoScreen({ profile, onCreated, onCancel }) {
   const onSubmit = async (e) => {
     e.preventDefault();
     setSaving(true); setError(null);
-    const { data, error } = await sb.from("grupos").insert({
-      nombre, zona, tipo, rango_familias: rango,
-      institucion_nombre: instNombre || null,
-      institucion_direccion: instDireccion || null,
-      creado_por: profile.id
-    }).select().single();
+    const { data, error } = await sb.rpc("crear_grupo", {
+      p_nombre: nombre,
+      p_zona: zona,
+      p_tipo: tipo,
+      p_rango: rango,
+      p_inst_nombre: instNombre || null,
+      p_inst_direccion: instDireccion || null
+    });
     setSaving(false);
     if (error) { setError(error.message); return; }
-    setActiveGrupo(data.id);
-    setGrupoCreado(data);
+    const grupo = Array.isArray(data) ? data[0] : data;
+    if (!grupo) { setError("No se pudo crear el grupo (respuesta vacía)"); return; }
+    setActiveGrupo(grupo.id);
+    setGrupoCreado(grupo);
   };
 
   if (grupoCreado) {
