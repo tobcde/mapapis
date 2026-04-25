@@ -275,6 +275,28 @@ async function marcarCumplida(necesidadId) {
 async function revertirCumplida(necesidadId) {
   return await sb.rpc("revertir_cumplida", { p_necesidad: necesidadId });
 }
+async function registrarPago({ necesidadId, alumnoId = null, montoCentavos = null, notas = null }) {
+  return await sb.rpc("registrar_pago", {
+    p_necesidad: necesidadId,
+    p_alumno: alumnoId,
+    p_monto_centavos: montoCentavos,
+    p_notas: notas,
+  });
+}
+async function eliminarPago({ necesidadId, alumnoId = null }) {
+  return await sb.rpc("eliminar_pago", { p_necesidad: necesidadId, p_alumno: alumnoId });
+}
+async function fetchPagos(necesidadId) {
+  return await sb.from("necesidad_pagos")
+    .select("id, necesidad_id, profile_id, alumno_id, monto_centavos, notas, pagado_at, marcado_por")
+    .eq("necesidad_id", necesidadId);
+}
+async function fetchContactoPyme(necesidadId) {
+  return await sb.rpc("contacto_pyme_ganadora", { p_necesidad: necesidadId });
+}
+async function fetchContactoAdminGrupo(necesidadId) {
+  return await sb.rpc("contacto_admin_grupo", { p_necesidad: necesidadId });
+}
 
 /* ===================== ICONS (inline SVG) ===================== */
 const Icon = ({ d, className = "w-5 h-5", stroke = 2 }) => (
@@ -1635,6 +1657,18 @@ function DetalleScreen({ necesidad: necProp, profile, onBack }) {
         />
       )}
 
+      {/* Pagos externos + datos de contacto post-adjudicacion */}
+      {(n.estado === "adjudicada" || n.estado === "cumplida") && (
+        <PagosPanel
+          necesidad={n}
+          profile={profile}
+          ofertas={ofertas}
+          misAlumnos={misAlumnos}
+          inscripciones={inscripciones}
+          esAdminGrupo={esAdminGrupo}
+        />
+      )}
+
       {/* Sección rol */}
       {isPyme ? (
         <PymeOfertaPanel necesidad={n} profile={profile} ofertas={ofertas} loading={loading} onChanged={fetchData} />
@@ -1722,6 +1756,202 @@ function CumplidaPanel({ necesidad: n, profile, ofertas, esAdminGrupo, onChanged
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ===================== Panel de pagos externos + contacto ===================== */
+function PagosPanel({ necesidad: n, profile, ofertas, misAlumnos, inscripciones, esAdminGrupo }) {
+  const isPyme = profile.role === "pyme";
+  const ganadora = ofertas.find(o => o.estado === "ganadora");
+  const soyPymeGanadora = ganadora && ganadora.pyme_id === profile.id;
+  const [pagos, setPagos] = useState([]);
+  const [contactoPyme, setContactoPyme] = useState(null);
+  const [contactoAdmins, setContactoAdmins] = useState([]);
+  const [busyKey, setBusyKey] = useState(null);
+  const [loaded, setLoaded] = useState(false);
+  const { showAlert, showConfirm } = useDialog();
+
+  const aliveRef = React.useRef(true);
+  const refresh = async () => {
+    const reqs = [fetchPagos(n.id)];
+    if (!isPyme) reqs.push(fetchContactoPyme(n.id));
+    if (soyPymeGanadora) reqs.push(fetchContactoAdminGrupo(n.id));
+    const results = await Promise.all(reqs);
+    if (!aliveRef.current) return;
+    setPagos(results[0]?.data || []);
+    if (!isPyme) setContactoPyme((results[1]?.data || [])[0] || null);
+    if (soyPymeGanadora) setContactoAdmins((results[isPyme ? 1 : 2]?.data) || []);
+    setLoaded(true);
+  };
+  useEffect(() => {
+    aliveRef.current = true;
+    refresh();
+    return () => { aliveRef.current = false; };
+  }, [n.id]);
+
+  const togglePago = async (alumnoId) => {
+    const key = alumnoId || "self";
+    const yaPago = pagos.some(p => alumnoId
+      ? p.alumno_id === alumnoId
+      : (p.profile_id === profile.id && p.alumno_id == null));
+    if (!yaPago) {
+      setBusyKey(key);
+      const { error } = await registrarPago({ necesidadId: n.id, alumnoId });
+      setBusyKey(null);
+      if (error) { await showAlert("Error: " + error.message); return; }
+    } else {
+      if (!await showConfirm("¿Marcar como no pagado?")) return;
+      setBusyKey(key);
+      const { error } = await eliminarPago({ necesidadId: n.id, alumnoId });
+      setBusyKey(null);
+      if (error) { await showAlert("Error: " + error.message); return; }
+    }
+    refresh();
+  };
+
+  const copiar = async (txt, label) => {
+    try { await navigator.clipboard.writeText(txt); await showAlert(`${label} copiado`); }
+    catch { await showAlert("No se pudo copiar"); }
+  };
+
+  if (!loaded) return null;
+
+  // Render contacto pyme (lo ven familias del grupo)
+  const ContactoPyme = !isPyme && contactoPyme && (
+    <div className="bg-white rounded-3xl border-[1.5px] border-[var(--ink)] p-5 mb-3" style={{boxShadow: "3px 3px 0 var(--ink)"}}>
+      <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/60 mb-2">Cómo pagarle a la pyme</div>
+      <div className="font-display font-bold text-base mb-2">{contactoPyme.nombre_comercial}</div>
+      <div className="space-y-2 text-sm">
+        {contactoPyme.alias_cbu && (
+          <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-[var(--mist)]">
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-[var(--ink)]/60 font-bold">Alias</div>
+              <div className="font-mono font-semibold break-all">{contactoPyme.alias_cbu}</div>
+            </div>
+            <button onClick={() => copiar(contactoPyme.alias_cbu, "Alias")}
+              className="shrink-0 px-2.5 py-1.5 rounded-lg bg-white border-[1.5px] border-[var(--ink)] text-[10px] font-bold uppercase tracking-wider">
+              <IconCopy className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+        {contactoPyme.cbu && (
+          <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-[var(--mist)]">
+            <div className="min-w-0">
+              <div className="text-[10px] uppercase tracking-wider text-[var(--ink)]/60 font-bold">CBU</div>
+              <div className="font-mono font-semibold break-all">{contactoPyme.cbu}</div>
+            </div>
+            <button onClick={() => copiar(contactoPyme.cbu, "CBU")}
+              className="shrink-0 px-2.5 py-1.5 rounded-lg bg-white border-[1.5px] border-[var(--ink)] text-[10px] font-bold uppercase tracking-wider">
+              <IconCopy className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+        {contactoPyme.telefono && (
+          <a href={`https://wa.me/${contactoPyme.telefono.replace(/[^0-9]/g, "")}`} target="_blank" rel="noopener noreferrer"
+             className="flex items-center justify-between gap-2 p-2 rounded-lg bg-[var(--sage)]/15 hover:bg-[var(--sage)]/25">
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-[var(--ink)]/60 font-bold">WhatsApp</div>
+              <div className="font-semibold">{contactoPyme.telefono}</div>
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--sage)]">Abrir →</span>
+          </a>
+        )}
+        {!contactoPyme.alias_cbu && !contactoPyme.cbu && (
+          <p className="text-xs text-[var(--ink)]/60">La pyme aún no cargó datos de cobro. Coordinen por WhatsApp.</p>
+        )}
+      </div>
+    </div>
+  );
+
+  // Render contacto admin (lo ve la pyme ganadora)
+  const ContactoAdmins = soyPymeGanadora && contactoAdmins.length > 0 && (
+    <div className="bg-white rounded-3xl border-[1.5px] border-[var(--ink)] p-5 mb-3" style={{boxShadow: "3px 3px 0 var(--ink)"}}>
+      <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/60 mb-2">Contacto del grupo</div>
+      <div className="space-y-2 text-sm">
+        {contactoAdmins.map(a => (
+          <div key={a.profile_id} className="p-2 rounded-lg bg-[var(--mist)]">
+            <div className="font-bold">{a.nombre || "—"}</div>
+            <div className="text-xs text-[var(--ink)]/70">{a.email}</div>
+            {a.telefono && (
+              <a href={`https://wa.me/${a.telefono.replace(/[^0-9]/g, "")}`} target="_blank" rel="noopener noreferrer"
+                 className="inline-flex mt-1 items-center gap-1 text-xs font-bold text-[var(--sage)] uppercase tracking-wider">
+                WhatsApp: {a.telefono} →
+              </a>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  // Tracking de pagos: solo familias del grupo lo accionan; pyme lo ve readonly
+  let TrackingPagos = null;
+  if (n.modalidad === "individual") {
+    const inscriptosIds = new Set((inscripciones || []).map(i => i.alumno_id));
+    const tutorAlumnos = (misAlumnos || []).filter(a => inscriptosIds.has(a.id));
+    const totalInscriptos = inscripciones?.length || 0;
+    const pagados = pagos.length;
+    TrackingPagos = (
+      <div className="bg-white rounded-3xl border-[1.5px] border-[var(--ink)] p-5" style={{boxShadow: "3px 3px 0 var(--ink)"}}>
+        <div className="flex items-baseline justify-between mb-2">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/60">Pagos por alumno</div>
+          <div className="text-xs font-bold font-mono">{pagados}/{totalInscriptos}</div>
+        </div>
+        {!isPyme && tutorAlumnos.length > 0 ? (
+          <div className="space-y-2">
+            {tutorAlumnos.map(a => {
+              const pago = pagos.find(p => p.alumno_id === a.id);
+              const yo = pago?.marcado_por === profile.id;
+              const puedeAccionar = !pago || yo || esAdminGrupo;
+              return (
+                <div key={a.id} className="flex items-center justify-between gap-2 p-2.5 rounded-lg border-[1.5px] border-[var(--ink)]/15">
+                  <div className="font-semibold text-sm">{a.nombre}</div>
+                  <button onClick={() => togglePago(a.id)} disabled={busyKey === a.id || !puedeAccionar}
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-bold uppercase tracking-wider border-[1.5px] disabled:opacity-50 ${
+                      pago ? "bg-[var(--sage)] text-white border-[var(--sage)]" : "bg-white border-[var(--ink)]/40 text-[var(--ink)]"
+                    }`}>
+                    {busyKey === a.id ? "..." : (pago ? "✓ Pagado" : "Marcar pagado")}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        ) : !isPyme ? (
+          <p className="text-xs text-[var(--ink)]/60">No tenés alumnos inscriptos en esta necesidad.</p>
+        ) : (
+          <p className="text-xs text-[var(--ink)]/60">{pagados} de {totalInscriptos} familias ya marcaron el pago.</p>
+        )}
+      </div>
+    );
+  } else {
+    // Grupal: 1 fila por familia (profile)
+    const miPago = pagos.find(p => p.profile_id === profile.id && p.alumno_id == null);
+    TrackingPagos = (
+      <div className="bg-white rounded-3xl border-[1.5px] border-[var(--ink)] p-5" style={{boxShadow: "3px 3px 0 var(--ink)"}}>
+        <div className="flex items-baseline justify-between mb-2">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/60">Pagos por familia</div>
+          <div className="text-xs font-bold font-mono">{pagos.length} {pagos.length === 1 ? "pago" : "pagos"}</div>
+        </div>
+        {!isPyme ? (
+          <button onClick={() => togglePago(null)} disabled={busyKey === "self"}
+            className={`w-full py-3 rounded-xl text-xs font-extrabold uppercase tracking-wider border-[1.5px] disabled:opacity-50 ${
+              miPago ? "bg-[var(--sage)] text-white border-[var(--sage)]" : "bg-white border-[var(--ink)] text-[var(--ink)]"
+            }`}>
+            {busyKey === "self" ? "..." : (miPago ? "✓ Marcaste tu pago — tocá para revertir" : "Marcar mi pago")}
+          </button>
+        ) : (
+          <p className="text-xs text-[var(--ink)]/60">{pagos.length} familias ya marcaron su pago.</p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-5 mt-3">
+      {ContactoPyme}
+      {ContactoAdmins}
+      {TrackingPagos}
     </div>
   );
 }
