@@ -2704,7 +2704,8 @@ function PerfilScreen({ profile, onProfileChange }) {
 
   const cambiarRol = async () => {
     if (!confirm("¿Cambiar de rol? Vas a volver al onboarding.")) return;
-    await sb.from("profiles").update({ role: null }).eq("id", profile.id);
+    const { error } = await sb.from("profiles").update({ role: null }).eq("id", profile.id);
+    if (error) { alert("No se pudo cambiar el rol: " + error.message); return; }
     onProfileChange();
   };
 
