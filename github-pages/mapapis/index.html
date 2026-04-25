@@ -915,6 +915,7 @@ function DetalleScreen({ necesidad: n, profile, onBack }) {
   const [inscripciones, setInscripciones] = useState([]); // { alumno_id, inscripto_por }
   const [miRol, setMiRol] = useState(null);
   const [totalAlumnos, setTotalAlumnos] = useState(n.total_alumnos ?? null);
+  const [inscriptosCount, setInscriptosCount] = useState(n.inscriptos_count ?? null);
   const [cerrandoBusy, setCerrandoBusy] = useState(false);
   const [inscripcionCerradaAt, setInscripcionCerradaAt] = useState(n.inscripcion_cerrada_at || null);
   const [loading, setLoading] = useState(true);
@@ -932,42 +933,40 @@ function DetalleScreen({ necesidad: n, profile, onBack }) {
         .select("alumno_id, inscripto_por")
         .eq("necesidad_id", n.id);
 
-      const necesidadReq = sb.from("necesidades")
-        .select("inscripcion_cerrada_at")
-        .eq("id", n.id)
-        .maybeSingle();
+      const progresoReq = sb.rpc("necesidad_progreso", { p_necesidad: n.id });
 
       if (isPyme) {
-        const [oRes, iRes, nRes] = await Promise.all([ofertasReq, inscripcionesReq, necesidadReq]);
+        const [oRes, iRes, pRes] = await Promise.all([ofertasReq, inscripcionesReq, progresoReq]);
         if (!aliveRef.current) return;
         setOfertas(oRes.data || []);
         setInscripciones(iRes.data || []);
-        setInscripcionCerradaAt(nRes.data?.inscripcion_cerrada_at || null);
+        const prog = (pRes.data || [])[0] || {};
+        setInscripcionCerradaAt(prog.inscripcion_cerrada_at || null);
+        setTotalAlumnos(prog.total_alumnos ?? null);
+        setInscriptosCount(prog.inscriptos ?? null);
       } else {
-        const totalAlumnosReq = sb.from("alumnos")
-          .select("id", { count: "exact", head: true })
-          .eq("grupo_id", n.grupo_id);
         const miRolReq = sb.from("grupo_miembros")
           .select("rol_en_grupo")
           .eq("grupo_id", n.grupo_id)
           .eq("profile_id", profile.id)
           .maybeSingle();
-        const [oRes, aRes, iRes, nRes, tRes, rRes] = await Promise.all([
+        const [oRes, aRes, iRes, pRes, rRes] = await Promise.all([
           ofertasReq,
           sb.from("alumnos")
             .select("id, nombre, alumno_tutores!inner(profile_id)")
             .eq("grupo_id", n.grupo_id)
             .eq("alumno_tutores.profile_id", profile.id),
           inscripcionesReq,
-          necesidadReq,
-          totalAlumnosReq,
+          progresoReq,
           miRolReq,
         ]);
         if (!aliveRef.current) return;
         setOfertas(oRes.data || []);
         setInscripciones(iRes.data || []);
-        setInscripcionCerradaAt(nRes.data?.inscripcion_cerrada_at || null);
-        setTotalAlumnos(typeof tRes.count === "number" ? tRes.count : null);
+        const prog = (pRes.data || [])[0] || {};
+        setInscripcionCerradaAt(prog.inscripcion_cerrada_at || null);
+        setTotalAlumnos(prog.total_alumnos ?? null);
+        setInscriptosCount(prog.inscriptos ?? null);
         setMiRol(rRes.data?.rol_en_grupo || null);
         const alumnos = aRes.data || [];
         setMisAlumnos(alumnos);
@@ -1126,9 +1125,14 @@ function DetalleScreen({ necesidad: n, profile, onBack }) {
                   {inscripcionCerrada ? "Inscripciones cerradas" : "Inscripción abierta"}
                 </div>
                 <div className="text-sm font-bold mt-1">
-                  {inscripciones.length}{totalAlumnos != null ? `/${totalAlumnos}` : ""} alumno{inscripciones.length === 1 ? "" : "s"} anotado{inscripciones.length === 1 ? "" : "s"}
-                  {" · "}{inscripcionCerrada ? "cantidad final" : "total actual"}{": "}
-                  <span className="font-mono">{(inscripciones.length) * Number(n.cantidad_por_alumno || 1)}</span>
+                  {(() => {
+                    const k = inscriptosCount ?? inscripciones.length;
+                    return <>
+                      {k}{totalAlumnos != null ? `/${totalAlumnos}` : ""} alumno{k === 1 ? "" : "s"} anotado{k === 1 ? "" : "s"}
+                      {" · "}{inscripcionCerrada ? "cantidad final" : "total actual"}{": "}
+                      <span className="font-mono">{k * Number(n.cantidad_por_alumno || 1)}</span>
+                    </>;
+                  })()}
                 </div>
                 {!isPyme && esAdminGrupo && (
                   <div className="mt-3 flex gap-2 flex-wrap">
