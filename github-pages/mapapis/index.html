@@ -578,6 +578,8 @@ const MODO_ENTREGA_LABEL = {
   envio:  { icon: "🚚", short: "Envío a domicilio", long: "Envío al domicilio del comprador" },
   ambos:  { icon: "🚚📦", short: "Envío o retiro", long: "Envío o retiro, según prefieras" },
 };
+// Bumpear esta string cuando los T&C cambien materialmente — fuerza re-aceptación.
+const TERMS_VERSION = "2026-04-25-v0.1";
 const fmtFechaHora = (iso) => {
   if (!iso) return "";
   try {
@@ -594,6 +596,78 @@ function cantidadVisible(n) {
 }
 
 /* ===================== AUTH GATE ===================== */
+/* ===================== Terms acceptance gate ===================== */
+function TermsAcceptanceGate({ profile, onDone }) {
+  const [aceptado, setAceptado] = useState(false);
+  const [verLegal, setVerLegal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+  const { showAlert } = useDialog();
+
+  const onAceptar = async () => {
+    if (!aceptado) return;
+    setSubmitting(true); setError(null);
+    const { error: err } = await sb.rpc("aceptar_terminos", { p_version: TERMS_VERSION });
+    setSubmitting(false);
+    if (err) { setError(err.message); return; }
+    onDone();
+  };
+
+  const logout = async () => { await sb.auth.signOut(); };
+
+  return (
+    <div className="min-h-screen bg-[var(--cream)] bg-dots px-6 py-10 anim-in">
+      <div className="max-w-md mx-auto">
+        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--coral)] mb-2">Antes de empezar</div>
+        <h1 className="font-display font-black text-3xl leading-tight">
+          Aceptá los <span className="font-display-italic">Términos</span>
+        </h1>
+        <p className="text-sm text-[var(--ink)]/70 mt-3 leading-relaxed">
+          Para usar MaPaPis tenés que aceptar nuestros Términos y Condiciones. Cubren cómo funciona la plataforma, cómo se procesan los pagos por Mercado Pago y las responsabilidades de cada parte (familias y pymes).
+        </p>
+
+        <div className="bg-white rounded-3xl border-[1.5px] border-[var(--ink)] p-5 mt-6" style={{boxShadow: "4px 4px 0 var(--ink)"}}>
+          <button onClick={() => setVerLegal(true)} className="w-full text-left flex items-center justify-between gap-3 group">
+            <div>
+              <div className="font-display font-bold text-base">Términos y Condiciones</div>
+              <div className="text-[11px] text-[var(--ink)]/55">Versión {TERMS_VERSION} · Tap para leer</div>
+            </div>
+            <div className="text-[var(--coral)] font-bold">→</div>
+          </button>
+
+          <label className="flex items-start gap-3 mt-5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={aceptado}
+              onChange={(e) => setAceptado(e.target.checked)}
+              className="mt-1 w-5 h-5 accent-[var(--coral)]"
+            />
+            <span className="text-sm text-[var(--ink)]/85 leading-snug">
+              Leí y <span className="font-bold">acepto los Términos y Condiciones</span> y la Política de tratamiento de datos personales.
+            </span>
+          </label>
+
+          <button
+            onClick={onAceptar}
+            disabled={!aceptado || submitting}
+            className="btn-pop w-full mt-5 py-3.5 bg-[var(--ink)] text-[var(--sun)] font-extrabold rounded-xl uppercase tracking-wider text-sm disabled:opacity-40"
+          >
+            {submitting ? "Guardando…" : "Aceptar y continuar →"}
+          </button>
+
+          {error && <p className="text-xs text-rose-700 bg-rose-50 rounded-lg p-2 mt-3 text-center font-semibold">{error}</p>}
+        </div>
+
+        <button onClick={logout} className="block mx-auto mt-6 text-xs text-[var(--ink)]/55 underline">
+          Cerrar sesión
+        </button>
+      </div>
+
+      {verLegal && <LegalScreen onClose={() => setVerLegal(false)} />}
+    </div>
+  );
+}
+
 function AuthGate() {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -674,6 +748,9 @@ function AuthGate() {
 
   if (loading) return <SplashScreen />;
   if (!session) return <LoginScreen joinBanner={joinBanner} />;
+  if (profile && profile.terms_version_aceptada !== TERMS_VERSION) {
+    return <TermsAcceptanceGate profile={profile} onDone={() => refetchProfile(session)} />;
+  }
   if (!profile?.role) return <OnboardingRolScreen profile={profile} session={session} onDone={() => refetchProfile(session)} />;
   if (profile.role === "admin") {
     return <FounderApp profile={profile} session={session} onProfileChange={() => refetchProfile(session)} />;
@@ -4518,7 +4595,7 @@ function LegalScreen({ onClose }) {
         </button>
       </div>
       <div className="px-5 py-6 max-w-2xl mx-auto text-[14px] leading-relaxed text-[var(--ink)]/85 space-y-5">
-        <p className="text-[11px] uppercase tracking-widest text-[var(--ink)]/50">Última actualización: 25 de abril de 2026 · Versión 0.1</p>
+        <p className="text-[11px] uppercase tracking-widest text-[var(--ink)]/50">Versión {TERMS_VERSION}</p>
 
         <section className="space-y-2">
           <h2 className="font-display font-bold text-xl text-[var(--ink)]">1. Qué es MaPaPis</h2>
