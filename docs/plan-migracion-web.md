@@ -13,12 +13,12 @@
 | Tests | ❌ | ✅ Vitest configurado |
 | React Query | ❌ | ✅ |
 | Rutas | Estado local | React Router v7 |
-| Componentes reutilizables | ❌ | ⚠️ Básicos |
+| Componentes reutilizables | ❌ | ✅ Fase 1 completa |
 | Features completas | ✅ | ~20% |
 
 ---
 
-## Fase 0 — Setup local (30 min)
+## ✅ Fase 0 — Setup local (30 min) — COMPLETA
 
 ### 0.1 Completar `.env.local`
 ```
@@ -26,6 +26,7 @@ VITE_SUPABASE_ANON_KEY=   ← copiar de index.html línea 23
 VITE_MP_PUBLIC_KEY=        ← desde dashboard de MercadoPago
 VITE_BASE_PATH=/
 ```
+> `.env.local` creado. Completar `VITE_SUPABASE_ANON_KEY` y `VITE_MP_PUBLIC_KEY`.
 
 ### 0.2 Instalar dependencias y correr
 ```bash
@@ -33,85 +34,53 @@ cd web
 npm install
 npm run dev     # → http://localhost:5173
 ```
+> `vite-plugin-pwa@1.2.0` removido temporalmente — incompatible con Vite 8. Se agrega en Fase 5.
 
 ### 0.3 Verificar que anda
-- [ ] Landing carga
+- [x] App corre en localhost:5173
+- [x] `npx tsc` sin errores
 - [ ] Login con magic link funciona
 - [ ] Onboarding guarda rol
 - [ ] Grupos lista y crea
 
 ---
 
-## Fase 1 — Librería de componentes UI (½ día)
+## ✅ Fase 1 — Librería de componentes UI (½ día) — COMPLETA
 
-Extraer los patrones visuales del `index.html` en componentes reutilizables tipados.
+Commit: `feat(ui): libreria de componentes — Button, Card, Dialog, Input, Badge, Skeleton`
 
-### Archivos a crear en `web/src/components/ui/`
+### Archivos creados en `web/src/components/ui/`
 
-#### `Button.tsx`
-```tsx
-// Variantes: primary | secondary | danger | ghost
-// Tamaños: sm | md | lg
-// Props: loading, disabled, fullWidth, icon
-<Button variant="primary" loading={saving}>Guardar</Button>
-<Button variant="danger">Eliminar</Button>
-<Button variant="ghost">Cancelar</Button>
-```
+| Archivo | Exports |
+|---|---|
+| `Button.tsx` | `<Button variant="primary/secondary/danger/ghost" size="sm/md/lg" loading fullWidth icon>` |
+| `Card.tsx` | `<Card shadow="sm/md/lg/none" as="div/section/article">` |
+| `Dialog.tsx` | `<DialogProvider>`, `useDialog()` → `showAlert()` / `showConfirm()` |
+| `Input.tsx` | `<Input label error hint>`, `<Textarea label error hint>` |
+| `Badge.tsx` | `<EstadoBadge estado>`, `<RolBadge rol>`, `<Badge label>` |
+| `Skeleton.tsx` | `<Skeleton>`, `<SkeletonCard>`, `<SkeletonList count>` |
+| `index.ts` | Barrel export de todo |
 
-#### `Card.tsx`
-```tsx
-// Wrapper con borde ink, sombra 3px/4px desplazada, rounded-2xl o 3xl
-<Card>contenido</Card>
-<Card shadow="lg">contenido</Card>  // 4px 4px 0 var(--ink)
-```
-
-#### `Dialog.tsx`
-```tsx
-// Migrar el CustomDialog del index.html
-// Soporta: alert (1 botón) y confirm (2 botones)
-// Backdrop con blur, animación slideUp
-const { showAlert, showConfirm } = useDialog()
-await showConfirm('¿Eliminar miembro?')
-```
-
-#### `Input.tsx`
-```tsx
-// Input + Label + error message
-// Variantes: text, email, tel, textarea
-<Input label="Nombre" error={errors.nombre?.message} {...register('nombre')} />
-```
-
-#### `Badge.tsx`
-```tsx
-// Chips de estado para necesidades y roles
-<Badge estado="recibiendo_ofertas" />  // → amarillo
-<Badge estado="adjudicada" />          // → verde
-<Badge rol="creador" />                // → sun
-```
-
-#### `Skeleton.tsx`
-```tsx
-// Placeholder animado para loading states
-<Skeleton className="h-16 rounded-2xl" />
-<SkeletonList count={3} />
-```
+- `DialogProvider` conectado en `main.tsx`
+- Animaciones `anim-in` y `dialog-in` agregadas a `index.css`
+- `npx tsc` sin errores ✅
 
 #### `BottomNav.tsx`
 ```tsx
-// Reemplaza el nav actual (emojis) por SVG icons como el index.html
+// Pendiente — se implementa en Fase 2
 // Tabs: Feed | Grupos | + (publicar, solo familia) | Perfil
 // Para pyme: Feed | Mis ofertas | Perfil
 ```
 
 ---
 
-## Fase 2 — Shell y navegación (½ día)
+## 🔄 Fase 2 — Shell y navegación (½ día) — EN CURSO
 
 ### 2.1 Rediseñar `Shell.tsx`
-- Reemplazar header con `border-b` por el estilo del `index.html` (fondo oscuro en nav, cream en contenido)
-- Implementar `BottomNav` con SVG icons y el botón `+` flotante para familia
-- Soporte para rol pyme (tabs diferentes)
-- Fondo con gradientes radiales decorativos (como el `body::before` del index.html)
+- [ ] Sacar header (más espacio en pantalla, como index.html)
+- [ ] `BottomNav` con SVG icons + botón `+` flotante coral para familia
+- [ ] Tabs distintos según rol: familia vs pyme
+- [ ] Fondo con gradientes radiales (ya en `index.css`, solo verificar que Shell no los tape)
 
 ### 2.2 Agregar rutas faltantes en `App.tsx`
 ```tsx
@@ -247,21 +216,21 @@ VITE_SENTRY_DSN  (opcional)
 ## Orden de prioridad sugerido
 
 ```
-Fase 0  Setup local                    30 min
-Fase 1  Componentes UI                 4 hs
-Fase 2  Shell + rutas                  4 hs
-Fase 3  Queries + mutations            4 hs
-Fase 4.1 Feed familia                  3 hs
-Fase 4.2 Feed pyme                     2 hs
-Fase 4.3 Publicar necesidad            3 hs
-Fase 4.4 Detalle completo              4 hs
-Fase 4.5 Gestión de grupo              3 hs
-Fase 4.6 Perfil                        2 hs
-Fase 4.7 Onboarding pyme               2 hs
-Fase 4.8 Alumnos                       3 hs
-Fase 5  Polish + deploy                3 hs
+✅ Fase 0  Setup local                    30 min  COMPLETA
+✅ Fase 1  Componentes UI                 4 hs    COMPLETA
+🔄 Fase 2  Shell + rutas                  4 hs    EN CURSO
+   Fase 3  Queries + mutations            4 hs
+   Fase 4.1 Feed familia                  3 hs
+   Fase 4.2 Feed pyme                     2 hs
+   Fase 4.3 Publicar necesidad            3 hs
+   Fase 4.4 Detalle completo              4 hs
+   Fase 4.5 Gestión de grupo              3 hs
+   Fase 4.6 Perfil                        2 hs
+   Fase 4.7 Onboarding pyme               2 hs
+   Fase 4.8 Alumnos                       3 hs
+   Fase 5   Polish + deploy               3 hs
 ─────────────────────────────────────────────
-Total estimado                        ~37 hs
+Total estimado                          ~37 hs
 ```
 
 ---
