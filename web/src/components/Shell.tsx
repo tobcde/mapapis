@@ -2,6 +2,7 @@ import { type ReactNode } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useSessionStore } from '@/stores/session';
 import { useProfile } from '@/lib/queries/useProfile';
+import { MapapisLogo } from '@/components/MapapisLogo';
 
 interface Props {
   children: ReactNode;
@@ -27,9 +28,8 @@ export function Shell({ children }: Props) {
     <div className="min-h-screen flex flex-col bg-cream">
       <header className="border-b-[1.5px] border-ink bg-white sticky top-0 z-10">
         <div className="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="font-display font-extrabold text-lg">
-            MaPa<span className="hl-sun">Pis</span>
-          </div>
+          <MapapisLogo variant="wordmark" width={130} />
+
           <button
             type="button"
             onClick={() => { void onLogout(); }}

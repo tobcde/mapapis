@@ -1,19 +1,17 @@
 import { Link } from 'react-router-dom';
 import { useSessionStore } from '@/stores/session';
+import { MapapisLogo } from '@/components/MapapisLogo';
 
 export function Landing() {
   const user = useSessionStore((s) => s.user);
 
   return (
     <main className="min-h-screen px-6 py-12 flex flex-col items-center justify-center max-w-md mx-auto">
-      <div className="bg-white rounded-3xl border-[1.5px] border-ink p-8 w-full text-center" style={{ boxShadow: 'var(--shadow-pop)' }}>
+      <div className="bg-white rounded-3xl border-[1.5px] border-ink p-6 w-full text-center" style={{ boxShadow: 'var(--shadow-pop)' }}>
         <div className="text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-2">v2 — vite</div>
-        <h1 className="font-display font-extrabold text-4xl leading-tight">
-          MaPa<span className="hl-sun">Pis</span>
-        </h1>
-        <p className="mt-3 text-sm text-ink/70">
-          Coordinación + marketplace para grupos de padres del jardín y colegio.
-        </p>
+        <div className="flex justify-center">
+          <MapapisLogo variant="lockup" width={300} />
+        </div>
 
         <div className="mt-6 grid gap-2">
           <Link
