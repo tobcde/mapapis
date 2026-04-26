@@ -18,6 +18,7 @@ import { MisOfertas } from '@/routes/MisOfertas';
 import { GrupoMiembros } from '@/routes/GrupoMiembros';
 import { GrupoAlumnos } from '@/routes/GrupoAlumnos';
 import { PymeOnboarding } from '@/routes/PymeOnboarding';
+import { Unirse } from '@/routes/Unirse';
 import { AuthGuard } from '@/components/AuthGuard';
 import { RequireProfile } from '@/components/RequireProfile';
 import { env } from '@/lib/env';
@@ -171,6 +172,8 @@ export function App() {
                 </AuthGuard>
               }
             />
+            {/* Punto de entrada de links de invitación — sin AuthGuard; la ruta lo maneja internamente */}
+            <Route path="/unirse" element={<Unirse />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
