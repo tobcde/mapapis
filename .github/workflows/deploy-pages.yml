@@ -1,10 +1,16 @@
 name: Deploy MaPaPis to GitHub Pages
 
+# Deploy combinado: app vieja (HTML estatico) + app nueva (Vite build).
+# Ambas conviven en el mismo gh-pages bajo subpaths distintos:
+#   tobcde.github.io/mapapis/       <- app vieja (intacta)
+#   tobcde.github.io/mapapis-next/  <- app nueva (Vite)
+
 on:
   push:
     branches: [main]
     paths:
       - 'github-pages/mapapis/**'
+      - 'web/**'
       - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
 
@@ -18,16 +24,67 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web deps
+        working-directory: web
+        run: npm ci --legacy-peer-deps
+
+      - name: Typecheck + lint + tests
+        working-directory: web
+        run: npm run validate
+
+      - name: Build Vite app
+        working-directory: web
+        env:
+          # Estos valores son publicos por diseno (anon key con RLS, MP public
+          # key). Los hardcodeamos aca en lugar de usar GitHub Secrets — no
+          # ganamos nada con eso porque cualquiera los lee en el bundle.
+          VITE_SUPABASE_URL: https://adpbjslkswtnqklzejuy.supabase.co
+          VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFkcGJqc2xrc3d0bnFrbHplanV5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwNjg5NzIsImV4cCI6MjA5MjY0NDk3Mn0.LrzDO8CtW1FeJjdUH5unjaoAdOtMHnDd9T1E4q7X_uU
+          VITE_MP_PUBLIC_KEY: APP_USR-79ac6ee1-8c01-4e30-9ae5-be03cbe403ab
+          VITE_SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          VITE_ENV: prod
+          VITE_BASE_PATH: /mapapis-next/
+        run: npm run build
+
+      - name: Stage combined deploy
+        run: |
+          mkdir -p _site/mapapis _site/mapapis-next
+          cp -r github-pages/mapapis/. _site/mapapis/
+          cp -r web/dist/. _site/mapapis-next/
+          # index.html en root con redirect a la app vieja (default)
+          cat > _site/index.html <<'EOF'
+          <!doctype html>
+          <meta charset="utf-8">
+          <title>MaPaPis</title>
+          <meta http-equiv="refresh" content="0; url=./mapapis/">
+          <link rel="canonical" href="./mapapis/">
+          <p>Redirigiendo a <a href="./mapapis/">MaPaPis</a>...</p>
+          EOF
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
   deploy:
+    needs: build
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: github-pages/mapapis
       - id: deployment
         uses: actions/deploy-pages@v4

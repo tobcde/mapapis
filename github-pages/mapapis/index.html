@@ -2777,8 +2777,16 @@ function PagosPanel({ necesidad: n, profile, ofertas, misAlumnos, inscripciones,
     );
   }
 
-  // Estado del lote: pagados vs esperados
-  const pagadosCount = pagos.length;
+  // Estado del lote: pagados vs esperados (combina pagos externos + MP)
+  const mpEstadosPagados = ["approved", "liberado", "transferido"];
+  const claveMP = (p) => (p.alumno_id || `self:${p.profile_id}`);
+  const claveExt = (p) => (p.alumno_id || `self:${p.profile_id}`);
+  const pagadasKeys = new Set();
+  for (const p of pagos) pagadasKeys.add(claveExt(p));
+  for (const p of pagosMP) {
+    if (mpEstadosPagados.includes(p.estado)) pagadasKeys.add(claveMP(p));
+  }
+  const pagadosCount = pagadasKeys.size;
   const loteCompleto = totalEsperados > 0 && pagadosCount >= totalEsperados;
   const yaCumplida = n.estado === "cumplida";
 
@@ -3492,7 +3500,7 @@ function PublicarScreen({ profile, grupoId, onChangeGrupo, onCancel, onPublicado
       if (v == null || v === "") continue;
       camposClean[c.key] = c.type === "int" ? Number(v) : v;
     }
-    const { error: errInsert } = await sb.from("necesidades").insert({
+    const insertPayload = {
       grupo_id: grupoId,
       creador_id: profile.id,
       creador_tipo: profile.role === "institucion" ? "institucion" : "familia",
@@ -3509,7 +3517,10 @@ function PublicarScreen({ profile, grupoId, onChangeGrupo, onCancel, onPublicado
       cantidad_por_alumno: cpa,
       campos: camposClean,
       foto_url: fotoUrl,
-    });
+    };
+    console.log("[publicar] insert payload:", insertPayload);
+    const { data: insData, error: errInsert } = await sb.from("necesidades").insert(insertPayload).select("id").maybeSingle();
+    console.log("[publicar] insert result:", { insData, errInsert });
     setEnviando(false);
     if (errInsert) { setError(errInsert.message); return; }
     onPublicado();
