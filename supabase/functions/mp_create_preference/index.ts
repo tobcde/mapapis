@@ -34,10 +34,26 @@ Deno.serve(async (req) => {
   try {
     const accessToken = Deno.env.get("MP_ACCESS_TOKEN");
     const appBaseUrl = Deno.env.get("APP_BASE_URL") ?? "";
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL") ?? "";
+    // Preferimos la legacy JWT service_role key (eyJ...) porque el nuevo
+    // formato sb_secret_xxx tiene problemas para bypassear RLS desde Edge Functions.
+    const serviceRoleKey = Deno.env.get("LEGACY_SERVICE_ROLE_KEY")
+      ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
+      ?? Deno.env.get("SB_SERVICE_ROLE_KEY")
+      ?? "";
+    console.log("[mp_create_preference] env check:", {
+      hasAccessToken: !!accessToken,
+      hasAppBaseUrl: !!appBaseUrl,
+      hasSupabaseUrl: !!supabaseUrl,
+      supabaseUrl: supabaseUrl,
+      hasServiceRoleKey: !!serviceRoleKey,
+      serviceRoleKeyPrefix: serviceRoleKey ? serviceRoleKey.slice(0, 12) + "..." : "MISSING",
+    });
     if (!accessToken) {
       return json({ error: "MP_ACCESS_TOKEN no configurado" }, 500);
+    }
+    if (!supabaseUrl || !serviceRoleKey) {
+      return json({ error: "SUPABASE env vars no disponibles", debug: { hasSupabaseUrl: !!supabaseUrl, hasServiceRoleKey: !!serviceRoleKey } }, 500);
     }
 
     // Cliente con el JWT del usuario para identificarlo
@@ -54,6 +70,8 @@ Deno.serve(async (req) => {
     const userEmail = userData.user.email ?? "";
 
     const body = (await req.json()) as ReqBody;
+    console.log("[mp_create_preference] body:", JSON.stringify(body));
+    console.log("[mp_create_preference] user_id:", userId);
     if (!body.necesidad_id) return json({ error: "necesidad_id requerido" }, 400);
 
     // Cliente con service role para queries internas
@@ -67,7 +85,9 @@ Deno.serve(async (req) => {
       .select("id, titulo, estado, grupo_id")
       .eq("id", body.necesidad_id)
       .maybeSingle();
-    if (necErr || !nec) return json({ error: "Necesidad no encontrada" }, 404);
+    console.log("[mp_create_preference] nec lookup:", { nec, necErr });
+    if (necErr) return json({ error: "DB error: " + necErr.message, debug: { necesidad_id: body.necesidad_id } }, 500);
+    if (!nec) return json({ error: "Necesidad no encontrada", debug: { necesidad_id: body.necesidad_id } }, 404);
     if (!["adjudicada", "en_curso"].includes(nec.estado)) {
       return json({ error: `Estado inválido: ${nec.estado}` }, 400);
     }
@@ -120,6 +140,10 @@ Deno.serve(async (req) => {
     // Crear preference en MP
     const monto = montoCentavos / 100;
     const titulo = `MaPaPis · ${nec.titulo ?? "Compra grupal"}`;
+    // Nota: NO mandamos payer.email a MP. Si el comprador real (en sandbox,
+    // un TESTUSER) loguea con un email distinto al que pasamos acá, MP
+    // rechaza como "una de las partes es de prueba". Dejamos que MP lo
+    // identifique por la sesión del checkout.
     const preferenceBody = {
       items: [{
         title: titulo,
@@ -127,7 +151,6 @@ Deno.serve(async (req) => {
         unit_price: monto,
         currency_id: "ARS",
       }],
-      payer: { email: userEmail || undefined },
       external_reference: pago.id,
       back_urls: {
         success: `${appBaseUrl}?mp=success&pago=${pago.id}`,
