@@ -11,6 +11,12 @@ import { Home, PerfilPlaceholder } from '@/routes/Home';
 import { Grupos } from '@/routes/Grupos';
 import { GrupoDetail } from '@/routes/GrupoDetail';
 import { NecesidadDetail } from '@/routes/NecesidadDetail';
+import { Feed } from '@/routes/Feed';
+import { Publicar } from '@/routes/Publicar';
+import { MisOfertas } from '@/routes/MisOfertas';
+import { GrupoMiembros } from '@/routes/GrupoMiembros';
+import { GrupoAlumnos } from '@/routes/GrupoAlumnos';
+import { PymeOnboarding } from '@/routes/PymeOnboarding';
 import { AuthGuard } from '@/components/AuthGuard';
 import { RequireProfile } from '@/components/RequireProfile';
 import { env } from '@/lib/env';
@@ -93,6 +99,64 @@ export function App() {
                   <RequireProfile>
                     <NecesidadDetail />
                   </RequireProfile>
+                </AuthGuard>
+              }
+            />
+            <Route
+              path="/feed"
+              element={
+                <AuthGuard>
+                  <RequireProfile>
+                    <Feed />
+                  </RequireProfile>
+                </AuthGuard>
+              }
+            />
+            <Route
+              path="/publicar"
+              element={
+                <AuthGuard>
+                  <RequireProfile>
+                    <Publicar />
+                  </RequireProfile>
+                </AuthGuard>
+              }
+            />
+            <Route
+              path="/mis-ofertas"
+              element={
+                <AuthGuard>
+                  <RequireProfile>
+                    <MisOfertas />
+                  </RequireProfile>
+                </AuthGuard>
+              }
+            />
+            <Route
+              path="/grupos/:id/miembros"
+              element={
+                <AuthGuard>
+                  <RequireProfile>
+                    <GrupoMiembros />
+                  </RequireProfile>
+                </AuthGuard>
+              }
+            />
+            <Route
+              path="/grupos/:id/alumnos"
+              element={
+                <AuthGuard>
+                  <RequireProfile>
+                    <GrupoAlumnos />
+                  </RequireProfile>
+                </AuthGuard>
+              }
+            />
+            <Route
+              path="/pyme/onboarding"
+              element={
+                <AuthGuard>
+                  <PymeOnboarding />
                 </AuthGuard>
               }
             />
