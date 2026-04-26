@@ -7,7 +7,8 @@ import { useSessionStore } from '@/stores/session';
 import { Landing } from '@/routes/Landing';
 import { Login } from '@/routes/Login';
 import { Onboarding } from '@/routes/Onboarding';
-import { Home, PerfilPlaceholder } from '@/routes/Home';
+import { Home } from '@/routes/Home';
+import { Perfil } from '@/routes/Perfil';
 import { Grupos } from '@/routes/Grupos';
 import { GrupoDetail } from '@/routes/GrupoDetail';
 import { NecesidadDetail } from '@/routes/NecesidadDetail';
@@ -165,7 +166,7 @@ export function App() {
               element={
                 <AuthGuard>
                   <RequireProfile>
-                    <PerfilPlaceholder />
+                    <Perfil />
                   </RequireProfile>
                 </AuthGuard>
               }
