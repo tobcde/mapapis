@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Shell } from '@/components/Shell';
-import { Button } from '@/components/ui';
-import { useDialog } from '@/components/ui';
+import { Button, useDialog } from '@/components/ui';
 import { useProfile } from '@/lib/queries/useProfile';
 import { useMisGrupos } from '@/lib/queries/useMisGrupos';
 import { useAlumnosByGrupo } from '@/lib/queries/useAlumnosByGrupo';
@@ -36,8 +35,9 @@ function AgregarAlumnoForm({
       await crear.mutateAsync({ grupoId, nombre: nombreTrim, dni: dni.trim() || null });
       onDone();
     } catch (error) {
-      setErr(error instanceof Error ? error.message : 'Error al crear alumno');
-      await showAlert(err ?? 'Error');
+      const msg = error instanceof Error ? error.message : 'Error al crear alumno';
+      setErr(msg);
+      await showAlert(msg);
     }
   };
 
