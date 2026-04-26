@@ -1,0 +1,26 @@
+/*
+ * Design tokens — fuente única de verdad para colores, tipografías y radios.
+ * Tailwind expone estas mismas vars como `text-ink`, `bg-coral`, etc.
+ * (ver tailwind.config.js).
+ */
+:root {
+  --ink: #0e1525;
+  --cream: #fff7ee;
+  --coral: #ff5a4e;
+  --sun: #ffc83d;
+  --sage: #2bc48a;
+  --mist: #efe7da;
+  --violet: #6e5bff;
+
+  --bg-page: #fbf6ee;
+
+  --font-display: 'Geist', 'Inter', -apple-system, system-ui, sans-serif;
+  --font-ui: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+
+  --radius-sm: 0.5rem;
+  --radius-md: 1rem;
+  --radius-lg: 1.5rem;
+
+  --shadow-pop: 3px 3px 0 var(--ink);
+  --shadow-pop-sm: 2px 2px 0 var(--ink);
+}

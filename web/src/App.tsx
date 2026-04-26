@@ -1,0 +1,105 @@
+import { Suspense, useEffect } from 'react';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
+import { queryClient } from '@/lib/queryClient';
+import { useSessionStore } from '@/stores/session';
+import { Landing } from '@/routes/Landing';
+import { Login } from '@/routes/Login';
+import { Onboarding } from '@/routes/Onboarding';
+import { Home, PerfilPlaceholder } from '@/routes/Home';
+import { Grupos } from '@/routes/Grupos';
+import { GrupoDetail } from '@/routes/GrupoDetail';
+import { AuthGuard } from '@/components/AuthGuard';
+import { RequireProfile } from '@/components/RequireProfile';
+import { env } from '@/lib/env';
+
+function NotFound() {
+  return (
+    <main className="min-h-screen flex items-center justify-center px-6">
+      <div className="text-center">
+        <h1 className="font-display text-3xl font-extrabold">404</h1>
+        <p className="text-sm text-ink/60 mt-2">Esta ruta no existe.</p>
+      </div>
+    </main>
+  );
+}
+
+function Loading() {
+  return (
+    <div className="min-h-screen flex items-center justify-center text-sm text-ink/60">
+      Cargando...
+    </div>
+  );
+}
+
+export function App() {
+  const init = useSessionStore((s) => s.init);
+
+  useEffect(() => {
+    void init();
+  }, [init]);
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter basename={import.meta.env.BASE_URL}>
+        <Suspense fallback={<Loading />}>
+          <Routes>
+            <Route path="/" element={<Landing />} />
+            <Route path="/login" element={<Login />} />
+            <Route
+              path="/onboarding"
+              element={
+                <AuthGuard>
+                  <Onboarding />
+                </AuthGuard>
+              }
+            />
+            <Route
+              path="/home"
+              element={
+                <AuthGuard>
+                  <RequireProfile>
+                    <Home />
+                  </RequireProfile>
+                </AuthGuard>
+              }
+            />
+            <Route
+              path="/grupos"
+              element={
+                <AuthGuard>
+                  <RequireProfile>
+                    <Grupos />
+                  </RequireProfile>
+                </AuthGuard>
+              }
+            />
+            <Route
+              path="/grupos/:id"
+              element={
+                <AuthGuard>
+                  <RequireProfile>
+                    <GrupoDetail />
+                  </RequireProfile>
+                </AuthGuard>
+              }
+            />
+            <Route
+              path="/perfil"
+              element={
+                <AuthGuard>
+                  <RequireProfile>
+                    <PerfilPlaceholder />
+                  </RequireProfile>
+                </AuthGuard>
+              }
+            />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
+      </BrowserRouter>
+      {!env.IS_PROD && <ReactQueryDevtools initialIsOpen={false} />}
+    </QueryClientProvider>
+  );
+}

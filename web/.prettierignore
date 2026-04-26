@@ -1,0 +1,6 @@
+dist
+dev-dist
+node_modules
+coverage
+public
+src/lib/database.types.ts
