@@ -97,12 +97,10 @@ function AlumnoItem({
   alumno,
   grupoId,
   userId,
-  soyAdmin,
 }: {
   alumno: AlumnoConTutores;
   grupoId: string;
   userId: string;
-  soyAdmin: boolean;
 }) {
   const { joinAsTutor, leaveAsTutor } = useAlumnoActions();
   const { showConfirm, showAlert } = useDialog();
@@ -297,10 +295,14 @@ export function GrupoAlumnos() {
             <div className="text-[10px] font-bold uppercase tracking-wider text-ink flex items-center gap-1.5">
               ✦ Posibles duplicados
             </div>
-            {dupGroups.map((grp) => (
-              <div key={grp[0].id} className="text-sm space-y-1">
+            {dupGroups.map((grp) => {
+              const primero = grp[0];
+              const segundo = grp[1];
+              if (!primero || !segundo) return null;
+              return (
+              <div key={primero.id} className="text-sm space-y-1">
                 <div className="font-bold">
-                  {grp.length} alumnos llamados &ldquo;{grp[0].nombre}&rdquo;
+                  {grp.length} alumnos llamados &ldquo;{primero.nombre}&rdquo;
                 </div>
                 <div className="text-[11px] text-ink/70">
                   Si son la misma persona (típico: padres separados), fusionalos.
@@ -308,7 +310,7 @@ export function GrupoAlumnos() {
                 <button
                   type="button"
                   onClick={() => {
-                    void handleMerge(grp[0].id, grp[1].id, grp[0].nombre);
+                    void handleMerge(primero.id, segundo.id, primero.nombre);
                   }}
                   disabled={merge.isPending}
                   className="text-[11px] font-bold uppercase tracking-wider bg-ink text-white px-3 py-1.5 rounded-lg disabled:opacity-50"
@@ -316,7 +318,8 @@ export function GrupoAlumnos() {
                   Fusionar → 1 solo
                 </button>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -344,7 +347,6 @@ export function GrupoAlumnos() {
                 alumno={a}
                 grupoId={id ?? ''}
                 userId={userId}
-                soyAdmin={soyAdmin}
               />
             ))}
           </div>

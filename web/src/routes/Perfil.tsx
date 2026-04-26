@@ -96,7 +96,7 @@ export function Perfil() {
   }
 
   const rolInfo = profile.role ? ROL_INFO[profile.role] : null;
-  const displayNombre = profile.nombre ?? profile.email.split('@')[0];
+  const displayNombre = profile.nombre ?? profile.email.split('@')[0] ?? profile.email;
   const inicial = displayNombre[0]?.toUpperCase() ?? '?';
 
   return (
