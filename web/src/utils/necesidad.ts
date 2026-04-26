@@ -1,4 +1,4 @@
-import type { NecesidadEstado } from '@/lib/database.types';
+import type { ModoEntrega, NecesidadEstado } from '@/lib/database.types';
 
 const labels: Record<NecesidadEstado, string> = {
   recibiendo_ofertas: 'Recibiendo ofertas',
@@ -30,4 +30,18 @@ export function estadoLabel(e: NecesidadEstado): string {
 
 export function estadoBadgeClass(e: NecesidadEstado): string {
   return palette[e];
+}
+
+const modoEntregaLabels: Record<ModoEntrega, string> = {
+  retiro: 'Solo retiro',
+  envio: 'Solo envío',
+  ambos: 'Retiro o envío',
+};
+
+export function modoEntregaLabel(m: ModoEntrega | null): string {
+  return m ? modoEntregaLabels[m] : 'Entrega no especificada';
+}
+
+export function pymeAlias(index: number): string {
+  return `Pyme ${String.fromCharCode(65 + (index % 26))}`;
 }

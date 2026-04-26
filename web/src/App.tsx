@@ -10,6 +10,7 @@ import { Onboarding } from '@/routes/Onboarding';
 import { Home, PerfilPlaceholder } from '@/routes/Home';
 import { Grupos } from '@/routes/Grupos';
 import { GrupoDetail } from '@/routes/GrupoDetail';
+import { NecesidadDetail } from '@/routes/NecesidadDetail';
 import { AuthGuard } from '@/components/AuthGuard';
 import { RequireProfile } from '@/components/RequireProfile';
 import { env } from '@/lib/env';
@@ -81,6 +82,16 @@ export function App() {
                 <AuthGuard>
                   <RequireProfile>
                     <GrupoDetail />
+                  </RequireProfile>
+                </AuthGuard>
+              }
+            />
+            <Route
+              path="/grupos/:id/necesidades/:necesidadId"
+              element={
+                <AuthGuard>
+                  <RequireProfile>
+                    <NecesidadDetail />
                   </RequireProfile>
                 </AuthGuard>
               }

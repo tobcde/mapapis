@@ -168,6 +168,34 @@ export type NecesidadInsert = {
 
 export type NecesidadUpdate = Partial<NecesidadRow>;
 
+export type OfertaEstado = 'presentada' | 'ganadora' | 'descartada' | 'retirada';
+export type ModoEntrega = 'retiro' | 'envio' | 'ambos';
+
+export type OfertaRow = {
+  id: string;
+  necesidad_id: string;
+  pyme_id: string;
+  precio_total_centavos: number;
+  descripcion: string;
+  tiempo_entrega_dias: number | null;
+  estado: OfertaEstado;
+  modo_entrega: ModoEntrega | null;
+  created_at: string | null;
+};
+
+export type OfertaInsert = {
+  id?: string;
+  necesidad_id: string;
+  pyme_id: string;
+  precio_total_centavos: number;
+  descripcion: string;
+  tiempo_entrega_dias?: number | null;
+  estado?: OfertaEstado;
+  modo_entrega?: ModoEntrega | null;
+};
+
+export type OfertaUpdate = Partial<OfertaRow>;
+
 export type Database = {
   public: {
     Tables: {
@@ -199,6 +227,12 @@ export type Database = {
         Row: NecesidadRow;
         Insert: NecesidadInsert;
         Update: NecesidadUpdate;
+        Relationships: [];
+      };
+      ofertas: {
+        Row: OfertaRow;
+        Insert: OfertaInsert;
+        Update: OfertaUpdate;
         Relationships: [];
       };
     };

@@ -91,7 +91,7 @@ export function GrupoDetail() {
             <ul className="grid gap-2">
               {necesidadesQ.data.map((n) => (
                 <li key={n.id}>
-                  <NecesidadCard n={n} />
+                  <NecesidadCard n={n} grupoId={grupo.id} />
                 </li>
               ))}
             </ul>
@@ -102,15 +102,16 @@ export function GrupoDetail() {
   );
 }
 
-function NecesidadCard({ n }: { n: NecesidadRow }) {
+function NecesidadCard({ n, grupoId }: { n: NecesidadRow; grupoId: string }) {
   const presu =
     n.presupuesto_min_centavos != null && n.presupuesto_max_centavos != null
       ? `${fmtMoney(n.presupuesto_min_centavos / 100)} – ${fmtMoney(n.presupuesto_max_centavos / 100)}`
       : null;
 
   return (
-    <div
-      className="bg-white rounded-2xl border-[1.5px] border-ink px-4 py-3"
+    <Link
+      to={`/grupos/${grupoId}/necesidades/${n.id}`}
+      className="block bg-white rounded-2xl border-[1.5px] border-ink px-4 py-3 hover:bg-cream transition"
       style={{ boxShadow: 'var(--shadow-pop)' }}
     >
       <div className="flex items-start justify-between gap-2">
@@ -127,6 +128,6 @@ function NecesidadCard({ n }: { n: NecesidadRow }) {
           {estadoLabel(n.estado)}
         </span>
       </div>
-    </div>
+    </Link>
   );
 }
