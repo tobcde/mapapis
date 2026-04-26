@@ -1,0 +1,7 @@
+project_id = "adpbjslkswtnqklzejuy"
+
+[functions.mp_webhook]
+verify_jwt = false
+
+[functions.mp_create_preference]
+verify_jwt = true
