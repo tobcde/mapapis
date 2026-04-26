@@ -1,20 +1,730 @@
-import { Link, useParams } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { Shell } from '@/components/Shell';
+import { Button } from '@/components/ui';
+import { useDialog } from '@/components/ui';
+import { useProfile } from '@/lib/queries/useProfile';
+import { useMisGrupos } from '@/lib/queries/useMisGrupos';
 import { useNecesidad } from '@/lib/queries/useNecesidad';
 import { useOfertasByNecesidad } from '@/lib/queries/useOfertasByNecesidad';
+import { useInscripciones } from '@/lib/queries/useInscripciones';
+import { useNecesidadProgreso } from '@/lib/queries/useNecesidadProgreso';
+import { useAlumnosByGrupo } from '@/lib/queries/useAlumnosByGrupo';
+import { useMisVotos } from '@/lib/queries/useMisVotos';
+import { useVoteOferta } from '@/lib/mutations/useVoteOferta';
+import { useAdjudicarOferta } from '@/lib/mutations/useAdjudicarOferta';
+import { useCerrarInscripcion } from '@/lib/mutations/useCerrarInscripcion';
+import { useInscribirAlumno } from '@/lib/mutations/useInscribirAlumno';
+import { useCrearOferta } from '@/lib/mutations/useCrearOferta';
 import { fmtMoney } from '@/utils/fmt';
 import { estadoBadgeClass, estadoLabel, modoEntregaLabel, pymeAlias } from '@/utils/necesidad';
-import type { OfertaRow } from '@/lib/database.types';
+import type { NecesidadRow, OfertaRow, ModoEntrega } from '@/lib/database.types';
+import type { AlumnoConTutores } from '@/lib/queries/useAlumnosByGrupo';
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function fmtFecha(iso: string | null): string {
+  if (!iso) return '';
+  try {
+    return new Date(iso).toLocaleString('es-AR', {
+      day: '2-digit', month: '2-digit', year: '2-digit',
+      hour: '2-digit', minute: '2-digit',
+    });
+  } catch { return iso; }
+}
+
+function fmtPresupuesto(min: number | null, max: number | null): string {
+  if (!min && !max) return '—';
+  if (min && max) return `${fmtMoney(min)} – ${fmtMoney(max)}`;
+  if (min) return `Desde ${fmtMoney(min)}`;
+  return `Hasta ${fmtMoney(max!)}`;
+}
+
+const INPUT_CLS =
+  'w-full px-4 py-3 rounded-xl border-[1.5px] border-ink bg-white text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-coral/30';
+
+// ─── Sección info de la necesidad ─────────────────────────────────────────────
+
+function InfoCard({ n }: { n: NecesidadRow }) {
+  const campos = n.campos as Record<string, unknown> | null;
+
+  return (
+    <div className="bg-white rounded-3xl border-[1.5px] border-ink overflow-hidden shadow-pop">
+      {n.foto_url && (
+        <img
+          src={n.foto_url}
+          alt=""
+          className="w-full max-h-72 object-cover border-b-[1.5px] border-ink"
+        />
+      )}
+      <div className="p-5 space-y-4">
+        {/* Descripción */}
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-ink/60">Descripción</p>
+          <p className="mt-1.5 text-sm text-ink/85 whitespace-pre-wrap leading-relaxed">
+            {n.descripcion}
+          </p>
+        </div>
+
+        {/* Campos dinámicos */}
+        {campos && Object.keys(campos).length > 0 && (
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-2">
+              Detalle del pedido
+            </p>
+            <div className="space-y-1 text-sm">
+              {Object.entries(campos).map(([k, v]) => (
+                <div key={k} className="flex items-baseline gap-2">
+                  <span className="text-ink/55 capitalize">{k.replace(/_/g, ' ')}:</span>
+                  <span className="font-semibold">{String(v)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Link de referencia */}
+        {n.link_referencia && (
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-1.5">
+              Referencia
+            </p>
+            <a
+              href={n.link_referencia}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-mist border-[1.5px] border-ink/20 text-xs font-semibold text-ink hover:bg-sun/30 transition-colors break-all"
+            >
+              Ver ejemplo / link →
+            </a>
+          </div>
+        )}
+
+        {/* Presupuesto + Modalidad */}
+        <div className="grid grid-cols-2 gap-3 pt-1">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-ink/60">Presupuesto</p>
+            <p className="font-mono text-sm font-bold mt-1">
+              {fmtPresupuesto(n.presupuesto_min_centavos, n.presupuesto_max_centavos)}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-ink/60">Modalidad</p>
+            <p className="text-sm font-semibold mt-1 capitalize">
+              {n.modalidad === 'individual'
+                ? `Individual · ${n.cantidad_por_alumno ?? 1}/alumno`
+                : 'Grupal'}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Chip de progreso (inscripción) ───────────────────────────────────────────
+
+function ProgresoChip({
+  n,
+  esAdmin,
+}: {
+  n: NecesidadRow;
+  esAdmin: boolean;
+}) {
+  const progreso = useNecesidadProgreso(n.id);
+  const { cerrar, reabrir } = useCerrarInscripcion();
+  const { showConfirm, showAlert } = useDialog();
+
+  const inscriptosCount = progreso.data?.inscriptos ?? 0;
+  const totalAlumnos = progreso.data?.total_alumnos ?? null;
+  const cerradaAt = progreso.data?.inscripcion_cerrada_at ?? null;
+  const isCerrada = Boolean(cerradaAt);
+
+  const handleCerrar = async () => {
+    const ok = await showConfirm(
+      '¿Cerrar inscripciones? Las pymes ofertarán con la cantidad final firme. Las familias ya no podrán sumarse.',
+    );
+    if (!ok) return;
+    try {
+      await cerrar.mutateAsync({ necesidadId: n.id });
+    } catch (err) {
+      await showAlert(err instanceof Error ? err.message : 'Error al cerrar');
+    }
+  };
+
+  const handleReabrir = async () => {
+    const ok = await showConfirm('¿Reabrir inscripciones?');
+    if (!ok) return;
+    try {
+      await reabrir.mutateAsync({ necesidadId: n.id });
+    } catch (err) {
+      await showAlert(err instanceof Error ? err.message : 'Error al reabrir');
+    }
+  };
+
+  return (
+    <div
+      className={`p-4 rounded-2xl border-[1.5px] ${
+        isCerrada ? 'bg-sage/15 border-sage' : 'bg-violet/10 border-violet/30'
+      }`}
+    >
+      <div
+        className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${
+          isCerrada ? 'text-sage' : 'text-violet'
+        }`}
+      >
+        {isCerrada ? 'Inscripciones cerradas' : 'Inscripción abierta'}
+      </div>
+      <div className="text-sm font-bold">
+        {inscriptosCount}
+        {totalAlumnos != null ? `/${totalAlumnos}` : ''} alumno
+        {inscriptosCount !== 1 ? 's' : ''} anotado
+        {inscriptosCount !== 1 ? 's' : ''}
+        {' · '}
+        <span className="font-mono">
+          {inscriptosCount * Number(n.cantidad_por_alumno ?? 1)}
+        </span>{' '}
+        {isCerrada ? '(cantidad final)' : '(total actual)'}
+      </div>
+
+      {esAdmin && (
+        <div className="mt-3 flex gap-2">
+          {!isCerrada ? (
+            <button
+              type="button"
+              onClick={() => { void handleCerrar(); }}
+              disabled={cerrar.isPending}
+              className="px-3 py-1.5 rounded-lg bg-ink text-white text-[11px] font-bold uppercase tracking-wider disabled:opacity-50"
+            >
+              {cerrar.isPending ? 'Cerrando…' : 'Cerrar inscripciones'}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => { void handleReabrir(); }}
+              disabled={reabrir.isPending}
+              className="px-3 py-1.5 rounded-lg bg-white border-[1.5px] border-ink/40 text-[11px] font-bold uppercase tracking-wider text-ink/80 disabled:opacity-50"
+            >
+              {reabrir.isPending ? '…' : 'Reabrir'}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Panel inscripción (anotar hijos) ─────────────────────────────────────────
+
+function InscripcionPanel({
+  necesidad,
+  misAlumnos,
+  inscripciones,
+  isCerrada,
+}: {
+  necesidad: NecesidadRow;
+  misAlumnos: AlumnoConTutores[];
+  inscripciones: { alumno_id: string }[];
+  isCerrada: boolean;
+}) {
+  const { inscribir, desinscribir } = useInscribirAlumno();
+  const { showAlert } = useDialog();
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const inscriptosSet = new Set(inscripciones.map((i) => i.alumno_id));
+
+  const toggle = async (alumnoId: string, yaInscripto: boolean) => {
+    if (isCerrada) return;
+    setBusyId(alumnoId);
+    try {
+      if (yaInscripto) {
+        await desinscribir.mutateAsync({ necesidadId: necesidad.id, alumnoId });
+      } else {
+        await inscribir.mutateAsync({ necesidadId: necesidad.id, alumnoId });
+      }
+    } catch (err) {
+      await showAlert(err instanceof Error ? err.message : 'Error al actualizar inscripción');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <section className="space-y-3">
+      <div>
+        <h2 className="font-display font-bold text-xl">Anotar a tus hijos/as</h2>
+        <p className="text-xs text-ink/65 mt-1">
+          {isCerrada
+            ? 'Las inscripciones están cerradas. La cantidad final quedó firme.'
+            : `Cada alumno anotado suma ${necesidad.cantidad_por_alumno ?? 1} unidad${
+                Number(necesidad.cantidad_por_alumno) === 1 ? '' : 'es'
+              } al total del pedido.`}
+        </p>
+      </div>
+      <div className="space-y-2">
+        {misAlumnos.map((a) => {
+          const yaInscripto = inscriptosSet.has(a.id);
+          const isBusy = busyId === a.id;
+          const disabled = isBusy || isCerrada;
+          return (
+            <button
+              key={a.id}
+              type="button"
+              onClick={() => { void toggle(a.id, yaInscripto); }}
+              disabled={disabled}
+              className={`w-full flex items-center justify-between p-3 rounded-xl border-[1.5px] transition-colors ${
+                yaInscripto ? 'bg-sage/15 border-sage' : 'bg-white border-ink/30'
+              } ${disabled ? 'opacity-60 cursor-not-allowed' : 'hover:border-ink/60'}`}
+            >
+              <div className="flex items-center gap-2">
+                <span
+                  className={`w-5 h-5 rounded-md border-[1.5px] flex items-center justify-center text-xs font-bold ${
+                    yaInscripto
+                      ? 'bg-sage border-sage text-white'
+                      : 'border-ink/40 bg-white'
+                  }`}
+                >
+                  {yaInscripto ? '✓' : ''}
+                </span>
+                <span className="font-semibold text-sm">{a.nombre}</span>
+              </div>
+              <span className="text-[10px] uppercase tracking-wider font-bold text-ink/60">
+                {isBusy ? '…' : isCerrada ? (yaInscripto ? 'Anotado' : '—') : yaInscripto ? 'Anotado' : 'Anotar'}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+// ─── OfertaCard familia ───────────────────────────────────────────────────────
+
+function OfertaCardFamilia({
+  oferta,
+  index,
+  necesidad,
+  misAlumnos,
+  misVotos,
+  esAdmin,
+  adjudicada,
+}: {
+  oferta: OfertaRow;
+  index: number;
+  necesidad: NecesidadRow;
+  misAlumnos: AlumnoConTutores[];
+  misVotos: Record<string, string>;
+  esAdmin: boolean;
+  adjudicada: boolean;
+}) {
+  const { vote, unvote } = useVoteOferta();
+  const adjudicar = useAdjudicarOferta();
+  const { showConfirm, showAlert } = useDialog();
+  const alias = pymeAlias(index);
+  const esGanadora = oferta.estado === 'ganadora';
+  const esDescartada = oferta.estado === 'descartada';
+
+  const handleVote = async (alumnoId: string, yaVoto: boolean) => {
+    try {
+      if (yaVoto) {
+        await unvote.mutateAsync({ alumnoId, ofertaId: oferta.id, necesidadId: necesidad.id });
+      } else {
+        await vote.mutateAsync({ alumnoId, ofertaId: oferta.id, necesidadId: necesidad.id });
+      }
+    } catch (err) {
+      await showAlert(err instanceof Error ? err.message : 'Error al votar');
+    }
+  };
+
+  const handleAdjudicar = async () => {
+    const monto = fmtMoney(oferta.precio_total_centavos);
+    const ok = await showConfirm(
+      `¿Adjudicar la oferta de ${alias} por ${monto}? Las demás quedan descartadas.`,
+    );
+    if (!ok) return;
+    try {
+      await adjudicar.mutateAsync({
+        ofertaId: oferta.id,
+        necesidadId: necesidad.id,
+        grupoId: necesidad.grupo_id,
+      });
+    } catch (err) {
+      await showAlert(err instanceof Error ? err.message : 'Error al adjudicar');
+    }
+  };
+
+  return (
+    <div
+      className={`rounded-3xl border-[1.5px] p-4 transition ${
+        esGanadora
+          ? 'bg-sage/15 border-sage'
+          : esDescartada
+            ? 'bg-white border-ink/15 opacity-60'
+            : 'bg-white border-ink shadow-pop'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="font-display font-bold text-lg">{alias}</h3>
+            {esGanadora && (
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-sage text-white">
+                Ganadora
+              </span>
+            )}
+            {esDescartada && (
+              <span className="text-[10px] font-bold uppercase tracking-wider text-ink/55">
+                Descartada
+              </span>
+            )}
+          </div>
+          <div className="text-[11px] text-ink/60 mt-0.5">
+            {modoEntregaLabel(oferta.modo_entrega)}
+            {oferta.tiempo_entrega_dias != null ? ` · ${oferta.tiempo_entrega_dias} días` : ''}
+          </div>
+        </div>
+        <div className="text-right shrink-0">
+          <div className="font-mono font-extrabold text-xl">
+            {fmtMoney(oferta.precio_total_centavos)}
+          </div>
+        </div>
+      </div>
+
+      <p className="text-sm text-ink/80 mt-3 whitespace-pre-wrap leading-relaxed">
+        {oferta.descripcion}
+      </p>
+
+      {/* Votos de alumnos */}
+      {!adjudicada && misAlumnos.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-ink/10">
+          <div className="text-[10px] uppercase tracking-wider font-bold text-ink/55 mb-2">
+            Tu voto
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {misAlumnos.map((a) => {
+              const yaVoto = misVotos[a.id] === oferta.id;
+              return (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => { void handleVote(a.id, yaVoto); }}
+                  disabled={vote.isPending || unvote.isPending}
+                  className={`px-3 py-1.5 rounded-full border-[1.5px] text-xs font-bold transition-colors disabled:opacity-60 ${
+                    yaVoto
+                      ? 'bg-coral text-white border-ink'
+                      : 'bg-white text-ink border-ink/30 hover:border-ink/60'
+                  }`}
+                >
+                  {yaVoto ? '✓ ' : ''}{a.nombre}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Adjudicar (solo admin, no adjudicada aún) */}
+      {!adjudicada && esAdmin && (
+        <div className="mt-3 pt-3 border-t border-ink/10">
+          <button
+            type="button"
+            onClick={() => { void handleAdjudicar(); }}
+            disabled={adjudicar.isPending}
+            className="w-full py-2.5 rounded-xl bg-ink text-sun text-xs font-bold uppercase tracking-wider disabled:opacity-50"
+          >
+            {adjudicar.isPending ? 'Adjudicando…' : 'Adjudicar a esta pyme'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Panel de ofertas (familia) ───────────────────────────────────────────────
+
+function PanelOfertasFamilia({
+  necesidad,
+  ofertas,
+  misAlumnos,
+  misVotos,
+  esAdmin,
+}: {
+  necesidad: NecesidadRow;
+  ofertas: OfertaRow[];
+  misAlumnos: AlumnoConTutores[];
+  misVotos: Record<string, string>;
+  esAdmin: boolean;
+}) {
+  const adjudicada = necesidad.estado === 'adjudicada' || ofertas.some((o) => o.estado === 'ganadora');
+
+  return (
+    <section className="space-y-3">
+      <h2 className="font-display font-bold text-xl">
+        Ofertas recibidas{' '}
+        <span className="text-ink/40">({ofertas.length}/{necesidad.cap_ofertas})</span>
+      </h2>
+      {ofertas.length === 0 ? (
+        <div className="bg-mist/50 rounded-3xl p-5 text-center text-sm text-ink/70">
+          Esperando ofertas. Las pymes de la zona verán el pedido.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {ofertas.map((o, idx) => (
+            <OfertaCardFamilia
+              key={o.id}
+              oferta={o}
+              index={idx}
+              necesidad={necesidad}
+              misAlumnos={misAlumnos}
+              misVotos={misVotos}
+              esAdmin={esAdmin}
+              adjudicada={adjudicada}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ─── Panel oferta (pyme) ──────────────────────────────────────────────────────
+
+function PanelOfertaPyme({
+  necesidad,
+  ofertas,
+  pymeId,
+}: {
+  necesidad: NecesidadRow;
+  ofertas: OfertaRow[];
+  pymeId: string;
+}) {
+  const crearOferta = useCrearOferta();
+  const { showAlert } = useDialog();
+  const miOferta = ofertas.find((o) => o.pyme_id === pymeId);
+  const [showForm, setShowForm] = useState(!miOferta);
+  const [precio, setPrecio] = useState('');
+  const [dias, setDias] = useState('');
+  const [descripcion, setDescripcion] = useState('');
+  const [modoEntrega, setModoEntrega] = useState<ModoEntrega>('retiro');
+  const [err, setErr] = useState<string | null>(null);
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErr(null);
+    if (descripcion.trim().length < 10) {
+      setErr('La descripción debe tener al menos 10 caracteres.');
+      return;
+    }
+    try {
+      await crearOferta.mutateAsync({
+        necesidadId: necesidad.id,
+        precioCentavos: Math.round(Number(precio) * 100),
+        tiempoDias: dias ? Number(dias) : null,
+        descripcion: descripcion.trim(),
+        modoEntrega,
+      });
+      setShowForm(false);
+    } catch (error) {
+      setErr(error instanceof Error ? error.message : 'Error al enviar la oferta');
+      await showAlert(err ?? 'Error');
+    }
+  };
+
+  if (miOferta) {
+    return (
+      <section className="space-y-3">
+        <h2 className="font-display font-bold text-xl">Tu oferta</h2>
+        <div className="bg-sage/10 rounded-3xl border-[1.5px] border-sage p-4 space-y-2">
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="font-mono font-extrabold text-2xl">
+              {fmtMoney(miOferta.precio_total_centavos)}
+            </span>
+            {miOferta.tiempo_entrega_dias != null && (
+              <span className="text-[10px] uppercase tracking-wider font-bold text-ink/60">
+                {miOferta.tiempo_entrega_dias} días
+              </span>
+            )}
+          </div>
+          <p className="text-[11px] text-ink/70">
+            {modoEntregaLabel(miOferta.modo_entrega)}
+          </p>
+          <p className="text-sm text-ink/85 whitespace-pre-wrap leading-relaxed">
+            {miOferta.descripcion}
+          </p>
+          <p className="text-[10px] uppercase tracking-wider font-bold text-sage mt-2">
+            ✓ Presentada
+          </p>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="space-y-3">
+      <h2 className="font-display font-bold text-xl">¿Cubrís este pedido?</h2>
+      <div className="bg-sun rounded-3xl border-[1.5px] border-ink p-5 shadow-pop">
+        <p className="text-sm font-semibold">Las ofertas son selladas — el grupo elige al cierre.</p>
+
+        {!showForm ? (
+          <Button
+            variant="primary"
+            size="lg"
+            fullWidth
+            className="mt-4"
+            onClick={() => { setShowForm(true); }}
+          >
+            Presentar oferta →
+          </Button>
+        ) : (
+          <form onSubmit={(e) => { void onSubmit(e); }} className="mt-4 space-y-3">
+            {err && (
+              <div className="p-2 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700">
+                {err}
+              </div>
+            )}
+
+            <label className="block">
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-1.5">
+                Precio total ($) *
+              </span>
+              <input
+                type="number"
+                min={1}
+                required
+                value={precio}
+                onChange={(e) => { setPrecio(e.target.value); }}
+                placeholder="45000"
+                className={INPUT_CLS + ' font-mono'}
+              />
+            </label>
+
+            <label className="block">
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-1.5">
+                Tiempo de entrega (días)
+              </span>
+              <input
+                type="number"
+                min={1}
+                value={dias}
+                onChange={(e) => { setDias(e.target.value); }}
+                placeholder="7"
+                className={INPUT_CLS + ' font-mono'}
+              />
+            </label>
+
+            <div>
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-2">
+                ¿Cómo entregás?
+              </span>
+              <div className="grid grid-cols-3 gap-2">
+                {(
+                  [
+                    { v: 'retiro' as ModoEntrega, label: 'Solo retiro' },
+                    { v: 'envio' as ModoEntrega, label: 'Solo envío' },
+                    { v: 'ambos' as ModoEntrega, label: 'Ambos' },
+                  ] as const
+                ).map((opt) => (
+                  <button
+                    key={opt.v}
+                    type="button"
+                    onClick={() => { setModoEntrega(opt.v); }}
+                    className={`py-2.5 rounded-xl border-[1.5px] text-[11px] font-bold uppercase tracking-wider transition-colors ${
+                      modoEntrega === opt.v
+                        ? 'bg-ink text-sun border-ink'
+                        : 'bg-white border-ink/30 text-ink/70 hover:border-ink/60'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <label className="block">
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-1.5">
+                Detalle de la oferta *
+              </span>
+              <textarea
+                required
+                minLength={10}
+                maxLength={1000}
+                rows={3}
+                value={descripcion}
+                onChange={(e) => { setDescripcion(e.target.value); }}
+                placeholder="Material, calidad, condiciones. Sin teléfono: el contacto se intercambia al adjudicar."
+                className={INPUT_CLS + ' resize-none'}
+              />
+            </label>
+
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                fullWidth
+                onClick={() => { setShowForm(false); }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                fullWidth
+                loading={crearOferta.isPending}
+              >
+                Enviar
+              </Button>
+            </div>
+          </form>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// ─── NecesidadDetail ──────────────────────────────────────────────────────────
 
 export function NecesidadDetail() {
   const { id: grupoId, necesidadId } = useParams<{ id: string; necesidadId: string }>();
+  const navigate = useNavigate();
+  const { data: profile } = useProfile();
+  const { data: misGrupos = [] } = useMisGrupos();
+
   const necesidadQ = useNecesidad(necesidadId);
   const ofertasQ = useOfertasByNecesidad(necesidadId);
+  const inscripcionesQ = useInscripciones(necesidadId);
+  const alumnosQ = useAlumnosByGrupo(grupoId);
+  const progreso = useNecesidadProgreso(necesidadId);
+
+  const isPyme = profile?.role === 'pyme';
+  const userId = profile?.id ?? '';
+
+  // Alumnos del usuario (filtrando por tutor)
+  const misAlumnos = (alumnosQ.data ?? []).filter((a) =>
+    a.alumno_tutores.some((t) => t.profile_id === userId),
+  );
+
+  const ofertaIds = (ofertasQ.data ?? []).map((o) => o.id);
+  const alumnoIds = misAlumnos.map((a) => a.id);
+
+  const misVotosQ = useMisVotos(necesidadId, alumnoIds, ofertaIds);
+
+  // Mi rol en el grupo
+  const miGrupo = misGrupos.find((g) => g.id === grupoId);
+  const esAdmin =
+    miGrupo?.rol_en_grupo === 'admin' || miGrupo?.rol_en_grupo === 'creador';
+
+  const isCerrada = Boolean(progreso.data?.inscripcion_cerrada_at);
+
+  // ── Loading / error ──────────────────────────────────────────────────────
 
   if (necesidadQ.isLoading) {
     return (
       <Shell>
-        <div className="text-sm text-ink/60">Cargando necesidad...</div>
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-20 bg-white/60 rounded-2xl border-[1.5px] border-ink/10 animate-pulse" />
+          ))}
+        </div>
       </Shell>
     );
   }
@@ -22,160 +732,96 @@ export function NecesidadDetail() {
   if (necesidadQ.error || !necesidadQ.data) {
     return (
       <Shell>
-        <div className="bg-coral/10 text-coral text-sm rounded-xl border-[1.5px] border-coral px-4 py-3">
-          No encontramos esta necesidad. {necesidadQ.error?.message ?? ''}
-        </div>
-        <div className="mt-4">
-          <Link
-            to={grupoId ? `/grupos/${grupoId}` : '/grupos'}
-            className="text-[11px] font-bold uppercase tracking-wider text-ink/60"
+        <div className="space-y-4">
+          <div className="bg-coral/10 text-coral text-sm rounded-xl border-[1.5px] border-coral px-4 py-3">
+            No encontramos esta necesidad. {necesidadQ.error?.message ?? ''}
+          </div>
+          <button
+            type="button"
+            onClick={() => { void navigate(grupoId ? `/grupos/${grupoId}` : '/grupos'); }}
+            className="text-[11px] font-bold uppercase tracking-wider text-ink/60 hover:text-ink"
           >
             ← Volver al grupo
-          </Link>
+          </button>
         </div>
       </Shell>
     );
   }
 
   const n = necesidadQ.data;
-  const presupuesto =
-    n.presupuesto_min_centavos != null && n.presupuesto_max_centavos != null
-      ? `${fmtMoney(n.presupuesto_min_centavos / 100)} – ${fmtMoney(n.presupuesto_max_centavos / 100)}`
-      : null;
+  const ofertas = ofertasQ.data ?? [];
+  const inscripciones = inscripcionesQ.data ?? [];
+  const misVotos = misVotosQ.data ?? {};
+
+  // ── Render ───────────────────────────────────────────────────────────────
 
   return (
     <Shell>
-      <div className="grid gap-4">
+      <div className="space-y-5 anim-in">
+        {/* Volver */}
+        <Link
+          to={grupoId ? `/grupos/${grupoId}` : '/grupos'}
+          className="text-[11px] font-bold uppercase tracking-wider text-ink/60 hover:text-ink"
+        >
+          ← Volver al grupo
+        </Link>
+
+        {/* Header */}
         <div>
-          <Link
-            to={grupoId ? `/grupos/${grupoId}` : '/grupos'}
-            className="text-[11px] font-bold uppercase tracking-wider text-ink/60"
-          >
-            ← Volver al grupo
-          </Link>
-          <div className="flex items-start justify-between gap-3 mt-1">
-            <h1 className="font-display font-extrabold text-2xl">{n.titulo}</h1>
+          <div className="flex items-start justify-between gap-3">
+            <h1 className="font-display font-extrabold text-2xl leading-tight">{n.titulo}</h1>
             <span
-              className={`text-[9px] font-bold uppercase tracking-wider rounded-full px-2 py-0.5 whitespace-nowrap ${estadoBadgeClass(n.estado)}`}
+              className={`shrink-0 text-[9px] font-bold uppercase tracking-wider rounded-full px-2 py-1 whitespace-nowrap ${estadoBadgeClass(n.estado)}`}
             >
               {estadoLabel(n.estado)}
             </span>
           </div>
-          <p className="text-[11px] text-ink/60 mt-1">
-            {n.zona}
-            {n.fecha_limite ? ` · cierra ${formatDate(n.fecha_limite)}` : ''}
-          </p>
+          <div className="text-[11px] text-ink/60 mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+            <span>{n.zona}</span>
+            {n.fecha_limite_inscripcion && (
+              <span>Inscripción hasta {fmtFecha(n.fecha_limite_inscripcion)}</span>
+            )}
+            {n.fecha_limite_entrega && (
+              <span>Entrega {fmtFecha(n.fecha_limite_entrega)}</span>
+            )}
+          </div>
         </div>
 
-        {n.descripcion && (
-          <div
-            className="bg-white rounded-2xl border-[1.5px] border-ink p-4"
-            style={{ boxShadow: 'var(--shadow-pop)' }}
-          >
-            <div className="text-[10px] font-bold uppercase tracking-wider text-ink/60">
-              descripción
-            </div>
-            <p className="text-sm mt-1 whitespace-pre-wrap">{n.descripcion}</p>
-            {presupuesto && (
-              <div className="mt-3 text-[11px] text-ink/70">
-                <span className="font-bold uppercase tracking-wider text-[10px] text-ink/60">
-                  presupuesto:
-                </span>{' '}
-                {presupuesto}
-              </div>
-            )}
-          </div>
+        {/* Info */}
+        <InfoCard n={n} />
+
+        {/* Progreso inscripción (individual) */}
+        {n.modalidad === 'individual' && (
+          <ProgresoChip n={n} esAdmin={!isPyme && esAdmin} />
         )}
 
-        <section className="grid gap-2">
-          <div className="flex items-end justify-between">
-            <h2 className="font-display font-extrabold text-lg">
-              Ofertas <span className="text-ink/40">({n.ofertas_count}/{n.cap_ofertas})</span>
-            </h2>
-            {ofertasQ.isFetching && !ofertasQ.isLoading && (
-              <span className="text-[10px] text-ink/50">actualizando…</span>
-            )}
-          </div>
+        {/* Panel de inscripción (familia, individual, con alumnos) */}
+        {!isPyme && n.modalidad === 'individual' && misAlumnos.length > 0 && (
+          <InscripcionPanel
+            necesidad={n}
+            misAlumnos={misAlumnos}
+            inscripciones={inscripciones}
+            isCerrada={isCerrada}
+          />
+        )}
 
-          {ofertasQ.isLoading && (
-            <div className="bg-white/60 rounded-2xl border-[1.5px] border-ink/10 px-4 py-3 h-[80px] animate-pulse" />
-          )}
-
-          {ofertasQ.error && (
-            <div className="bg-coral/10 text-coral text-sm rounded-xl border-[1.5px] border-coral px-4 py-3">
-              {ofertasQ.error.message}
-            </div>
-          )}
-
-          {!ofertasQ.isLoading && ofertasQ.data?.length === 0 && (
-            <div className="bg-mist/30 rounded-2xl border-[1.5px] border-ink p-4 text-sm">
-              Aún no llegaron ofertas. Te avisamos cuando lleguen.
-            </div>
-          )}
-
-          {!ofertasQ.isLoading && ofertasQ.data && ofertasQ.data.length > 0 && (
-            <ul className="grid gap-2">
-              {ofertasQ.data.map((o, idx) => (
-                <li key={o.id}>
-                  <OfertaCard o={o} alias={pymeAlias(idx)} />
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        {/* Ofertas */}
+        {isPyme ? (
+          <PanelOfertaPyme
+            necesidad={n}
+            ofertas={ofertas}
+            pymeId={userId}
+          />
+        ) : (
+          <PanelOfertasFamilia
+            necesidad={n}
+            ofertas={ofertas}
+            misAlumnos={misAlumnos}
+            misVotos={misVotos}
+            esAdmin={esAdmin}
+          />
+        )}
       </div>
     </Shell>
   );
-}
-
-function OfertaCard({ o, alias }: { o: OfertaRow; alias: string }) {
-  const monto = fmtMoney(o.precio_total_centavos / 100);
-  const isGanadora = o.estado === 'ganadora';
-  const isDescartada = o.estado === 'descartada';
-
-  return (
-    <div
-      className={`rounded-2xl border-[1.5px] p-4 transition ${
-        isGanadora
-          ? 'bg-sage/15 border-sage'
-          : isDescartada
-            ? 'bg-white border-ink/15 opacity-60'
-            : 'bg-white border-ink'
-      }`}
-      style={{ boxShadow: isDescartada ? 'none' : 'var(--shadow-pop)' }}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="font-display font-bold text-base">{alias}</h3>
-            {isGanadora && (
-              <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-sage text-white">
-                Ganadora
-              </span>
-            )}
-            {isDescartada && (
-              <span className="text-[9px] font-bold uppercase tracking-wider text-ink/55">
-                Descartada
-              </span>
-            )}
-          </div>
-          <div className="text-[11px] text-ink/60 mt-0.5">
-            {modoEntregaLabel(o.modo_entrega)}
-            {o.tiempo_entrega_dias != null ? ` · ${o.tiempo_entrega_dias} días` : ''}
-          </div>
-        </div>
-        <div className="text-right whitespace-nowrap">
-          <div className="font-bold text-lg leading-none">{monto}</div>
-        </div>
-      </div>
-
-      <p className="text-sm mt-2 text-ink/80 whitespace-pre-wrap">{o.descripcion}</p>
-    </div>
-  );
-}
-
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString('es-AR', { day: '2-digit', month: 'short' });
 }
