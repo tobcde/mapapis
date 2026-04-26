@@ -127,6 +127,8 @@ export type NecesidadEstado =
   | 'cancelada'
   | 'disputada';
 
+export type NecesidadModalidad = 'grupal' | 'individual';
+
 export type NecesidadRow = {
   id: string;
   grupo_id: string;
@@ -140,6 +142,11 @@ export type NecesidadRow = {
   presupuesto_min_centavos: number | null;
   presupuesto_max_centavos: number | null;
   fecha_limite: string | null;
+  fecha_limite_inscripcion: string | null;
+  fecha_limite_entrega: string | null;
+  link_referencia: string | null;
+  modalidad: NecesidadModalidad;
+  cantidad_por_alumno: number | null;
   estado: NecesidadEstado;
   cap_ofertas: number;
   ofertas_count: number;
@@ -161,10 +168,29 @@ export type NecesidadInsert = {
   presupuesto_min_centavos?: number | null;
   presupuesto_max_centavos?: number | null;
   fecha_limite?: string | null;
+  fecha_limite_inscripcion?: string | null;
+  fecha_limite_entrega?: string | null;
+  link_referencia?: string | null;
+  modalidad?: NecesidadModalidad;
+  cantidad_por_alumno?: number | null;
   estado?: NecesidadEstado;
   cap_ofertas?: number;
   foto_url?: string | null;
 };
+
+/**
+ * Shape de cada campo en `categorias.campos_obligatorios`.
+ * Se usa para renderizar el formulario dinámico de publicar necesidad.
+ */
+export interface CampoSchema {
+  key: string;
+  label: string;
+  type: 'int' | 'text' | 'date';
+  required: boolean;
+  min?: number;
+  placeholder?: string;
+  help?: string;
+}
 
 export type NecesidadUpdate = Partial<NecesidadRow>;
 
