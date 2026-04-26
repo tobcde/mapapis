@@ -4,7 +4,6 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { queryClient } from '@/lib/queryClient';
 import { useSessionStore } from '@/stores/session';
-import { Landing } from '@/routes/Landing';
 import { Login } from '@/routes/Login';
 import { Onboarding } from '@/routes/Onboarding';
 import { Home } from '@/routes/Home';
@@ -54,7 +53,7 @@ export function App() {
       <BrowserRouter basename={import.meta.env.BASE_URL}>
         <Suspense fallback={<Loading />}>
           <Routes>
-            <Route path="/" element={<Landing />} />
+            <Route path="/" element={<Login />} />
             <Route path="/login" element={<Login />} />
             <Route
               path="/onboarding"
