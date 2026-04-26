@@ -52,9 +52,11 @@ export function Onboarding() {
         className="bg-white rounded-3xl border-[1.5px] border-ink p-8 w-full"
         style={{ boxShadow: 'var(--shadow-pop)' }}
       >
-        <div className="text-[10px] font-bold uppercase tracking-wider text-ink/60">paso 1 de 1</div>
-        <h1 className="font-display font-extrabold text-2xl mt-1">Bienvenida</h1>
-        <p className="text-xs text-ink/60 mt-1">Contanos quien sos para terminar de configurar tu cuenta.</p>
+        <div className="text-xs font-bold uppercase tracking-[0.2em] text-coral">Bienvenida</div>
+        <h1 className="font-display font-black text-5xl leading-none mt-3">
+          ¿Quién <span className="font-display-italic">sos</span>?
+        </h1>
+        <p className="text-ink/70 mt-3 text-[15px]">Contanos cómo vas a usar MaPaPis.</p>
 
         <form onSubmit={handleSubmit(onSubmit)} className="mt-6 grid gap-4">
           <div>

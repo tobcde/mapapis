@@ -25,7 +25,9 @@ export function Grupos() {
     <Shell>
       <div className="grid gap-3">
         <div className="flex items-end justify-between">
-          <h1 className="font-display font-extrabold text-xl">Mis grupos</h1>
+          <h1 className="font-display font-black text-4xl leading-none">
+            Mis <span className="font-display-italic">grupos</span>
+          </h1>
           {isFetching && !isLoading && <span className="text-[10px] text-ink/50">actualizando…</span>}
         </div>
 

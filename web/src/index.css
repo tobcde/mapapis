@@ -42,6 +42,24 @@
     letter-spacing: -0.03em;
   }
 
+  /* Palabra destacada en títulos — coral + subrayado sun grueso */
+  .font-display-italic {
+    font-family: var(--font-display);
+    letter-spacing: -0.03em;
+    color: var(--coral);
+    text-decoration: underline;
+    text-decoration-color: var(--sun);
+    text-decoration-thickness: 5px;
+    text-underline-offset: 6px;
+    text-decoration-skip-ink: none;
+  }
+
+  /* Highlighters de texto */
+  .hl-coral {
+    background: linear-gradient(180deg, transparent 60%, rgba(255, 90, 78, 0.35) 60%);
+    padding: 0 0.1em;
+  }
+
   .btn-pop {
     border-color: transparent !important;
     border-width: 0 !important;
@@ -84,4 +102,8 @@
     to   { opacity: 1; transform: translateY(0) scale(1); }
   }
   .dialog-in { animation: slideUp .22s cubic-bezier(.2,.7,.3,1) both; }
+
+  /* Ocultar scrollbar horizontal en listas de filtros/pills */
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 }

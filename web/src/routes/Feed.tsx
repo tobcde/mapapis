@@ -124,7 +124,7 @@ function FeedFamilia() {
             Hola, {nombreCorto}
           </p>
           <h1 className="font-display font-black text-[2.6rem] leading-[0.95] mt-2">
-            Necesidades <em className="not-italic" style={{ fontStyle: 'italic' }}>activas</em>
+            Necesidades <span className="font-display-italic">activas</span>
           </h1>
         </div>
 
@@ -147,7 +147,7 @@ function FeedFamilia() {
         </div>
 
         {/* Filtros */}
-        <div className="flex gap-2 mb-5 overflow-x-auto pb-1 -mx-4 px-4">
+        <div className="flex gap-2 mb-5 overflow-x-auto no-scrollbar pb-1 -mx-4 px-4">
           <FilterPill active={filtro === 'activas'} onClick={() => { setFiltro('activas'); }} label="Activas" />
           <FilterPill active={filtro === 'votando'} onClick={() => { setFiltro('votando'); }} label="Votando" />
           <FilterPill active={filtro === 'cumplidas'} onClick={() => { setFiltro('cumplidas'); }} label="Cumplidas" />
@@ -216,7 +216,7 @@ function FeedPyme() {
         <div className="mb-6">
           <p className="text-xs uppercase font-bold tracking-[0.2em] text-sage">Para tu pyme</p>
           <h1 className="font-display font-black text-[2.6rem] leading-[0.95] mt-2">
-            Necesidades <em className="not-italic" style={{ fontStyle: 'italic' }}>cerca</em>
+            Necesidades <span className="font-display-italic">cerca</span>
           </h1>
           <p className="text-ink/60 text-sm mt-2">
             Pedidos anonimizados — el grupo elige al final.
@@ -224,7 +224,7 @@ function FeedPyme() {
         </div>
 
         {/* Filtro de zona */}
-        <div className="flex gap-2 overflow-x-auto pb-2 mb-2 -mx-4 px-4">
+        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2 mb-2 -mx-4 px-4">
           <FilterPill
             active={filtroZona === 'todas'}
             onClick={() => { setFiltroZona('todas'); }}

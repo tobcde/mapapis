@@ -324,7 +324,7 @@ export function Publicar() {
         </button>
 
         <h1 className="font-display font-black text-4xl leading-none">
-          Publicar <em style={{ fontStyle: 'italic' }}>necesidad</em>
+          Publicar <span className="font-display-italic">necesidad</span>
         </h1>
         <p className="text-sm text-ink/60 mt-2">
           Las pymes lo verán anonimizado por zona.

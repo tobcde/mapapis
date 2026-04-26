@@ -563,7 +563,7 @@ function PanelOfertaPyme({
     <section className="space-y-3">
       <h2 className="font-display font-bold text-xl">¿Cubrís este pedido?</h2>
       <div className="bg-sun rounded-3xl border-[1.5px] border-ink p-5 shadow-pop">
-        <p className="text-sm font-semibold">Las ofertas son selladas — el grupo elige al cierre.</p>
+        <p className="text-sm font-semibold">Las ofertas son <span className="hl-coral">selladas</span> — el grupo elige al cierre.</p>
 
         {!showForm ? (
           <Button
