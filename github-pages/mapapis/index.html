@@ -2053,8 +2053,10 @@ function DetalleScreen({ necesidad: necProp, profile, onBack }) {
   const fetchData = async () => {
     setLoading(true);
     try {
+      // Anonimizadas: sin nombre/desc/telefono. Solo tier (badge verificación).
+      // Para la pyme propia (miOferta) no necesitamos su nombre acá tampoco.
       const ofertasReq = sb.from("ofertas")
-        .select("*, profiles!ofertas_pyme_id_fkey(nombre, email, pymes(nombre_comercial, descripcion, telefono, tier))")
+        .select("*, profiles!ofertas_pyme_id_fkey(pymes(tier))")
         .eq("necesidad_id", n.id)
         .order("created_at", { ascending: true });
 
@@ -3026,18 +3028,26 @@ function PymeOfertaPanel({ necesidad: n, profile, ofertas, loading, onChanged })
 /* ===================== Familia: lista de ofertas + voto ===================== */
 function FamiliaOfertasPanel({ necesidad: n, ofertas, loading, misAlumnos, misVotos, onVote, onUnvote, esAdminGrupo, onChanged }) {
   const [ratings, setRatings] = useState({});
+  const [stats, setStats] = useState({});
   useEffect(() => {
     let alive = true;
-    if (!ofertas || ofertas.length === 0) { setRatings({}); return; }
+    if (!ofertas || ofertas.length === 0) { setRatings({}); setStats({}); return; }
     const ids = [...new Set(ofertas.map(o => o.pyme_id).filter(Boolean))];
     if (ids.length === 0) return;
-    sb.from("pymes_rating_summary").select("pyme_id, total_reviews, promedio").in("pyme_id", ids)
-      .then(({ data }) => {
-        if (!alive || !data) return;
-        const map = {};
-        data.forEach(r => { map[r.pyme_id] = r; });
-        setRatings(map);
-      });
+    Promise.all([
+      sb.from("pymes_rating_summary").select("pyme_id, total_reviews, promedio").in("pyme_id", ids),
+      sb.from("pymes_stats_publico").select("pyme_id, zonas, tier, ofertas_total, ofertas_ganadas").in("pyme_id", ids),
+    ]).then(([rRes, sRes]) => {
+      if (!alive) return;
+      if (rRes.data) {
+        const m = {}; rRes.data.forEach(r => { m[r.pyme_id] = r; });
+        setRatings(m);
+      }
+      if (sRes.data) {
+        const m = {}; sRes.data.forEach(r => { m[r.pyme_id] = r; });
+        setStats(m);
+      }
+    });
     return () => { alive = false; };
   }, [ofertas?.map(o => o.id).join(",")]);
 
@@ -3056,9 +3066,10 @@ function FamiliaOfertasPanel({ necesidad: n, ofertas, loading, misAlumnos, misVo
         </div>
       ) : (
         <div className="space-y-3">
-          {ofertas.map(o => (
+          {ofertas.map((o, idx) => (
             <OfertaCard key={o.id}
               o={o}
+              index={idx}
               necesidad={n}
               misAlumnos={misAlumnos}
               misVotos={misVotos}
@@ -3068,6 +3079,7 @@ function FamiliaOfertasPanel({ necesidad: n, ofertas, loading, misAlumnos, misVo
               adjudicada={adjudicada}
               onChanged={onChanged}
               rating={ratings[o.pyme_id]}
+              stats={stats[o.pyme_id]}
             />
           ))}
         </div>
@@ -3076,11 +3088,11 @@ function FamiliaOfertasPanel({ necesidad: n, ofertas, loading, misAlumnos, misVo
   );
 }
 
-function OfertaCard({ o, necesidad: n, misAlumnos, misVotos, onVote, onUnvote, esAdminGrupo, adjudicada, onChanged, rating }) {
+function OfertaCard({ o, index = 0, necesidad: n, misAlumnos, misVotos, onVote, onUnvote, esAdminGrupo, adjudicada, onChanged, rating, stats }) {
   const pyme = o.profiles?.pymes;
-  const pymeNombre = pyme?.nombre_comercial
-    || o.profiles?.nombre
-    || (o.profiles?.email ? o.profiles.email.split("@")[0] : "Pyme");
+  // Etiqueta anónima estable: A, B, C... segun orden en la lista.
+  const letra = String.fromCharCode(65 + (index % 26));
+  const pymeLabel = `Pyme ${letra}`;
   const monto = Number(o.precio_total_centavos);
   const dias = o.tiempo_entrega_dias;
   const esGanadora = o.estado === "ganadora";
@@ -3088,8 +3100,12 @@ function OfertaCard({ o, necesidad: n, misAlumnos, misVotos, onVote, onUnvote, e
   const [adjudicandoBusy, setAdjudicandoBusy] = useState(false);
   const { showAlert, showConfirm } = useDialog();
 
+  const zonas = stats?.zonas || [];
+  const ofertasTotal = stats?.ofertas_total ?? 0;
+  const ofertasGanadas = stats?.ofertas_ganadas ?? 0;
+
   const onAdjudicar = async () => {
-    if (!await showConfirm(`¿Adjudicar a "${pymeNombre}" por ${fmtMoney(monto)}? Las demás ofertas quedan descartadas.`)) return;
+    if (!await showConfirm(`¿Adjudicar la oferta de ${pymeLabel} por ${fmtMoney(monto)}? Las demás ofertas quedan descartadas. Una vez adjudicada vas a poder ver y contactar a la pyme.`)) return;
     setAdjudicandoBusy(true);
     const { error } = await adjudicarOferta(o.id);
     setAdjudicandoBusy(false);
@@ -3106,7 +3122,7 @@ function OfertaCard({ o, necesidad: n, misAlumnos, misVotos, onVote, onUnvote, e
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="font-display font-bold text-lg">{pymeNombre}</h3>
+            <h3 className="font-display font-bold text-lg">{pymeLabel}</h3>
             {pyme && <TierBadge tier={pyme.tier} />}
             {esGanadora && (
               <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[var(--sage)] text-white">Ganadora</span>
@@ -3115,16 +3131,31 @@ function OfertaCard({ o, necesidad: n, misAlumnos, misVotos, onVote, onUnvote, e
               <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/55">Descartada</span>
             )}
           </div>
-          {pyme?.descripcion && (
-            <p className="text-[11px] text-[var(--ink)]/55 mt-0.5 line-clamp-1">{pyme.descripcion}</p>
-          )}
-          {rating && rating.total_reviews > 0 && (
-            <div className="flex items-center gap-1 mt-1">
-              <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="var(--sun)" stroke="var(--ink)" strokeWidth={1.5}>
-                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-              </svg>
-              <span className="text-[11px] font-bold">{Number(rating.promedio).toFixed(1)}</span>
-              <span className="text-[10px] text-[var(--ink)]/55">({rating.total_reviews})</span>
+          <div className="flex items-center gap-3 mt-1.5 flex-wrap text-[11px] text-[var(--ink)]/70">
+            {rating && rating.total_reviews > 0 ? (
+              <span className="inline-flex items-center gap-1">
+                <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="var(--sun)" stroke="var(--ink)" strokeWidth={1.5}>
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                </svg>
+                <span className="font-bold">{Number(rating.promedio).toFixed(1)}</span>
+                <span className="text-[var(--ink)]/55">({rating.total_reviews})</span>
+              </span>
+            ) : (
+              <span className="text-[var(--ink)]/40">Sin reviews</span>
+            )}
+            <span className="inline-flex items-center gap-1">
+              <span className="font-bold">{ofertasGanadas}</span>
+              <span className="text-[var(--ink)]/55">de {ofertasTotal} ganadas</span>
+            </span>
+          </div>
+          {zonas.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-2">
+              {zonas.slice(0, 5).map(z => (
+                <span key={z} className="text-[10px] px-1.5 py-0.5 rounded-md bg-[var(--mist)] border border-[var(--ink)]/10 text-[var(--ink)]/70">
+                  📍 {z}
+                </span>
+              ))}
+              {zonas.length > 5 && <span className="text-[10px] text-[var(--ink)]/50">+{zonas.length - 5}</span>}
             </div>
           )}
         </div>
@@ -3140,12 +3171,6 @@ function OfertaCard({ o, necesidad: n, misAlumnos, misVotos, onVote, onUnvote, e
         </div>
       )}
       <p className="text-sm text-[var(--ink)]/75 mt-3 whitespace-pre-wrap">{o.descripcion}</p>
-
-      {esGanadora && pyme?.telefono && (
-        <a href={`tel:${pyme.telefono}`} className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--sage)] underline">
-          📞 {pyme.telefono}
-        </a>
-      )}
 
       {!adjudicada && misAlumnos && misAlumnos.length > 0 && (
         <div className="mt-3 pt-3 border-t border-[var(--ink)]/10">
