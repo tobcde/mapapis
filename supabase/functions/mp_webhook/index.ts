@@ -31,9 +31,13 @@ Deno.serve(async (req) => {
 
   try {
     const accessToken = Deno.env.get("MP_ACCESS_TOKEN");
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("SB_URL") ?? "";
+    const serviceRoleKey = Deno.env.get("LEGACY_SERVICE_ROLE_KEY")
+      ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
+      ?? Deno.env.get("SB_SERVICE_ROLE_KEY")
+      ?? "";
     if (!accessToken) return new Response("MP_ACCESS_TOKEN no configurado", { status: 500 });
+    if (!supabaseUrl || !serviceRoleKey) return new Response("SUPABASE env vars missing", { status: 500 });
 
     // Extraer payment_id (de body JSON o querystring)
     let paymentId: string | null = null;

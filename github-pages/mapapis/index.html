@@ -268,12 +268,13 @@ function validarCuit(cuit) {
   if (dv === 10) return false;
   return dv === parseInt(clean[10], 10);
 }
-async function crearOferta({ necesidadId, precioCentavos, tiempoDias, descripcion }) {
+async function crearOferta({ necesidadId, precioCentavos, tiempoDias, descripcion, modoEntrega = "retiro" }) {
   return await sb.rpc("crear_oferta", {
     p_necesidad: necesidadId,
     p_precio_centavos: precioCentavos,
     p_tiempo_dias: tiempoDias,
     p_descripcion: descripcion,
+    p_modo_entrega: modoEntrega,
   });
 }
 async function adjudicarOferta(ofertaId) {
@@ -572,6 +573,11 @@ const fmt = (n) => "$" + new Intl.NumberFormat("es-AR").format(n);
 const fmtRange = (a, b) => `${fmt(a)} – ${fmt(b)}`;
 const fmtMoney = (centavos) => "$" + new Intl.NumberFormat("es-AR").format(Math.round(Number(centavos || 0) / 100));
 const fmtMoneyRange = (aC, bC) => `${fmtMoney(aC)} – ${fmtMoney(bC)}`;
+const MODO_ENTREGA_LABEL = {
+  retiro: { icon: "📦", short: "Retiro en local", long: "Solo retiro en el local de la pyme" },
+  envio:  { icon: "🚚", short: "Envío a domicilio", long: "Envío al domicilio del comprador" },
+  ambos:  { icon: "🚚📦", short: "Envío o retiro", long: "Envío o retiro, según prefieras" },
+};
 const fmtFechaHora = (iso) => {
   if (!iso) return "";
   try {
@@ -736,8 +742,6 @@ function PymeOnboardingScreen({ profile, onDone, initialPyme = null, onCancel })
   const [webUrl, setWebUrl] = useState(initialPyme?.web_url || "");
   const [instagram, setInstagram] = useState(initialPyme?.instagram || "");
   const [facebook, setFacebook] = useState(initialPyme?.facebook || "");
-  const [cbu, setCbu] = useState(initialPyme?.cbu || "");
-  const [aliasCbu, setAliasCbu] = useState(initialPyme?.alias_cbu || "");
   const [zonasSel, setZonasSel] = useState(Array.isArray(initialPyme?.zonas) ? initialPyme.zonas : []);
   const [catsSel, setCatsSel] = useState(Array.isArray(initialPyme?.categorias_ids) ? initialPyme.categorias_ids : []);
   const [categorias, setCategorias] = useState([]);
@@ -779,8 +783,8 @@ function PymeOnboardingScreen({ profile, onDone, initialPyme = null, onCancel })
       instagram: instagram.trim() || null,
       facebook: facebook.trim() || null,
       aniosRubro: Number.isFinite(aniosNum) && aniosNum >= 0 ? aniosNum : null,
-      cbu: cbu.trim() || null,
-      aliasCbu: aliasCbu.trim() || null,
+      cbu: null,
+      aliasCbu: null,
     });
     setSubmitting(false);
     if (err) { setError(err.message); return; }
@@ -906,20 +910,14 @@ function PymeOnboardingScreen({ profile, onDone, initialPyme = null, onCancel })
             </Field>
           </div>
 
-          {/* Bloque 5 — Cobros (opcional ahora) */}
+          {/* Bloque 5 — Cobros */}
           <div className="space-y-3">
-            <SectionLabel n={5} text="Cobros (opcional)" />
-            <p className="text-[11px] text-[var(--ink)]/60 -mt-1">Vas a poder cargarlo después. Cuando habilitemos pagos por la plataforma, se vuelve obligatorio.</p>
-            <Field label="CBU">
-              <input type="text" maxLength={22} value={cbu} onChange={(e) => setCbu(e.target.value)}
-                placeholder="22 dígitos"
-                className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-mono focus:outline-none" />
-            </Field>
-            <Field label="Alias">
-              <input type="text" maxLength={40} value={aliasCbu} onChange={(e) => setAliasCbu(e.target.value)}
-                placeholder="mi.alias.mp"
-                className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-mono focus:outline-none" />
-            </Field>
+            <SectionLabel n={5} text="Cobros" />
+            <div className="rounded-xl border-[1.5px] border-dashed border-[var(--ink)]/30 bg-[var(--cream)] p-4 text-[12px] text-[var(--ink)]/75 leading-relaxed">
+              Las familias pagan dentro de MaPaPis con <span className="font-bold">Mercado Pago</span>. La plata se acredita en tu cuenta MP asociada al CUIT/CUIL que cargaste arriba — no necesitamos CBU ni alias.
+              <br/><br/>
+              Sos responsable de tu situación fiscal y de emitir factura al comprador. Más detalles en los <span className="font-bold">Términos y Condiciones</span>.
+            </div>
           </div>
 
           <button type="submit" disabled={submitting}
@@ -1833,7 +1831,7 @@ function MisOfertasScreen({ profile, onOpen }) {
     (async () => {
       const [ofertasRes, pymeRes] = await Promise.all([
         sb.from("ofertas")
-          .select("id, estado, precio_total_centavos, tiempo_entrega_dias, descripcion, created_at, necesidad:necesidades(id, titulo, zona, estado, modalidad, fecha_limite, ofertas_count, creador_tipo, foto_url, categorias(nombre))")
+          .select("id, estado, precio_total_centavos, tiempo_entrega_dias, modo_entrega, descripcion, created_at, necesidad:necesidades(id, titulo, zona, estado, modalidad, fecha_limite, ofertas_count, creador_tipo, foto_url, categorias(nombre))")
           .eq("pyme_id", profile.id)
           .order("created_at", { ascending: false }),
         sb.from("pymes").select("tier, estado").eq("profile_id", profile.id).maybeSingle(),
@@ -1949,6 +1947,12 @@ function MiOfertaCard({ oferta, onClick }) {
             <span className="text-[10px] uppercase tracking-wider font-bold text-[var(--ink)]/60">{oferta.tiempo_entrega_dias} días</span>
           )}
         </div>
+        {oferta.modo_entrega && MODO_ENTREGA_LABEL[oferta.modo_entrega] && (
+          <p className="text-[11px] mt-1 text-[var(--ink)]/70">
+            <span className="mr-1">{MODO_ENTREGA_LABEL[oferta.modo_entrega].icon}</span>
+            {MODO_ENTREGA_LABEL[oferta.modo_entrega].short}
+          </p>
+        )}
         <p className="text-xs text-[var(--ink)]/70 mt-2 line-clamp-2">{oferta.descripcion}</p>
       </div>
     </button>
@@ -2541,50 +2545,37 @@ function PagosPanel({ necesidad: n, profile, ofertas, misAlumnos, inscripciones,
 
   if (!loaded) return null;
 
-  // Render contacto pyme (lo ven familias del grupo)
+  // Render contacto pyme — solo se desbloquea para familias que ya pagaron via MP.
+  // Antes del pago no se muestran datos de contacto (evita que las partes
+  // arreglen por afuera salteando la comisión).
+  const yaPagueAlgunMP = pagosMP.some(p => p.profile_id === profile.id
+    && ["approved","liberado","transferido"].includes(p.estado));
   const ContactoPyme = !isPyme && contactoPyme && (
     <div className="bg-white rounded-3xl border-[1.5px] border-[var(--ink)] p-5 mb-3" style={{boxShadow: "3px 3px 0 var(--ink)"}}>
-      <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/60 mb-2">Cómo pagarle a la pyme</div>
+      <div className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/60 mb-2">Contacto para coordinar la entrega</div>
       <div className="font-display font-bold text-base mb-2">{contactoPyme.nombre_comercial}</div>
-      <div className="space-y-2 text-sm">
-        {contactoPyme.alias_cbu && (
-          <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-[var(--mist)]">
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-[var(--ink)]/60 font-bold">Alias</div>
-              <div className="font-mono font-semibold break-all">{contactoPyme.alias_cbu}</div>
-            </div>
-            <button onClick={() => copiar(contactoPyme.alias_cbu, "Alias")}
-              className="shrink-0 px-2.5 py-1.5 rounded-lg bg-white border-[1.5px] border-[var(--ink)] text-[10px] font-bold uppercase tracking-wider">
-              <IconCopy className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
-        {contactoPyme.cbu && (
-          <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-[var(--mist)]">
-            <div className="min-w-0">
-              <div className="text-[10px] uppercase tracking-wider text-[var(--ink)]/60 font-bold">CBU</div>
-              <div className="font-mono font-semibold break-all">{contactoPyme.cbu}</div>
-            </div>
-            <button onClick={() => copiar(contactoPyme.cbu, "CBU")}
-              className="shrink-0 px-2.5 py-1.5 rounded-lg bg-white border-[1.5px] border-[var(--ink)] text-[10px] font-bold uppercase tracking-wider">
-              <IconCopy className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
-        {contactoPyme.telefono && (
-          <a href={`https://wa.me/${contactoPyme.telefono.replace(/[^0-9]/g, "")}`} target="_blank" rel="noopener noreferrer"
-             className="flex items-center justify-between gap-2 p-2 rounded-lg bg-[var(--sage)]/15 hover:bg-[var(--sage)]/25">
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-[var(--ink)]/60 font-bold">WhatsApp</div>
-              <div className="font-semibold">{contactoPyme.telefono}</div>
-            </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--sage)]">Abrir →</span>
-          </a>
-        )}
-        {!contactoPyme.alias_cbu && !contactoPyme.cbu && (
-          <p className="text-xs text-[var(--ink)]/60">La pyme aún no cargó datos de cobro. Coordinen por WhatsApp.</p>
-        )}
-      </div>
+      {yaPagueAlgunMP ? (
+        <div className="space-y-2 text-sm">
+          {contactoPyme.telefono ? (
+            <a href={`https://wa.me/${contactoPyme.telefono.replace(/[^0-9]/g, "")}`} target="_blank" rel="noopener noreferrer"
+               className="flex items-center justify-between gap-2 p-2 rounded-lg bg-[var(--sage)]/15 hover:bg-[var(--sage)]/25">
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-[var(--ink)]/60 font-bold">WhatsApp</div>
+                <div className="font-semibold">{contactoPyme.telefono}</div>
+              </div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--sage)]">Abrir →</span>
+            </a>
+          ) : (
+            <p className="text-xs text-[var(--ink)]/60">La pyme no cargó WhatsApp. Esperá a que actualice su perfil.</p>
+          )}
+        </div>
+      ) : (
+        <div className="rounded-xl border-[1.5px] border-dashed border-[var(--ink)]/30 p-3 bg-[var(--mist)]">
+          <p className="text-xs text-[var(--ink)]/75">
+            🔒 Pagá tu parte con Mercado Pago para desbloquear el contacto y coordinar la entrega.
+          </p>
+        </div>
+      )}
     </div>
   );
 
@@ -2664,15 +2655,6 @@ function PagosPanel({ necesidad: n, profile, ofertas, misAlumnos, inscripciones,
                     <div className="font-semibold text-sm">{a.nombre}</div>
                     {renderMPButton(a.id)}
                   </div>
-                  <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-[var(--ink)]/10">
-                    <span className="text-[10px] uppercase tracking-wider text-[var(--ink)]/40">o marcar manual</span>
-                    <button onClick={() => togglePago(a.id)} disabled={busyKey === a.id || !puedeAccionar}
-                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border disabled:opacity-50 ${
-                        pago ? "bg-[var(--sage)]/15 text-[var(--sage)] border-[var(--sage)]/40" : "bg-white border-[var(--ink)]/30 text-[var(--ink)]/60"
-                      }`}>
-                      {busyKey === a.id ? "..." : (pago ? "✓ Pagado" : "Marcar")}
-                    </button>
-                  </div>
                 </div>
               );
             })}
@@ -2708,12 +2690,6 @@ function PagosPanel({ necesidad: n, profile, ofertas, misAlumnos, inscripciones,
                 {busyKey === "mp:self" ? "..." : (miMP?.estado === "pending" ? "Reintentar pago MP" : "Pagar con Mercado Pago")}
               </button>
             )}
-            <button onClick={() => togglePago(null)} disabled={busyKey === "self" || yaPagueMP}
-              className={`w-full py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider border disabled:opacity-30 ${
-                miPago ? "bg-[var(--sage)]/15 text-[var(--sage)] border-[var(--sage)]/40" : "bg-white border-[var(--ink)]/30 text-[var(--ink)]/60"
-              }`}>
-              {busyKey === "self" ? "..." : (miPago ? "✓ Marcado manual — tocá para revertir" : "o marcar pago manual (transferencia)")}
-            </button>
           </div>
         ) : (
           <p className="text-xs text-[var(--ink)]/60">{pagos.length + pagosMP.filter(p => ["approved","liberado","transferido"].includes(p.estado)).length} familias ya pagaron.</p>
@@ -2934,6 +2910,7 @@ function PymeOfertaPanel({ necesidad: n, profile, ofertas, loading, onChanged })
   const [precio, setPrecio] = useState("");
   const [dias, setDias] = useState("");
   const [desc, setDesc] = useState("");
+  const [modoEntrega, setModoEntrega] = useState("retiro");
   const [enviando, setEnviando] = useState(false);
   const [err, setErr] = useState(null);
 
@@ -2948,11 +2925,12 @@ function PymeOfertaPanel({ necesidad: n, profile, ofertas, loading, onChanged })
       precioCentavos: Math.round(Number(precio) * 100),
       tiempoDias: dias ? Number(dias) : null,
       descripcion: desc.trim(),
+      modoEntrega,
     });
     setEnviando(false);
     if (error) { setErr(error.message); return; }
     setShowForm(false);
-    setPrecio(""); setDias(""); setDesc("");
+    setPrecio(""); setDias(""); setDesc(""); setModoEntrega("retiro");
     onChanged();
   };
 
@@ -2971,6 +2949,12 @@ function PymeOfertaPanel({ necesidad: n, profile, ofertas, loading, onChanged })
               <span className="text-[10px] uppercase tracking-wider font-bold text-[var(--ink)]/60">{miOferta.tiempo_entrega_dias} días</span>
             )}
           </div>
+          {miOferta.modo_entrega && MODO_ENTREGA_LABEL[miOferta.modo_entrega] && (
+            <p className="text-[11px] mb-1.5 text-[var(--ink)]/70">
+              <span className="mr-1">{MODO_ENTREGA_LABEL[miOferta.modo_entrega].icon}</span>
+              {MODO_ENTREGA_LABEL[miOferta.modo_entrega].short}
+            </p>
+          )}
           <p className="text-sm text-[var(--ink)]/85 whitespace-pre-wrap">{miOferta.descripcion}</p>
           <p className="text-[10px] uppercase tracking-wider font-bold text-[var(--sage)] mt-3">✓ Presentada</p>
         </div>
@@ -2998,6 +2982,23 @@ function PymeOfertaPanel({ necesidad: n, profile, ofertas, loading, onChanged })
             <Field label="Tiempo de entrega (días)">
               <input type="number" min="1" value={dias} onChange={(e) => setDias(e.target.value)} placeholder="7"
                 className="w-full px-4 py-3 rounded-xl border-[1.5px] border-[var(--ink)] bg-white text-[15px] font-mono" />
+            </Field>
+            <Field label="¿Cómo entregás?">
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { v: "retiro", label: "Solo retiro", icon: "📦" },
+                  { v: "envio",  label: "Solo envío",  icon: "🚚" },
+                  { v: "ambos",  label: "Ambos",       icon: "🚚📦" },
+                ].map(opt => (
+                  <button key={opt.v} type="button" onClick={() => setModoEntrega(opt.v)}
+                    className={`py-2.5 rounded-xl border-[1.5px] text-[11px] font-bold uppercase tracking-wider ${
+                      modoEntrega === opt.v ? "bg-[var(--ink)] text-[var(--sun)] border-[var(--ink)]" : "bg-white border-[var(--ink)]/30 text-[var(--ink)]/70"
+                    }`}>
+                    <div className="text-base leading-none mb-0.5">{opt.icon}</div>
+                    <div>{opt.label}</div>
+                  </button>
+                ))}
+              </div>
             </Field>
             <Field label="Detalle de la oferta">
               <textarea required minLength={10} maxLength={1000} rows={3} value={desc} onChange={(e) => setDesc(e.target.value)}
@@ -3132,6 +3133,12 @@ function OfertaCard({ o, necesidad: n, misAlumnos, misVotos, onVote, onUnvote, e
           {dias != null && <div className="text-[10px] uppercase tracking-wider text-[var(--ink)]/60">{dias} días</div>}
         </div>
       </div>
+      {o.modo_entrega && MODO_ENTREGA_LABEL[o.modo_entrega] && (
+        <div className="mt-2 inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-[var(--mist)] border border-[var(--ink)]/10 text-[11px] font-semibold text-[var(--ink)]/80">
+          <span>{MODO_ENTREGA_LABEL[o.modo_entrega].icon}</span>
+          <span>{MODO_ENTREGA_LABEL[o.modo_entrega].short}</span>
+        </div>
+      )}
       <p className="text-sm text-[var(--ink)]/75 mt-3 whitespace-pre-wrap">{o.descripcion}</p>
 
       {esGanadora && pyme?.telefono && (
@@ -4475,11 +4482,119 @@ function GrupoScreen({ profile, grupoId, onChangeGrupo, onBack }) {
   );
 }
 
+/* ===================== Legal ===================== */
+function LegalScreen({ onClose }) {
+  return (
+    <div className="fixed inset-0 z-[80] bg-[var(--cream)] overflow-y-auto anim-in">
+      <div className="sticky top-0 bg-[var(--cream)]/95 backdrop-blur border-b-[1.5px] border-[var(--ink)] px-5 py-3 flex items-center justify-between z-10">
+        <div className="font-display font-black text-lg">Términos y Condiciones</div>
+        <button onClick={onClose} className="px-3 py-1.5 rounded-lg bg-[var(--ink)] text-[var(--sun)] text-[11px] font-bold uppercase tracking-wider">
+          Cerrar
+        </button>
+      </div>
+      <div className="px-5 py-6 max-w-2xl mx-auto text-[14px] leading-relaxed text-[var(--ink)]/85 space-y-5">
+        <p className="text-[11px] uppercase tracking-widest text-[var(--ink)]/50">Última actualización: 25 de abril de 2026 · Versión 0.1</p>
+
+        <section className="space-y-2">
+          <h2 className="font-display font-bold text-xl text-[var(--ink)]">1. Qué es MaPaPis</h2>
+          <p>MaPaPis es una plataforma digital que conecta grupos de familias (típicamente salas o cursos de jardines/colegios en Argentina) con pequeñas y medianas empresas (en adelante, <span className="font-bold">"Pymes"</span>) que ofertan bienes o servicios para esos grupos. MaPaPis no produce, almacena, transporta ni entrega los bienes. No es parte del contrato comercial entre la familia y la Pyme: actúa exclusivamente como intermediario tecnológico.</p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="font-display font-bold text-xl text-[var(--ink)]">2. Quién puede registrarse</h2>
+          <p><span className="font-bold">Familias / compradores:</span> personas mayores de edad con responsabilidad sobre alumnos del grupo.</p>
+          <p><span className="font-bold">Pymes / vendedores:</span> personas humanas o jurídicas con CUIT o CUIL válido y cuenta de Mercado Pago activa a nombre del mismo titular. No se exige forma societaria específica: monotributistas, profesionales independientes y emprendedores pueden operar siempre que cumplan los requisitos fiscales aplicables a su actividad.</p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="font-display font-bold text-xl text-[var(--ink)]">3. Cómo funciona</h2>
+          <p>Los grupos publican necesidades. Las Pymes envían ofertas dentro del plazo definido. La familia o grupo adjudica la oferta ganadora. El pago de la familia se procesa a través de <span className="font-bold">Mercado Pago</span> dentro de la plataforma. La Pyme entrega el bien o servicio según lo informado en su oferta (modo de entrega: retiro, envío o ambos).</p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="font-display font-bold text-xl text-[var(--ink)]">4. Comisión de la plataforma</h2>
+          <p>MaPaPis cobra una comisión sobre cada operación adjudicada, que se descuenta del cobro al momento de liberar los fondos a la Pyme. La comisión vigente se informa a la Pyme antes de aceptar la adjudicación. Operar fuera de la plataforma una vez adjudicada la oferta (cobrar por afuera, evitar el pago por Mercado Pago) constituye una violación de estos Términos y puede resultar en la suspensión o baja de la cuenta.</p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="font-display font-bold text-xl text-[var(--ink)]">5. Pagos y Mercado Pago</h2>
+          <p>Todos los pagos entre familias y Pymes se procesan exclusivamente vía Mercado Pago. MaPaPis no almacena datos de tarjetas, CBU/CVU ni credenciales bancarias. La acreditación, retenciones impositivas (IVA, IIBB, Ganancias), comisiones de Mercado Pago y plazos de liberación se rigen por los términos de Mercado Pago, que el usuario acepta separadamente al usar ese servicio.</p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="font-display font-bold text-xl text-[var(--ink)]">6. Obligaciones fiscales de la Pyme</h2>
+          <p>La Pyme es <span className="font-bold">la única responsable</span> de su situación fiscal: inscripción en AFIP y rentas provinciales, categorización (Monotributo / Responsable Inscripto), emisión de facturas tipo B o C según corresponda, y pago de impuestos derivados de las operaciones realizadas. MaPaPis no emite factura por la operación entre la Pyme y la familia: solo factura su propia comisión a la Pyme.</p>
+          <p>La familia tiene derecho a solicitar factura. La Pyme está obligada a emitirla. MaPaPis facilita el canal de contacto para esa solicitud, pero no se hace responsable de incumplimientos fiscales del vendedor.</p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="font-display font-bold text-xl text-[var(--ink)]">7. Información a AFIP y otras autoridades</h2>
+          <p>MaPaPis puede estar obligada, conforme a la <span className="font-bold">Resolución General AFIP 4622/2019</span> y normas conexas, a actuar como agente de información respecto de operaciones realizadas por terceros en la plataforma. Al registrarte como Pyme, aceptás que MaPaPis comparta con AFIP, ARBA, AGIP u otros organismos fiscales la información que esas normas exijan (CUIT, monto, fecha, contraparte). Esto no implica que MaPaPis sea agente de retención salvo que una norma específica así lo establezca.</p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="font-display font-bold text-xl text-[var(--ink)]">8. Responsabilidad por la entrega y calidad</h2>
+          <p>La Pyme es responsable de la calidad, idoneidad, plazo y modo de entrega de los bienes o servicios ofrecidos. La familia es responsable de proveer información correcta de entrega y de aceptar el producto al recibirlo. Cualquier reclamo por incumplimiento, defectos, demoras o disconformidad debe canalizarse en primera instancia entre la familia y la Pyme. MaPaPis puede mediar y, en su caso, retener fondos en disputa hasta resolver la situación, pero no garantiza la entrega ni reembolsa por cuenta propia salvo que así lo decida discrecionalmente como gesto comercial.</p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="font-display font-bold text-xl text-[var(--ink)]">9. Defensa del consumidor</h2>
+          <p>Los usuarios consumidores cuentan con los derechos previstos por la Ley 24.240 de Defensa del Consumidor y normas concordantes. Las disposiciones de estos Términos no limitan ni excluyen derechos de orden público que correspondan al consumidor.</p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="font-display font-bold text-xl text-[var(--ink)]">10. Datos personales</h2>
+          <p>MaPaPis recolecta y trata datos personales conforme a la Ley 25.326 de Protección de Datos Personales. Los datos que cargás (nombre, email, teléfono, CUIT, alumnos a tu cargo, DNI cuando aplica) se utilizan exclusivamente para operar la plataforma. No se venden a terceros. El DNI de los alumnos se usa internamente como clave de match entre tutores y nunca se muestra en pantalla a otras familias.</p>
+          <p>El usuario puede solicitar acceso, rectificación o supresión de sus datos contactando al canal de soporte de la plataforma.</p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="font-display font-bold text-xl text-[var(--ink)]">11. Conducta prohibida</h2>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>Compartir datos de contacto (teléfono, email, redes, CBU) en descripciones de ofertas o necesidades antes de la adjudicación.</li>
+            <li>Cobrar por fuera de Mercado Pago una vez adjudicada una oferta dentro de la plataforma.</li>
+            <li>Suplantar identidad o cargar datos falsos (CUIT ajeno, alumnos inexistentes, etc.).</li>
+            <li>Usar la plataforma para fines ilegales, fraudulentos o que vulneren derechos de terceros.</li>
+          </ul>
+          <p>El incumplimiento puede derivar en suspensión, baja de la cuenta y, según el caso, denuncia ante autoridades competentes.</p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="font-display font-bold text-xl text-[var(--ink)]">12. Limitación de responsabilidad</h2>
+          <p>MaPaPis se ofrece "tal cual está". No garantizamos disponibilidad ininterrumpida ni ausencia total de errores. En la máxima medida permitida por la ley, MaPaPis no responde por daños indirectos, lucro cesante, pérdida de datos o costos derivados de operaciones realizadas a través de la plataforma. Esta limitación no aplica a daños causados por dolo o culpa grave de MaPaPis ni a derechos irrenunciables del consumidor.</p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="font-display font-bold text-xl text-[var(--ink)]">13. Cambios en estos términos</h2>
+          <p>Podemos actualizar estos Términos. Si los cambios son materiales, te avisamos por la app o por email con al menos 10 días de anticipación. Si seguís usando la plataforma después de ese plazo, se entiende que aceptaste la nueva versión.</p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="font-display font-bold text-xl text-[var(--ink)]">14. Jurisdicción</h2>
+          <p>Estos Términos se rigen por las leyes de la República Argentina. Para cualquier conflicto, las partes se someten a los tribunales ordinarios con competencia en la Ciudad Autónoma de Buenos Aires, sin perjuicio de los fueros especiales que correspondan al consumidor.</p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="font-display font-bold text-xl text-[var(--ink)]">15. Contacto</h2>
+          <p>Para soporte, reclamos o ejercicio de derechos sobre tus datos personales: <span className="font-mono">soporte@mapapis.app</span> (provisorio mientras estamos en beta).</p>
+        </section>
+
+        <p className="text-[11px] text-[var(--ink)]/50 pt-4 border-t border-[var(--ink)]/15">
+          Este documento es una versión inicial pensada para la etapa beta del producto. Antes de salir a producción a escala, será revisado por asesoramiento legal y contable formal.
+        </p>
+
+        <div className="h-8"></div>
+      </div>
+    </div>
+  );
+}
+
 /* ===================== Perfil ===================== */
 function PerfilScreen({ profile, pyme, onProfileChange, onEditarPyme }) {
   const [editing, setEditing] = useState(false);
   const [nombre, setNombre] = useState(profile.nombre || "");
   const [saving, setSaving] = useState(false);
+  const [showLegal, setShowLegal] = useState(false);
   const [stats, setStats] = useState(null); // { rating, reviews, ofertasTotal, ofertasGanadas }
   const { showAlert, showConfirm } = useDialog();
 
@@ -4619,6 +4734,11 @@ function PerfilScreen({ profile, pyme, onProfileChange, onEditarPyme }) {
         </div>
       )}
 
+      {/* Legal */}
+      <button onClick={() => setShowLegal(true)} className="w-full py-3 bg-white text-[var(--ink)]/80 rounded-xl border-[1.5px] border-[var(--ink)]/30 uppercase tracking-wider text-[11px] font-bold mb-3">
+        Términos y Condiciones
+      </button>
+
       {/* Logout */}
       <button onClick={logout} className="btn-pop w-full py-3.5 bg-white text-[var(--ink)] font-extrabold rounded-xl border-[1.5px] border-[var(--ink)] uppercase tracking-wider text-sm flex items-center justify-center gap-2">
         <IconLogout className="w-4 h-4" /> Cerrar sesión
@@ -4627,6 +4747,8 @@ function PerfilScreen({ profile, pyme, onProfileChange, onEditarPyme }) {
       <div className="text-center text-[10px] text-[var(--ink)]/40 mt-8 uppercase tracking-widest">
         MaPaPis · Prototipo v0.2
       </div>
+
+      {showLegal && <LegalScreen onClose={() => setShowLegal(false)} />}
     </div>
   );
 }
