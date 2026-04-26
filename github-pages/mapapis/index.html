@@ -318,8 +318,11 @@ async function fetchContactoAdminGrupo(necesidadId) {
   return await sb.rpc("contacto_admin_grupo", { p_necesidad: necesidadId });
 }
 async function crearPreferenciaMP({ necesidadId, alumnoId = null }) {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) return { data: null, error: { message: "Sesión expirada — volvé a entrar" } };
   return await sb.functions.invoke("mp_create_preference", {
     body: { necesidad_id: necesidadId, alumno_id: alumnoId },
+    headers: { Authorization: `Bearer ${session.access_token}` },
   });
 }
 async function fetchPagosMP(necesidadId) {
@@ -567,6 +570,8 @@ const ROLES_INFO = {
 
 const fmt = (n) => "$" + new Intl.NumberFormat("es-AR").format(n);
 const fmtRange = (a, b) => `${fmt(a)} – ${fmt(b)}`;
+const fmtMoney = (centavos) => "$" + new Intl.NumberFormat("es-AR").format(Math.round(Number(centavos || 0) / 100));
+const fmtMoneyRange = (aC, bC) => `${fmtMoney(aC)} – ${fmtMoney(bC)}`;
 const fmtFechaHora = (iso) => {
   if (!iso) return "";
   try {
@@ -1939,7 +1944,7 @@ function MiOfertaCard({ oferta, onClick }) {
         <p className="text-[10px] uppercase tracking-wider font-bold text-[var(--ink)]/50">{n.categorias?.nombre || "—"} · {n.zona}</p>
         <h3 className="font-display font-bold text-lg mt-1 leading-tight">{n.titulo}</h3>
         <div className="mt-3 flex items-baseline justify-between gap-3">
-          <span className="font-mono font-extrabold text-xl">{fmt(Number(oferta.precio_total_centavos))}</span>
+          <span className="font-mono font-extrabold text-xl">{fmtMoney(oferta.precio_total_centavos)}</span>
           {oferta.tiempo_entrega_dias && (
             <span className="text-[10px] uppercase tracking-wider font-bold text-[var(--ink)]/60">{oferta.tiempo_entrega_dias} días</span>
           )}
@@ -2014,7 +2019,7 @@ function NecesidadCard({ n, onClick, mode }) {
         </div>
 
         <div className="mt-3 flex items-center justify-between">
-          <span className="font-mono text-sm font-bold">{n.presupuesto_min || n.presupuesto_max ? fmtRange(n.presupuesto_min, n.presupuesto_max) : "Sin presupuesto"}</span>
+          <span className="font-mono text-sm font-bold">{n.presupuesto_min || n.presupuesto_max ? fmtMoneyRange(n.presupuesto_min, n.presupuesto_max) : "Sin presupuesto"}</span>
           <IconArrowRight className="w-4 h-4 text-[var(--coral)]" />
         </div>
       </div>
@@ -2228,7 +2233,7 @@ function DetalleScreen({ necesidad: necProp, profile, onBack }) {
             <div className="mt-5 grid grid-cols-2 gap-3">
               <div>
                 <h3 className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/60">Presupuesto</h3>
-                <p className="font-mono text-sm font-bold mt-1">{n.presupuesto_min || n.presupuesto_max ? fmtRange(n.presupuesto_min, n.presupuesto_max) : "—"}</p>
+                <p className="font-mono text-sm font-bold mt-1">{n.presupuesto_min || n.presupuesto_max ? fmtMoneyRange(n.presupuesto_min, n.presupuesto_max) : "—"}</p>
               </div>
               <div>
                 <h3 className="text-[10px] font-bold uppercase tracking-wider text-[var(--ink)]/60">Modalidad</h3>
@@ -2763,11 +2768,11 @@ function PagosPanel({ necesidad: n, profile, ofertas, misAlumnos, inscripciones,
         <div className="text-[10px] font-bold uppercase tracking-wider text-white/60">Total adjudicado</div>
         <div className="text-[10px] font-bold uppercase tracking-wider text-white/60">{totalEsperados} {n.modalidad === "individual" ? "alumno" + (totalEsperados === 1 ? "" : "s") : "familia" + (totalEsperados === 1 ? "" : "s")}</div>
       </div>
-      <div className="font-mono font-extrabold text-2xl mt-1">{fmt(totalCentavos)}</div>
+      <div className="font-mono font-extrabold text-2xl mt-1">{fmtMoney(totalCentavos)}</div>
       {!isPyme && (
         <div className="mt-3 pt-3 border-t border-white/15 flex items-baseline justify-between">
           <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--sun)]">{n.modalidad === "individual" ? "Por alumno" : "Tu parte"}</span>
-          <span className="font-mono font-extrabold text-xl text-[var(--sun)]">{fmt(miParteCentavos)}</span>
+          <span className="font-mono font-extrabold text-xl text-[var(--sun)]">{fmtMoney(miParteCentavos)}</span>
         </div>
       )}
     </div>
@@ -2940,7 +2945,7 @@ function PymeOfertaPanel({ necesidad: n, profile, ofertas, loading, onChanged })
     if (leak) { setErr(LEAK_MSG[leak]); setEnviando(false); return; }
     const { error } = await crearOferta({
       necesidadId: n.id,
-      precioCentavos: Number(precio),
+      precioCentavos: Math.round(Number(precio) * 100),
       tiempoDias: dias ? Number(dias) : null,
       descripcion: desc.trim(),
     });
@@ -2961,7 +2966,7 @@ function PymeOfertaPanel({ necesidad: n, profile, ofertas, loading, onChanged })
         <h2 className="font-display font-bold text-xl mb-3">Tu oferta</h2>
         <div className="bg-[var(--sage)]/10 rounded-3xl border-[1.5px] border-[var(--sage)] p-4">
           <div className="flex items-baseline justify-between gap-3 mb-2">
-            <span className="font-mono font-extrabold text-2xl">{fmt(Number(miOferta.precio_total_centavos))}</span>
+            <span className="font-mono font-extrabold text-2xl">{fmtMoney(miOferta.precio_total_centavos)}</span>
             {miOferta.tiempo_entrega_dias && (
               <span className="text-[10px] uppercase tracking-wider font-bold text-[var(--ink)]/60">{miOferta.tiempo_entrega_dias} días</span>
             )}
@@ -3083,7 +3088,7 @@ function OfertaCard({ o, necesidad: n, misAlumnos, misVotos, onVote, onUnvote, e
   const { showAlert, showConfirm } = useDialog();
 
   const onAdjudicar = async () => {
-    if (!await showConfirm(`¿Adjudicar a "${pymeNombre}" por ${fmt(monto)}? Las demás ofertas quedan descartadas.`)) return;
+    if (!await showConfirm(`¿Adjudicar a "${pymeNombre}" por ${fmtMoney(monto)}? Las demás ofertas quedan descartadas.`)) return;
     setAdjudicandoBusy(true);
     const { error } = await adjudicarOferta(o.id);
     setAdjudicandoBusy(false);
@@ -3123,7 +3128,7 @@ function OfertaCard({ o, necesidad: n, misAlumnos, misVotos, onVote, onUnvote, e
           )}
         </div>
         <div className="text-right shrink-0">
-          <div className="font-mono font-extrabold text-xl">{fmt(monto)}</div>
+          <div className="font-mono font-extrabold text-xl">{fmtMoney(monto)}</div>
           {dias != null && <div className="text-[10px] uppercase tracking-wider text-[var(--ink)]/60">{dias} días</div>}
         </div>
       </div>
@@ -3334,8 +3339,8 @@ function PublicarScreen({ profile, grupoId, onChangeGrupo, onCancel, onPublicado
         }
       }
     }
-    const min = presupuestoMin ? Number(presupuestoMin) : null;
-    const max = presupuestoMax ? Number(presupuestoMax) : null;
+    const min = presupuestoMin ? Math.round(Number(presupuestoMin) * 100) : null;
+    const max = presupuestoMax ? Math.round(Number(presupuestoMax) * 100) : null;
     if (min != null && max != null && min > max) {
       setError("El mínimo no puede ser mayor que el máximo."); setEnviando(false); return;
     }
