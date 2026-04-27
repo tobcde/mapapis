@@ -1,9 +1,12 @@
 name: Deploy MaPaPis to GitHub Pages
 
 # Deploy combinado: app vieja (HTML estatico) + app nueva (Vite build).
-# Ambas conviven en el mismo gh-pages bajo subpaths distintos:
-#   tobcde.github.io/mapapis/       <- app vieja (intacta)
-#   tobcde.github.io/mapapis-next/  <- app nueva (Vite)
+# Ambas conviven en el mismo gh-pages:
+#   www.mapapis.com.ar/             <- app vieja (raiz, custom domain)
+#   www.mapapis.com.ar/mapapis-next/ <- app nueva (Vite)
+# Compatibilidad con github.io:
+#   tobcde.github.io/mapapis/       <- app vieja
+#   tobcde.github.io/mapapis/mapapis-next/ <- app nueva
 
 on:
   push:
@@ -60,18 +63,13 @@ jobs:
 
       - name: Stage combined deploy
         run: |
-          mkdir -p _site/mapapis _site/mapapis-next
-          cp -r github-pages/mapapis/. _site/mapapis/
+          mkdir -p _site/mapapis-next
+          # App vieja en la raiz: index.html, manifest, sw, icons quedan en /
+          cp -r github-pages/mapapis/. _site/
+          # App nueva en /mapapis-next/
           cp -r web/dist/. _site/mapapis-next/
-          # index.html en root con redirect a la app vieja (default)
-          cat > _site/index.html <<'EOF'
-          <!doctype html>
-          <meta charset="utf-8">
-          <title>MaPaPis</title>
-          <meta http-equiv="refresh" content="0; url=./mapapis/">
-          <link rel="canonical" href="./mapapis/">
-          <p>Redirigiendo a <a href="./mapapis/">MaPaPis</a>...</p>
-          EOF
+          # CNAME para custom domain GitHub Pages
+          echo "www.mapapis.com.ar" > _site/CNAME
 
       - uses: actions/configure-pages@v5
 
