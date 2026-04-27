@@ -16,6 +16,7 @@ import { useCerrarInscripcion } from '@/lib/mutations/useCerrarInscripcion';
 import { useInscribirAlumno } from '@/lib/mutations/useInscribirAlumno';
 import { useCrearOferta } from '@/lib/mutations/useCrearOferta';
 import { fmtMoney } from '@/utils/fmt';
+import { COMMISSION_PCT } from '@/lib/billing';
 import { estadoBadgeClass, estadoLabel, modoEntregaLabel, pymeAlias } from '@/utils/necesidad';
 import type {
   NecesidadRow,
@@ -573,9 +574,10 @@ function OfertaCardFamilia({
   const alias = pymeAlias(index);
   const esGanadora = oferta.estado === 'ganadora';
   const esDescartada = oferta.estado === 'descartada';
+  const totalConComisionOC = Math.round(oferta.precio_total_centavos * (1 + COMMISSION_PCT));
   const porFamiliaOC =
     necesidad.modalidad === 'individual' && inscriptosOC > 0
-      ? Math.round(oferta.precio_total_centavos / inscriptosOC)
+      ? Math.round(totalConComisionOC / inscriptosOC)
       : null;
 
   const handleVote = async (alumnoId: string, yaVoto: boolean) => {
@@ -651,17 +653,19 @@ function OfertaCardFamilia({
         </div>
         <div className="text-right shrink-0">
           <div className="font-mono font-extrabold text-xl">
-            {fmtMoney(oferta.precio_total_centavos)}
+            {fmtMoney(totalConComisionOC)}
+          </div>
+          <div className="text-[10px] text-ink/55 font-mono">
+            total grupo (incluye {Math.round(COMMISSION_PCT * 100)}% MaPaPis)
           </div>
           {porFamiliaOC != null && (
-            <div className="text-[10px] text-ink/65 font-mono mt-0.5">
+            <div className="text-[10px] text-ink/65 font-mono mt-0.5 font-bold">
               ≈ {fmtMoney(porFamiliaOC)} / familia
             </div>
           )}
           {oferta.precio_envio_centavos > 0 && (
             <div className="text-[10px] text-ink/55 font-mono mt-0.5">
-              {fmtMoney(oferta.precio_total_centavos - oferta.precio_envio_centavos)} +{' '}
-              {fmtMoney(oferta.precio_envio_centavos)} envío
+              incluye {fmtMoney(oferta.precio_envio_centavos)} de envío
             </div>
           )}
         </div>
@@ -829,18 +833,24 @@ function PanelOfertaPyme({
   if (miOferta) {
     const envio = miOferta.precio_envio_centavos ?? 0;
     const retiro = miOferta.precio_total_centavos - envio;
+    const totalConComision = Math.round(miOferta.precio_total_centavos * (1 + COMMISSION_PCT));
     const porFamilia =
       necesidad.modalidad === 'individual' && inscriptos > 0
-        ? Math.round(miOferta.precio_total_centavos / inscriptos)
+        ? Math.round(totalConComision / inscriptos)
         : null;
     return (
       <section className="space-y-3">
         <h2 className="font-display font-bold text-xl">Tu oferta</h2>
         <div className="bg-sage/10 rounded-3xl border-[1.5px] border-sage p-4 space-y-2">
           <div className="flex items-baseline justify-between gap-3">
-            <span className="font-mono font-extrabold text-2xl">
-              {fmtMoney(miOferta.precio_total_centavos)}
-            </span>
+            <div>
+              <span className="font-mono font-extrabold text-2xl">
+                {fmtMoney(miOferta.precio_total_centavos)}
+              </span>
+              <span className="text-[10px] text-ink/55 ml-2 uppercase tracking-wider font-bold">
+                neto
+              </span>
+            </div>
             {miOferta.tiempo_entrega_dias != null && (
               <span className="text-[10px] uppercase tracking-wider font-bold text-ink/60">
                 {miOferta.tiempo_entrega_dias === 0 ? 'inmediato' : `${miOferta.tiempo_entrega_dias} días`}
@@ -852,6 +862,9 @@ function PanelOfertaPyme({
               {fmtMoney(retiro)} retiro + {fmtMoney(envio)} envío
             </p>
           )}
+          <p className="text-[11px] text-ink/55 font-mono">
+            Familias pagan {fmtMoney(totalConComision)} (incluye comisión {Math.round(COMMISSION_PCT * 100)}%)
+          </p>
           {porFamilia != null && (
             <p className="text-[11px] text-ink/55 font-mono">
               ≈ {fmtMoney(porFamilia)} / familia ({inscriptos} inscripto{inscriptos === 1 ? '' : 's'})
@@ -945,21 +958,38 @@ function PanelOfertaPyme({
             )}
 
             {totalNum > 0 && (
-              <div className="rounded-xl bg-ink text-sun px-3 py-2 space-y-1">
+              <div className="rounded-xl bg-ink text-sun px-3 py-2.5 space-y-1.5">
                 <div className="text-sm flex items-baseline justify-between">
                   <span className="text-[10px] font-bold uppercase tracking-wider opacity-80">
-                    Total de tu oferta
+                    Vos cobrás (neto)
                   </span>
                   <span className="font-mono font-extrabold">${totalNum.toLocaleString('es-AR')}</span>
                 </div>
+                <div className="text-[10px] flex items-baseline justify-between opacity-65">
+                  <span>+ Comisión MaPaPis ({Math.round(COMMISSION_PCT * 100)}%)</span>
+                  <span className="font-mono">
+                    ${Math.round(totalNum * COMMISSION_PCT).toLocaleString('es-AR')}
+                  </span>
+                </div>
+                <div className="border-t border-sun/20 pt-1.5 text-sm flex items-baseline justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-wider opacity-80">
+                    Total para las familias
+                  </span>
+                  <span className="font-mono font-extrabold">
+                    ${Math.round(totalNum * (1 + COMMISSION_PCT)).toLocaleString('es-AR')}
+                  </span>
+                </div>
                 {necesidad.modalidad === 'individual' && inscriptos > 0 && (
-                  <div className="text-[10px] flex items-baseline justify-between opacity-75">
+                  <div className="text-[10px] flex items-baseline justify-between opacity-65">
                     <span>≈ por familia ({inscriptos} inscripto{inscriptos === 1 ? '' : 's'})</span>
                     <span className="font-mono">
-                      ${Math.round(totalNum / inscriptos).toLocaleString('es-AR')}
+                      ${Math.round(totalNum * (1 + COMMISSION_PCT) / inscriptos).toLocaleString('es-AR')}
                     </span>
                   </div>
                 )}
+                <div className="text-[9px] opacity-55 italic mt-1">
+                  + fee de MP si la familia paga con tarjeta (la cobra MP al pagador, no a vos).
+                </div>
               </div>
             )}
 
