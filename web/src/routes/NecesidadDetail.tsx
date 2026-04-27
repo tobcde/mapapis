@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { Shell } from '@/components/Shell';
 import { Button, useDialog } from '@/components/ui';
@@ -890,12 +890,33 @@ function PanelOfertaPyme({
 
             {/* Variantes — opcional. Si la pyme carga al menos una, el precio retiro
                 se deriva de la suma. Si no carga ninguna, aparece el input simple. */}
+            {/* Si la necesidad tiene composicion, mostramos atajos por item */}
+            {necesidad.composicion && necesidad.composicion.length > 0 && (
+              <ItemsDelPedido
+                composicion={necesidad.composicion}
+                variantes={variantes}
+                onCotizarItem={(nombreItem) => {
+                  setVariantes([
+                    ...variantes,
+                    {
+                      ...emptyVariante(),
+                      nombre: nombreItem,
+                    },
+                  ]);
+                }}
+              />
+            )}
+
             <div>
               <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-1">
-                Variantes del producto (opcional)
+                {necesidad.composicion && necesidad.composicion.length > 0
+                  ? 'Tus variantes cotizadas'
+                  : 'Variantes del producto (opcional)'}
               </span>
               <span className="block text-[10px] text-ink/55 mb-2">
-                Si tenés varias opciones (ej: tapa dura $800, tapa flexible $500), cargá cada una con su precio. La familia las ve y elige. Si es un solo producto, dejá vacío y poné el precio total abajo.
+                {necesidad.composicion && necesidad.composicion.length > 0
+                  ? 'Cada una con su precio. Podés ofrecer varias por item del pedido (ej. dos marcas distintas) o dejar items sin cotizar.'
+                  : 'Si tenés varias opciones (ej: tapa dura $800, tapa flexible $500), cargá cada una con su precio. La familia las ve y elige. Si es un solo producto, dejá vacío y poné el precio total abajo.'}
               </span>
               <VariantesEditor
                 items={variantes}
@@ -1265,6 +1286,66 @@ function VariantesGallery({ variantes }: { variantes: OfertaVariante[] }) {
   );
 }
 
+// ─── ItemsDelPedido (atajos para cotizar items de la composición) ────────────
+
+function ItemsDelPedido({
+  composicion,
+  variantes,
+  onCotizarItem,
+}: {
+  composicion: ComposicionItem[];
+  variantes: VarianteRow[];
+  onCotizarItem: (nombre: string) => void;
+}) {
+  // Match aproximado: cuántas variantes ya cargadas tienen el nombre del item
+  // como prefijo (case-insensitive). Best-effort, la pyme puede renombrar.
+  const cuentaPorItem = (nombreItem: string) =>
+    variantes.filter((v) =>
+      v.nombre.trim().toLowerCase().startsWith(nombreItem.trim().toLowerCase()),
+    ).length;
+
+  return (
+    <div className="rounded-2xl border-[1.5px] border-ink/15 bg-mist/30 p-3 space-y-2">
+      <div className="text-[10px] font-bold uppercase tracking-wider text-ink/60">
+        Items del pedido — cotizá cada uno
+      </div>
+      <ul className="space-y-1.5">
+        {composicion.map((it, i) => {
+          const cotizado = cuentaPorItem(it.nombre);
+          return (
+            <li
+              key={i}
+              className="flex items-center gap-2 bg-white rounded-lg border border-ink/10 px-3 py-2"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="font-bold text-sm truncate">{it.nombre}</div>
+                <div className="text-[10px] text-ink/55 font-mono">
+                  {it.cantidad} × alumno
+                </div>
+              </div>
+              {cotizado > 0 && (
+                <span className="text-[10px] font-bold uppercase tracking-wider text-sage shrink-0">
+                  ✓ {cotizado} cotizada{cotizado === 1 ? '' : 's'}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => { onCotizarItem(it.nombre); }}
+                className="shrink-0 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg bg-coral text-white hover:bg-coral/85 transition-colors"
+              >
+                + Cotizar
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="text-[10px] text-ink/55 italic">
+        Tocá &ldquo;+ Cotizar&rdquo; para ofrecer una variante para ese item. Podés cargar varias para el mismo (distintas marcas/modelos).
+      </p>
+    </div>
+  );
+}
+
 // ─── VariantesEditor ──────────────────────────────────────────────────────────
 
 interface VarianteRow {
@@ -1303,6 +1384,15 @@ function VariantesEditor({
   necesidadId: string;
 }) {
   const [expanded, setExpanded] = useState<number | null>(null);
+  // Cuando crece el array desde afuera (ej. ItemsDelPedido → "+ Cotizar"),
+  // auto-expandir la nueva variante para que la pyme vea precio/foto al toque.
+  const prevLen = useRef(items.length);
+  useEffect(() => {
+    if (items.length > prevLen.current) {
+      setExpanded(items.length - 1);
+    }
+    prevLen.current = items.length;
+  }, [items.length]);
 
   const update = (i: number, patch: Partial<VarianteRow>) => {
     onChange(items.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
