@@ -64,7 +64,10 @@ export function NecesidadCard({ n, mode, to }: Props) {
   const rango = n.grupos?.rango_familias;
   const inscriptosCount = n.necesidad_inscripciones?.[0]?.count ?? 0;
 
-  const dest = to ?? `/grupos/${n.grupo_id}/necesidades/${n.id}`;
+  // Si el feed (pyme) no expone grupo_id (necesidades anonimizadas),
+  // caemos al route corto que tampoco lo necesita.
+  const dest =
+    to ?? (n.grupo_id ? `/grupos/${n.grupo_id}/necesidades/${n.id}` : `/necesidades/${n.id}`);
 
   const handleClick = () => { void navigate(dest); };
 

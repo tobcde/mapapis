@@ -92,6 +92,16 @@ export function App() {
               }
             />
             <Route
+              path="/necesidades/:necesidadId"
+              element={
+                <AuthGuard>
+                  <RequireProfile>
+                    <NecesidadDetail />
+                  </RequireProfile>
+                </AuthGuard>
+              }
+            />
+            <Route
               path="/feed"
               element={
                 <AuthGuard>

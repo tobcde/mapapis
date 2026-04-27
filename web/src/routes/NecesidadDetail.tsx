@@ -1035,10 +1035,14 @@ export function NecesidadDetail() {
           </div>
           <button
             type="button"
-            onClick={() => { void navigate(grupoId ? `/grupos/${grupoId}` : '/grupos'); }}
+            onClick={() => {
+              void navigate(
+                isPyme ? '/feed' : grupoId ? `/grupos/${grupoId}` : '/grupos',
+              );
+            }}
             className="text-[11px] font-bold uppercase tracking-wider text-ink/60 hover:text-ink"
           >
-            ← Volver al grupo
+            {isPyme ? '← Volver al feed' : '← Volver al grupo'}
           </button>
         </div>
       </Shell>
@@ -1057,10 +1061,10 @@ export function NecesidadDetail() {
       <div className="space-y-5 anim-in">
         {/* Volver */}
         <Link
-          to={grupoId ? `/grupos/${grupoId}` : '/grupos'}
+          to={isPyme ? '/feed' : grupoId ? `/grupos/${grupoId}` : '/grupos'}
           className="text-[11px] font-bold uppercase tracking-wider text-ink/60 hover:text-ink"
         >
-          ← Volver al grupo
+          {isPyme ? '← Volver al feed' : '← Volver al grupo'}
         </Link>
 
         {/* Header */}

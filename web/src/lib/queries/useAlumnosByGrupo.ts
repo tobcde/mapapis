@@ -19,12 +19,18 @@ export const alumnosByGrupoKey = (grupoId: string | undefined) =>
  * Devuelve todos los alumnos de un grupo con sus tutores registrados.
  * Ordena por nombre para facilitar la búsqueda.
  */
+/** Trata "undefined", "null" y vacío como falsy para evitar fetches con grupo_id basura. */
+function isValidGrupoId(id: string | undefined): id is string {
+  return Boolean(id) && id !== 'undefined' && id !== 'null';
+}
+
 export function useAlumnosByGrupo(grupoId: string | undefined) {
+  const valid = isValidGrupoId(grupoId);
   return useQuery<AlumnoConTutores[]>({
     queryKey: alumnosByGrupoKey(grupoId),
-    enabled: Boolean(grupoId),
+    enabled: valid,
     queryFn: async () => {
-      if (!grupoId) return [];
+      if (!valid) return [];
       const { data, error } = await supabase
         .from('alumnos')
         .select('*, alumno_tutores(profile_id, relacion, profiles(id, nombre, email))')
