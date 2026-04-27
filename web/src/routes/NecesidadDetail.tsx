@@ -90,7 +90,7 @@ const INPUT_CLS =
 
 // ─── Sección info de la necesidad ─────────────────────────────────────────────
 
-function InfoCard({ n }: { n: NecesidadRow }) {
+function InfoCard({ n, isPyme = false }: { n: NecesidadRow; isPyme?: boolean }) {
   const progreso = useNecesidadProgreso(n.id);
   const inscriptos = progreso.data?.inscriptos ?? 0;
   return (
@@ -128,17 +128,19 @@ function InfoCard({ n }: { n: NecesidadRow }) {
           </div>
         )}
 
-        {/* Presupuesto + Modalidad */}
-        <div className="grid grid-cols-2 gap-3 pt-1">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-ink/60">Presupuesto</p>
-            <PresupuestoDisplay
-              maxCentavos={n.presupuesto_max_centavos}
-              minCentavos={n.presupuesto_min_centavos}
-              modalidad={n.modalidad}
-              inscriptos={inscriptos}
-            />
-          </div>
+        {/* Presupuesto (solo familia/admin) + Modalidad */}
+        <div className={`grid ${isPyme ? 'grid-cols-1' : 'grid-cols-2'} gap-3 pt-1`}>
+          {!isPyme && (
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-ink/60">Presupuesto</p>
+              <PresupuestoDisplay
+                maxCentavos={n.presupuesto_max_centavos}
+                minCentavos={n.presupuesto_min_centavos}
+                modalidad={n.modalidad}
+                inscriptos={inscriptos}
+              />
+            </div>
+          )}
           <div>
             <p className="text-[10px] font-bold uppercase tracking-wider text-ink/60">Modalidad</p>
             <p className="text-sm font-semibold mt-1 capitalize">
@@ -259,47 +261,24 @@ function ProgresoChip({
 function ResumenPyme({
   necesidad,
   inscriptos,
-  totalAlumnos,
 }: {
   necesidad: NecesidadRow;
   inscriptos: number;
-  totalAlumnos: number | null;
 }) {
-  // Para techo proyectado, usamos total_alumnos si está disponible (el grupo
-  // tiene N alumnos, todos podrían anotarse). Si no, usamos inscriptos actuales.
-  const techoAlumnos =
-    necesidad.modalidad === 'individual'
-      ? (totalAlumnos ?? inscriptos)
-      : 1;
   const compFloor = necesidad.composicion ?? [];
-  const totalUnidadesProyectado = compFloor.reduce(
-    (acc, it) => acc + it.cantidad * techoAlumnos,
-    0,
-  );
   const totalUnidadesActual = compFloor.reduce(
     (acc, it) => acc + it.cantidad * (necesidad.modalidad === 'individual' ? inscriptos : 1),
     0,
   );
-
-  const presupuestoMax = necesidad.presupuesto_max_centavos;
-  const presupuestoTechoCentavos =
-    presupuestoMax != null && necesidad.modalidad === 'individual'
-      ? presupuestoMax * techoAlumnos
-      : presupuestoMax;
-  const presupuestoActualCentavos =
-    presupuestoMax != null && necesidad.modalidad === 'individual'
-      ? presupuestoMax * Math.max(inscriptos, 0)
-      : presupuestoMax;
-
   const fechaEntrega = necesidad.fecha_limite_entrega;
 
   return (
     <div className="bg-ink rounded-3xl border-[1.5px] border-ink p-5 text-sun shadow-pop space-y-4">
       <div className="text-[10px] font-bold uppercase tracking-wider text-sun/70">
-        Resumen para tu oferta
+        Datos del pedido
       </div>
 
-      {/* Fecha de entrega — la más importante para la pyme */}
+      {/* Fecha de entrega — la mas importante para la pyme */}
       {fechaEntrega && (
         <div>
           <div className="text-[10px] font-bold uppercase tracking-wider text-sun/65 mb-1">
@@ -311,59 +290,21 @@ function ResumenPyme({
         </div>
       )}
 
-      {/* Totales del pedido (si hay composicion) */}
+      {/* Cantidad real confirmada (no techo, no proyeccion) */}
       {compFloor.length > 0 && (
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <div className="text-[10px] font-bold uppercase tracking-wider text-sun/65">
-              Pedido máximo
-            </div>
-            <div className="font-mono font-extrabold text-lg leading-tight mt-0.5">
-              {totalUnidadesProyectado} u
-            </div>
-            {necesidad.modalidad === 'individual' && totalAlumnos != null && (
-              <div className="text-[10px] text-sun/55">
-                si se anotan los {totalAlumnos}
-              </div>
-            )}
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-sun/65 mb-1">
+            Cantidad firme a entregar
           </div>
-          <div>
-            <div className="text-[10px] font-bold uppercase tracking-wider text-sun/65">
-              Confirmado hoy
-            </div>
-            <div className="font-mono font-extrabold text-lg leading-tight mt-0.5">
-              {totalUnidadesActual} u
-            </div>
-            <div className="text-[10px] text-sun/55">
-              {inscriptos} inscripto{inscriptos === 1 ? '' : 's'}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Presupuesto total */}
-      {presupuestoMax != null && (
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <div className="text-[10px] font-bold uppercase tracking-wider text-sun/65">
-              Presupuesto máx
-            </div>
-            <div className="font-mono font-bold text-base mt-0.5">
-              {presupuestoTechoCentavos != null ? fmtMoney(presupuestoTechoCentavos) : '—'}
-            </div>
-            {necesidad.modalidad === 'individual' && (
-              <div className="text-[10px] text-sun/55">techo proyectado</div>
-            )}
+          <div className="font-mono font-extrabold text-2xl leading-tight">
+            {totalUnidadesActual} {totalUnidadesActual === 1 ? 'unidad' : 'unidades'}
           </div>
           {necesidad.modalidad === 'individual' && (
-            <div>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-sun/65">
-                Presupuesto actual
-              </div>
-              <div className="font-mono font-bold text-base mt-0.5">
-                {presupuestoActualCentavos != null ? fmtMoney(presupuestoActualCentavos) : '—'}
-              </div>
-              <div className="text-[10px] text-sun/55">con inscriptos hoy</div>
+            <div className="text-[10px] text-sun/55 mt-0.5">
+              {inscriptos} alumno{inscriptos === 1 ? '' : 's'} inscripto{inscriptos === 1 ? '' : 's'}
+              {necesidad.fecha_limite_inscripcion
+                ? ` · cierre ${fmtFecha(necesidad.fecha_limite_inscripcion)}`
+                : ''}
             </div>
           )}
         </div>
@@ -780,8 +721,6 @@ function PanelOfertaPyme({
   pymeId: string;
 }) {
   const crearOferta = useCrearOferta();
-  const progreso = useNecesidadProgreso(necesidad.id);
-  const inscriptos = progreso.data?.inscriptos ?? 0;
   const { showAlert } = useDialog();
   const miOferta = ofertas.find((o) => o.pyme_id === pymeId);
   const [showForm, setShowForm] = useState(!miOferta);
@@ -833,11 +772,7 @@ function PanelOfertaPyme({
   if (miOferta) {
     const envio = miOferta.precio_envio_centavos ?? 0;
     const retiro = miOferta.precio_total_centavos - envio;
-    const totalConComision = Math.round(miOferta.precio_total_centavos * (1 + COMMISSION_PCT));
-    const porFamilia =
-      necesidad.modalidad === 'individual' && inscriptos > 0
-        ? Math.round(totalConComision / inscriptos)
-        : null;
+    const comision = Math.round(miOferta.precio_total_centavos * COMMISSION_PCT);
     return (
       <section className="space-y-3">
         <h2 className="font-display font-bold text-xl">Tu oferta</h2>
@@ -863,13 +798,8 @@ function PanelOfertaPyme({
             </p>
           )}
           <p className="text-[11px] text-ink/55 font-mono">
-            Familias pagan {fmtMoney(totalConComision)} (incluye comisión {Math.round(COMMISSION_PCT * 100)}%)
+            − comisión MaPaPis ({Math.round(COMMISSION_PCT * 100)}%): {fmtMoney(comision)}
           </p>
-          {porFamilia != null && (
-            <p className="text-[11px] text-ink/55 font-mono">
-              ≈ {fmtMoney(porFamilia)} / familia ({inscriptos} inscripto{inscriptos === 1 ? '' : 's'})
-            </p>
-          )}
           <div className="flex items-center gap-2 flex-wrap text-[11px]">
             <span className="text-ink/70">{modoEntregaLabel(miOferta.modo_entrega)}</span>
             {miOferta.retiro_inmediato && (
@@ -966,29 +896,14 @@ function PanelOfertaPyme({
                   <span className="font-mono font-extrabold">${totalNum.toLocaleString('es-AR')}</span>
                 </div>
                 <div className="text-[10px] flex items-baseline justify-between opacity-65">
-                  <span>+ Comisión MaPaPis ({Math.round(COMMISSION_PCT * 100)}%)</span>
+                  <span>− Comisión MaPaPis ({Math.round(COMMISSION_PCT * 100)}%)</span>
                   <span className="font-mono">
                     ${Math.round(totalNum * COMMISSION_PCT).toLocaleString('es-AR')}
                   </span>
                 </div>
-                <div className="border-t border-sun/20 pt-1.5 text-sm flex items-baseline justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider opacity-80">
-                    Total para las familias
-                  </span>
-                  <span className="font-mono font-extrabold">
-                    ${Math.round(totalNum * (1 + COMMISSION_PCT)).toLocaleString('es-AR')}
-                  </span>
-                </div>
-                {necesidad.modalidad === 'individual' && inscriptos > 0 && (
-                  <div className="text-[10px] flex items-baseline justify-between opacity-65">
-                    <span>≈ por familia ({inscriptos} inscripto{inscriptos === 1 ? '' : 's'})</span>
-                    <span className="font-mono">
-                      ${Math.round(totalNum * (1 + COMMISSION_PCT) / inscriptos).toLocaleString('es-AR')}
-                    </span>
-                  </div>
-                )}
                 <div className="text-[9px] opacity-55 italic mt-1">
-                  + fee de MP si la familia paga con tarjeta (la cobra MP al pagador, no a vos).
+                  La comisión la pagan las familias por encima de tu precio. La fee de MP por
+                  tarjeta también la cobra MP al pagador, no a vos.
                 </div>
               </div>
             )}
@@ -1170,14 +1085,13 @@ export function NecesidadDetail() {
         </div>
 
         {/* Info */}
-        <InfoCard n={n} />
+        <InfoCard n={n} isPyme={isPyme} />
 
-        {/* Resumen pyme — fecha entrega + total proyectado + presupuesto total */}
+        {/* Resumen pyme — fecha entrega + cantidad firme a entregar */}
         {isPyme && (
           <ResumenPyme
             necesidad={n}
             inscriptos={progreso.data?.inscriptos ?? 0}
-            totalAlumnos={progreso.data?.total_alumnos ?? null}
           />
         )}
 
