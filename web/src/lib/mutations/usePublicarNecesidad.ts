@@ -1,6 +1,12 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import type { NecesidadRow, NecesidadInsert, NecesidadModalidad, Json } from '@/lib/database.types';
+import type {
+  NecesidadRow,
+  NecesidadInsert,
+  NecesidadModalidad,
+  ComposicionItem,
+  Json,
+} from '@/lib/database.types';
 import { useSessionStore } from '@/stores/session';
 import { useProfile } from '@/lib/queries/useProfile';
 import { feedFamiliaQueryKey } from '@/lib/queries/useFeedFamilia';
@@ -15,6 +21,7 @@ export interface PublicarNecesidadInput {
   campos: Json;
   modalidad: NecesidadModalidad;
   cantidadPorAlumno?: number | null;
+  composicion?: ComposicionItem[] | null;
   presupuestoMinCentavos?: number | null;
   presupuestoMaxCentavos?: number | null;
   fechaLimiteInscripcion?: string | null;
@@ -59,6 +66,7 @@ export function usePublicarNecesidad() {
         zona: input.zona,
         modalidad: input.modalidad,
         cantidad_por_alumno: input.cantidadPorAlumno ?? null,
+        composicion: input.composicion && input.composicion.length > 0 ? input.composicion : null,
         presupuesto_min_centavos: input.presupuestoMinCentavos ?? null,
         presupuesto_max_centavos: input.presupuestoMaxCentavos ?? null,
         fecha_limite_inscripcion: input.fechaLimiteInscripcion ?? null,

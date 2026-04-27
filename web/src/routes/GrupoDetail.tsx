@@ -9,6 +9,7 @@ import { useNecesidadesByGrupo } from '@/lib/queries/useNecesidadesByGrupo';
 import { useMiembros } from '@/lib/queries/useMiembros';
 import { useAlumnosByGrupo } from '@/lib/queries/useAlumnosByGrupo';
 import { useGrupoAdmin } from '@/lib/mutations/useGrupoAdmin';
+import { CalendarioCumples } from '@/components/CalendarioCumples';
 import { fmtMoney } from '@/utils/fmt';
 import { estadoBadgeClass, estadoLabel } from '@/utils/necesidad';
 import type { NecesidadRow, RolEnGrupo, GrupoRow } from '@/lib/database.types';
@@ -140,9 +141,12 @@ function InviteCard({
 // ─── NecesidadRow card ────────────────────────────────────────────────────────
 
 function NecesidadItem({ n, grupoId }: { n: NecesidadRow; grupoId: string }) {
+  const sufijo = n.modalidad === 'individual' ? ' /alumno' : '';
   const presu =
-    n.presupuesto_min_centavos != null && n.presupuesto_max_centavos != null
-      ? `${fmtMoney(n.presupuesto_min_centavos)} – ${fmtMoney(n.presupuesto_max_centavos)}`
+    n.presupuesto_max_centavos != null
+      ? n.presupuesto_min_centavos != null
+        ? `${fmtMoney(n.presupuesto_min_centavos)} – ${fmtMoney(n.presupuesto_max_centavos)}${sufijo}`
+        : `Hasta ${fmtMoney(n.presupuesto_max_centavos)}${sufijo}`
       : null;
 
   return (
@@ -323,6 +327,9 @@ export function GrupoDetail() {
             </div>
           </Link>
         )}
+
+        {/* Próximos cumpleaños del grupo */}
+        <CalendarioCumples grupoId={id} />
 
         {/* Necesidades */}
         <section className="space-y-3">

@@ -25,6 +25,7 @@ export type ProfileRow = {
   telefono_verificado: boolean | null;
   terms_version_aceptada: string | null;
   terms_accepted_at: string | null;
+  alias_mp: string | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -38,6 +39,7 @@ export type ProfileInsert = {
   telefono_verificado?: boolean | null;
   terms_version_aceptada?: string | null;
   terms_accepted_at?: string | null;
+  alias_mp?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -51,6 +53,7 @@ export type ProfileUpdate = {
   telefono_verificado?: boolean | null;
   terms_version_aceptada?: string | null;
   terms_accepted_at?: string | null;
+  alias_mp?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -129,6 +132,22 @@ export type NecesidadEstado =
 
 export type NecesidadModalidad = 'grupal' | 'individual';
 
+/**
+ * Item del desglose estructurado del pedido. Si modalidad=individual, la
+ * cantidad es por alumno (se multiplica por inscriptos). Si modalidad=grupal,
+ * la cantidad es total para todo el grupo.
+ *
+ * `descripcion`, `foto_url` y `link_url` son opcionales — la pyme puede
+ * usarlos para ver exactamente qué producto se pide.
+ */
+export interface ComposicionItem {
+  nombre: string;
+  cantidad: number;
+  descripcion?: string | null;
+  foto_url?: string | null;
+  link_url?: string | null;
+}
+
 export type NecesidadRow = {
   id: string;
   grupo_id: string;
@@ -147,6 +166,7 @@ export type NecesidadRow = {
   link_referencia: string | null;
   modalidad: NecesidadModalidad;
   cantidad_por_alumno: number | null;
+  composicion: ComposicionItem[] | null;
   estado: NecesidadEstado;
   cap_ofertas: number;
   ofertas_count: number;
@@ -173,6 +193,7 @@ export type NecesidadInsert = {
   link_referencia?: string | null;
   modalidad?: NecesidadModalidad;
   cantidad_por_alumno?: number | null;
+  composicion?: ComposicionItem[] | null;
   estado?: NecesidadEstado;
   cap_ofertas?: number;
   foto_url?: string | null;
@@ -197,15 +218,33 @@ export type NecesidadUpdate = Partial<NecesidadRow>;
 export type OfertaEstado = 'presentada' | 'ganadora' | 'descartada' | 'retirada';
 export type ModoEntrega = 'retiro' | 'envio' | 'ambos';
 
+/**
+ * Variante de producto dentro de una oferta. La pyme puede ofrecer varias
+ * versiones del mismo producto (ej. "cuaderno tapa dura" + "cuaderno tapa
+ * flexible") con su propio precio, foto y descripción. La familia ve todas
+ * y compara.
+ */
+export interface OfertaVariante {
+  nombre: string;
+  precio_centavos: number;
+  cantidad?: number;
+  descripcion?: string | null;
+  foto_url?: string | null;
+  link_url?: string | null;
+}
+
 export type OfertaRow = {
   id: string;
   necesidad_id: string;
   pyme_id: string;
   precio_total_centavos: number;
+  precio_envio_centavos: number;
+  retiro_inmediato: boolean;
   descripcion: string;
   tiempo_entrega_dias: number | null;
   estado: OfertaEstado;
   modo_entrega: ModoEntrega | null;
+  variantes: OfertaVariante[];
   created_at: string | null;
 };
 
@@ -214,10 +253,13 @@ export type OfertaInsert = {
   necesidad_id: string;
   pyme_id: string;
   precio_total_centavos: number;
+  precio_envio_centavos?: number;
+  retiro_inmediato?: boolean;
   descripcion: string;
   tiempo_entrega_dias?: number | null;
   estado?: OfertaEstado;
   modo_entrega?: ModoEntrega | null;
+  variantes?: OfertaVariante[];
 };
 
 export type OfertaUpdate = Partial<OfertaRow>;
@@ -229,6 +271,7 @@ export type AlumnoRow = {
   grupo_id: string;
   nombre: string;
   dni: string | null;
+  fecha_nacimiento: string | null;
   created_at: string | null;
 };
 
@@ -237,12 +280,26 @@ export type AlumnoInsert = {
   grupo_id: string;
   nombre: string;
   dni?: string | null;
+  fecha_nacimiento?: string | null;
 };
+
+export type ProximoCumple = {
+  alumno_id: string;
+  grupo_id: string;
+  nombre: string;
+  fecha_nacimiento: string;
+  proximo_cumple: string;
+  dias_para_cumple: number;
+  edad_que_cumple: number;
+};
+
+export type RelacionTutor = 'padre' | 'madre' | 'tutor' | 'encargado';
 
 export type AlumnoTutorRow = {
   id: string;
   alumno_id: string;
   profile_id: string;
+  relacion: RelacionTutor;
   created_at: string | null;
 };
 
@@ -384,6 +441,10 @@ export type Database = {
         Row: NecesidadPublicaRow;
         Relationships: [];
       };
+      proximos_cumples: {
+        Row: ProximoCumple;
+        Relationships: [];
+      };
     };
     Functions: {
       crear_grupo: {
@@ -440,6 +501,9 @@ export type Database = {
           p_tiempo_dias: number | null;
           p_descripcion: string;
           p_modo_entrega?: string;
+          p_precio_envio_centavos?: number;
+          p_retiro_inmediato?: boolean;
+          p_variantes?: OfertaVariante[];
         };
         Returns: void;
       };
@@ -463,15 +527,37 @@ export type Database = {
         Returns: void;
       };
       alumno_create_with_tutor: {
-        Args: { p_grupo: string; p_nombre: string; p_dni?: string | null };
+        Args: {
+          p_grupo: string;
+          p_nombre: string;
+          p_dni?: string | null;
+          p_relacion?: RelacionTutor;
+          p_fecha_nacimiento?: string | null;
+        };
         Returns: AlumnoRow[];
+      };
+      alumno_set_fecha_nacimiento: {
+        Args: { p_alumno: string; p_fecha: string | null };
+        Returns: void;
+      };
+      mi_mp_linked: {
+        Args: Record<string, never>;
+        Returns: { linked: boolean; mp_user_id: string | null; expires_at: string | null }[];
+      };
+      mi_mp_unlink: {
+        Args: Record<string, never>;
+        Returns: void;
       };
       alumnos_merge: {
         Args: { p_alumno_keep: string; p_alumno_merge: string };
         Returns: void;
       };
       alumno_join_as_tutor: {
-        Args: { p_alumno: string };
+        Args: { p_alumno: string; p_relacion?: RelacionTutor };
+        Returns: void;
+      };
+      alumno_set_mi_relacion: {
+        Args: { p_alumno: string; p_relacion: RelacionTutor };
         Returns: void;
       };
       alumno_leave_as_tutor: {
