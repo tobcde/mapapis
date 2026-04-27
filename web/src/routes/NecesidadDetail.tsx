@@ -567,10 +567,16 @@ function OfertaCardFamilia({
 }) {
   const { vote, unvote } = useVoteOferta();
   const adjudicar = useAdjudicarOferta();
+  const progresoOC = useNecesidadProgreso(necesidad.id);
+  const inscriptosOC = progresoOC.data?.inscriptos ?? 0;
   const { showConfirm, showAlert } = useDialog();
   const alias = pymeAlias(index);
   const esGanadora = oferta.estado === 'ganadora';
   const esDescartada = oferta.estado === 'descartada';
+  const porFamiliaOC =
+    necesidad.modalidad === 'individual' && inscriptosOC > 0
+      ? Math.round(oferta.precio_total_centavos / inscriptosOC)
+      : null;
 
   const handleVote = async (alumnoId: string, yaVoto: boolean) => {
     try {
@@ -647,6 +653,11 @@ function OfertaCardFamilia({
           <div className="font-mono font-extrabold text-xl">
             {fmtMoney(oferta.precio_total_centavos)}
           </div>
+          {porFamiliaOC != null && (
+            <div className="text-[10px] text-ink/65 font-mono mt-0.5">
+              ≈ {fmtMoney(porFamiliaOC)} / familia
+            </div>
+          )}
           {oferta.precio_envio_centavos > 0 && (
             <div className="text-[10px] text-ink/55 font-mono mt-0.5">
               {fmtMoney(oferta.precio_total_centavos - oferta.precio_envio_centavos)} +{' '}
@@ -765,6 +776,8 @@ function PanelOfertaPyme({
   pymeId: string;
 }) {
   const crearOferta = useCrearOferta();
+  const progreso = useNecesidadProgreso(necesidad.id);
+  const inscriptos = progreso.data?.inscriptos ?? 0;
   const { showAlert } = useDialog();
   const miOferta = ofertas.find((o) => o.pyme_id === pymeId);
   const [showForm, setShowForm] = useState(!miOferta);
@@ -816,6 +829,10 @@ function PanelOfertaPyme({
   if (miOferta) {
     const envio = miOferta.precio_envio_centavos ?? 0;
     const retiro = miOferta.precio_total_centavos - envio;
+    const porFamilia =
+      necesidad.modalidad === 'individual' && inscriptos > 0
+        ? Math.round(miOferta.precio_total_centavos / inscriptos)
+        : null;
     return (
       <section className="space-y-3">
         <h2 className="font-display font-bold text-xl">Tu oferta</h2>
@@ -833,6 +850,11 @@ function PanelOfertaPyme({
           {envio > 0 && (
             <p className="text-[11px] text-ink/65 font-mono">
               {fmtMoney(retiro)} retiro + {fmtMoney(envio)} envío
+            </p>
+          )}
+          {porFamilia != null && (
+            <p className="text-[11px] text-ink/55 font-mono">
+              ≈ {fmtMoney(porFamilia)} / familia ({inscriptos} inscripto{inscriptos === 1 ? '' : 's'})
             </p>
           )}
           <div className="flex items-center gap-2 flex-wrap text-[11px]">
@@ -880,7 +902,10 @@ function PanelOfertaPyme({
 
             <label className="block">
               <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-1.5">
-                Precio retiro por local ($) *
+                Precio del pedido completo ($) *
+              </span>
+              <span className="block text-[10px] text-ink/55 mb-1.5">
+                Lo que cobrás vos por todos los items del pedido. La app lo divide automáticamente entre las familias inscriptas.
               </span>
               <input
                 type="number"
@@ -920,11 +945,21 @@ function PanelOfertaPyme({
             )}
 
             {totalNum > 0 && (
-              <div className="rounded-xl bg-ink text-sun px-3 py-2 text-sm flex items-baseline justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-80">
-                  Total que paga la familia
-                </span>
-                <span className="font-mono font-extrabold">${totalNum.toLocaleString('es-AR')}</span>
+              <div className="rounded-xl bg-ink text-sun px-3 py-2 space-y-1">
+                <div className="text-sm flex items-baseline justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-wider opacity-80">
+                    Total de tu oferta
+                  </span>
+                  <span className="font-mono font-extrabold">${totalNum.toLocaleString('es-AR')}</span>
+                </div>
+                {necesidad.modalidad === 'individual' && inscriptos > 0 && (
+                  <div className="text-[10px] flex items-baseline justify-between opacity-75">
+                    <span>≈ por familia ({inscriptos} inscripto{inscriptos === 1 ? '' : 's'})</span>
+                    <span className="font-mono">
+                      ${Math.round(totalNum / inscriptos).toLocaleString('es-AR')}
+                    </span>
+                  </div>
+                )}
               </div>
             )}
 
