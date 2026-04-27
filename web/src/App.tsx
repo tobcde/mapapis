@@ -1,12 +1,11 @@
 import { Suspense, useEffect } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { queryClient } from '@/lib/queryClient';
 import { useSessionStore } from '@/stores/session';
 import { Login } from '@/routes/Login';
 import { Onboarding } from '@/routes/Onboarding';
-import { Home } from '@/routes/Home';
 import { Perfil } from '@/routes/Perfil';
 import { Grupos } from '@/routes/Grupos';
 import { GrupoDetail } from '@/routes/GrupoDetail';
@@ -63,16 +62,7 @@ export function App() {
                 </AuthGuard>
               }
             />
-            <Route
-              path="/home"
-              element={
-                <AuthGuard>
-                  <RequireProfile>
-                    <Home />
-                  </RequireProfile>
-                </AuthGuard>
-              }
-            />
+            <Route path="/home" element={<Navigate to="/feed" replace />} />
             <Route
               path="/grupos"
               element={

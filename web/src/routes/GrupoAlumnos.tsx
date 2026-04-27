@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Shell } from '@/components/Shell';
-import { Button, useDialog } from '@/components/ui';
+import { Button, useDialog, useToast } from '@/components/ui';
 import { useProfile } from '@/lib/queries/useProfile';
 import { useMisGrupos } from '@/lib/queries/useMisGrupos';
 import { useAlumnosByGrupo } from '@/lib/queries/useAlumnosByGrupo';
@@ -22,6 +22,7 @@ function AgregarAlumnoForm({
 }) {
   const { crear } = useAlumnoActions();
   const { showAlert } = useDialog();
+  const { showToast } = useToast();
   const [nombre, setNombre] = useState('');
   const [dni, setDni] = useState('');
   const [err, setErr] = useState<string | null>(null);
@@ -33,6 +34,7 @@ function AgregarAlumnoForm({
     if (!nombreTrim) { setErr('El nombre es obligatorio.'); return; }
     try {
       await crear.mutateAsync({ grupoId, nombre: nombreTrim, dni: dni.trim() || null });
+      showToast(`¡${nombreTrim} agregado!`);
       onDone();
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Error al crear alumno';
@@ -104,6 +106,7 @@ function AlumnoItem({
 }) {
   const { joinAsTutor, leaveAsTutor } = useAlumnoActions();
   const { showConfirm, showAlert } = useDialog();
+  const { showToast } = useToast();
 
   const tutores = alumno.alumno_tutores;
   const yoSoyTutor = tutores.some((t) => t.profile_id === userId);
@@ -112,6 +115,7 @@ function AlumnoItem({
   const handleJoin = async () => {
     try {
       await joinAsTutor.mutateAsync({ grupoId, alumnoId: alumno.id });
+      showToast(`¡Ahora sos tutor de ${alumno.nombre}!`);
     } catch (err) {
       await showAlert(err instanceof Error ? err.message : 'Error al unirse como tutor');
     }
@@ -122,6 +126,7 @@ function AlumnoItem({
     if (!ok) return;
     try {
       await leaveAsTutor.mutateAsync({ grupoId, alumnoId: alumno.id });
+      showToast(`Ya no sos tutor de ${alumno.nombre}`, 'info');
     } catch (err) {
       await showAlert(err instanceof Error ? err.message : 'Error al salir como tutor');
     }
@@ -204,6 +209,7 @@ export function GrupoAlumnos() {
   const alumnosQ = useAlumnosByGrupo(id);
   const { merge } = useAlumnoActions();
   const { showConfirm, showAlert } = useDialog();
+  const { showToast } = useToast();
 
   const [showForm, setShowForm] = useState(false);
 
@@ -232,6 +238,7 @@ export function GrupoAlumnos() {
     if (!ok) return;
     try {
       await merge.mutateAsync({ grupoId: id ?? '', keepId, mergeId });
+      showToast('Alumnos fusionados');
     } catch (err) {
       await showAlert(err instanceof Error ? err.message : 'Error al fusionar');
     }

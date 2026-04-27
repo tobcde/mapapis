@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Shell } from '@/components/Shell';
-import { Button } from '@/components/ui';
-import { useDialog } from '@/components/ui';
+import { useDialog, useToast } from '@/components/ui';
 import { useProfile } from '@/lib/queries/useProfile';
 import { usePymeProfile } from '@/lib/queries/usePymeProfile';
 import { supabase } from '@/lib/supabase';
@@ -10,25 +9,87 @@ import { useQueryClient } from '@tanstack/react-query';
 import { profileQueryKey } from '@/lib/queries/useProfile';
 import type { ProfileRole } from '@/lib/database.types';
 
-// ─── Mapeo de rol a color e icono ─────────────────────────────────────────────
+// ── íconos ────────────────────────────────────────────────────────────────────
+
+function IconUsers({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={className}>
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
+
+function IconBriefcase({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={className}>
+      <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+      <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+    </svg>
+  );
+}
+
+function IconShield({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={className}>
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+    </svg>
+  );
+}
+
+function IconLogout({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className={className}>
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <polyline points="16 17 21 12 16 7" />
+      <line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
+  );
+}
+
+// ── Rol config ────────────────────────────────────────────────────────────────
+
+type IconComp = ({ className }: { className?: string }) => JSX.Element;
 
 const ROL_INFO: Record<
   ProfileRole,
-  { label: string; color: string; textColor: string; short: string }
+  { label: string; color: string; short: string; Icon: IconComp }
 > = {
-  familia: { label: 'Familia', color: 'bg-coral', textColor: 'text-white', short: 'Comprás para tu grupo' },
-  pyme: { label: 'Pyme', color: 'bg-sage', textColor: 'text-white', short: 'Ofertás a grupos de familias' },
-  admin: { label: 'Admin', color: 'bg-violet', textColor: 'text-white', short: 'Administración del sistema' },
-  institucion: { label: 'Institución', color: 'bg-sun', textColor: 'text-ink', short: 'Colegio / jardín' },
+  familia: {
+    label: 'Familia',
+    color: 'var(--coral)',
+    short: 'Soy parte de un grupo de padres',
+    Icon: IconUsers,
+  },
+  pyme: {
+    label: 'Pyme',
+    color: 'var(--sage)',
+    short: 'Ofrezco productos / servicios',
+    Icon: IconBriefcase,
+  },
+  admin: {
+    label: 'Admin',
+    color: 'var(--violet)',
+    short: 'Administración del sistema',
+    Icon: IconShield,
+  },
+  institucion: {
+    label: 'Institución',
+    color: 'var(--violet)',
+    short: 'Colegio / jardín',
+    Icon: IconShield,
+  },
   personal_institucion: {
     label: 'Personal',
-    color: 'bg-mist',
-    textColor: 'text-ink',
+    color: 'var(--ink)',
     short: 'Personal de institución',
+    Icon: IconShield,
   },
 };
 
-// ─── Perfil ───────────────────────────────────────────────────────────────────
+// ── Perfil ─────────────────────────────────────────────────────────────────────
 
 export function Perfil() {
   const { data: profile, isLoading } = useProfile();
@@ -36,6 +97,7 @@ export function Perfil() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { showConfirm, showAlert } = useDialog();
+  const { showToast } = useToast();
 
   const [editing, setEditing] = useState(false);
   const [nombre, setNombre] = useState('');
@@ -60,6 +122,7 @@ export function Perfil() {
     }
     setEditing(false);
     void queryClient.invalidateQueries({ queryKey: profileQueryKey(profile.id) });
+    showToast('¡Nombre guardado!');
   };
 
   const cambiarRol = async () => {
@@ -95,23 +158,30 @@ export function Perfil() {
     );
   }
 
-  const rolInfo = profile.role ? ROL_INFO[profile.role] : null;
+  const info = profile.role ? ROL_INFO[profile.role] : null;
+  const IconCmp = info?.Icon ?? IconUsers;
   const displayNombre = profile.nombre ?? profile.email.split('@')[0] ?? profile.email;
   const inicial = displayNombre[0]?.toUpperCase() ?? '?';
 
   return (
     <Shell>
-      <div className="space-y-4 anim-in">
+      <div className="anim-in">
+        {/* Título */}
         <h1 className="font-display font-black text-4xl leading-none">
-          Tu <em style={{ fontStyle: 'italic' }}>perfil</em>
+          Tu <span className="font-display-italic">perfil</span>
         </h1>
+        <div className="squiggle my-5" />
 
-        {/* Tarjeta nombre */}
-        <div className="bg-white rounded-3xl border-[1.5px] border-ink p-5 shadow-pop">
+        {/* Tarjeta nombre + avatar */}
+        <div
+          className="bg-white rounded-3xl border-[1.5px] border-ink p-5 mb-4"
+          style={{ boxShadow: '4px 4px 0 var(--ink)' }}
+        >
           <div className="flex items-center gap-4">
             {/* Avatar */}
             <div
-              className={`w-16 h-16 rounded-2xl flex items-center justify-center font-display font-black text-3xl ${rolInfo?.color ?? 'bg-coral'} ${rolInfo?.textColor ?? 'text-white'} shrink-0`}
+              className="w-16 h-16 rounded-2xl flex items-center justify-center font-display font-black text-3xl text-white shrink-0"
+              style={{ background: info?.color ?? 'var(--coral)' }}
             >
               {inicial}
             </div>
@@ -123,7 +193,7 @@ export function Perfil() {
                   <input
                     value={nombre}
                     onChange={(e) => { setNombre(e.target.value); }}
-                    className="flex-1 px-3 py-2 rounded-lg border-[1.5px] border-ink text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-coral/30"
+                    className="flex-1 px-3 py-2 rounded-lg border-[1.5px] border-ink text-sm font-semibold focus:outline-none"
                     autoFocus
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') void guardarNombre();
@@ -157,18 +227,22 @@ export function Perfil() {
         </div>
 
         {/* Rol */}
-        <div className="bg-white rounded-3xl border-[1.5px] border-ink p-5 shadow-pop">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-3">Rol</div>
-          {rolInfo ? (
+        <div
+          className="bg-white rounded-3xl border-[1.5px] border-ink p-5 mb-4"
+          style={{ boxShadow: '3px 3px 0 var(--ink)' }}
+        >
+          <div className="text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-2">Rol</div>
+          {info ? (
             <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${rolInfo.color}`}>
-                <span className="text-lg">
-                  {profile.role === 'familia' ? '👨‍👩‍👧' : profile.role === 'pyme' ? '🏪' : '⚙️'}
-                </span>
+              <div
+                className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                style={{ background: info.color }}
+              >
+                <IconCmp className="w-5 h-5 text-white" />
               </div>
               <div>
-                <div className="font-display font-bold text-lg">{rolInfo.label}</div>
-                <div className="text-xs text-ink/60">{rolInfo.short}</div>
+                <div className="font-display font-bold text-lg">{info.label}</div>
+                <div className="text-xs text-ink/60">{info.short}</div>
               </div>
             </div>
           ) : (
@@ -185,11 +259,14 @@ export function Perfil() {
 
         {/* Mi negocio (solo pymes) */}
         {profile.role === 'pyme' && (
-          <div className="bg-white rounded-3xl border-[1.5px] border-ink p-5 shadow-pop">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-3">Mi negocio</div>
+          <div
+            className="bg-white rounded-3xl border-[1.5px] border-ink p-5 mb-4"
+            style={{ boxShadow: '3px 3px 0 var(--ink)' }}
+          >
+            <div className="text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-2">Mi negocio</div>
             {pyme ? (
               <>
-                <div className="flex items-center gap-3 mb-4">
+                <div className="flex items-center gap-3 mb-3">
                   {pyme.logo_url ? (
                     <img
                       src={pyme.logo_url}
@@ -197,7 +274,7 @@ export function Perfil() {
                       className="w-12 h-12 rounded-xl object-cover border-[1.5px] border-ink shrink-0"
                     />
                   ) : (
-                    <div className="w-12 h-12 rounded-xl bg-cream border-[1.5px] border-ink flex items-center justify-center font-display font-bold text-xl shrink-0">
+                    <div className="w-12 h-12 rounded-xl bg-cream border-[1.5px] border-ink flex items-center justify-center font-display font-bold text-lg shrink-0">
                       {(pyme.nombre_comercial ?? '?')[0]?.toUpperCase()}
                     </div>
                   )}
@@ -233,18 +310,15 @@ export function Perfil() {
         )}
 
         {/* Logout */}
-        <div className="space-y-2 pt-2">
-          <Button
-            variant="secondary"
-            size="lg"
-            fullWidth
-            onClick={() => { void logout(); }}
-          >
-            Cerrar sesión
-          </Button>
-        </div>
+        <button
+          type="button"
+          onClick={() => { void logout(); }}
+          className="btn-pop w-full py-3.5 bg-white text-ink font-extrabold rounded-xl border-[1.5px] border-ink uppercase tracking-wider text-sm flex items-center justify-center gap-2"
+        >
+          <IconLogout className="w-4 h-4" /> Cerrar sesión
+        </button>
 
-        <p className="text-center text-[10px] text-ink/40 uppercase tracking-widest pb-4">
+        <p className="text-center text-[10px] text-ink/40 mt-8 uppercase tracking-widest pb-4">
           MaPaPis · Beta
         </p>
       </div>

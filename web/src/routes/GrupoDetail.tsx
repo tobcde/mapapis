@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { Shell } from '@/components/Shell';
-import { useDialog } from '@/components/ui';
+import { useDialog, useToast } from '@/components/ui';
 import { useProfile } from '@/lib/queries/useProfile';
 import { useMisGrupos } from '@/lib/queries/useMisGrupos';
 import { useGrupo } from '@/lib/queries/useGrupo';
@@ -23,17 +23,16 @@ function InviteCard({
   soyCreador: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
   const { regenerarCodigo } = useGrupoAdmin();
   const { showConfirm, showAlert } = useDialog();
+  const { showToast } = useToast();
 
   const inviteUrl = `${window.location.origin}/unirse?c=${grupo.invite_code}`;
 
   const onCopy = async () => {
     try {
       await navigator.clipboard.writeText(inviteUrl);
-      setCopied(true);
-      setTimeout(() => { setCopied(false); }, 2000);
+      showToast('¡Link copiado!');
     } catch {
       await showAlert('No se pudo copiar al portapapeles');
     }
@@ -114,7 +113,7 @@ function InviteCard({
           onClick={() => { void onCopy(); }}
           className="py-2.5 bg-white text-ink font-extrabold rounded-xl uppercase tracking-wider text-xs flex items-center justify-center gap-1.5"
         >
-          {copied ? '✓ Copiado' : 'Copiar link'}
+          Copiar link
         </button>
         <button
           type="button"
@@ -286,6 +285,8 @@ export function GrupoDetail() {
           </div>
           <RolBadge rol={miRol} />
         </div>
+
+        <div className="squiggle" />
 
         {/* Invite card */}
         <InviteCard grupo={grupo} soyCreador={soyCreador} />

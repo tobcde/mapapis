@@ -147,12 +147,13 @@ function FeedFamilia() {
         </div>
 
         {/* Filtros */}
-        <div className="flex gap-2 mb-5 overflow-x-auto no-scrollbar pb-1 -mx-4 px-4">
+        <div className="flex gap-2 mb-4 overflow-x-auto no-scrollbar pb-1 -mx-4 px-4">
           <FilterPill active={filtro === 'activas'} onClick={() => { setFiltro('activas'); }} label="Activas" />
           <FilterPill active={filtro === 'votando'} onClick={() => { setFiltro('votando'); }} label="Votando" />
           <FilterPill active={filtro === 'cumplidas'} onClick={() => { setFiltro('cumplidas'); }} label="Cumplidas" />
           <FilterPill active={filtro === 'todas'} onClick={() => { setFiltro('todas'); }} label="Todas" />
         </div>
+        <div className="squiggle mb-5" />
 
         {/* Lista */}
         {error ? (
@@ -242,7 +243,7 @@ function FeedPyme() {
 
         {/* Toggle: solo mis categorías */}
         {misCats.length > 0 && (
-          <div className="flex items-center justify-between bg-white rounded-2xl border-[1.5px] border-ink px-3 py-2 mb-3 shadow-pop-sm">
+          <div className="flex items-center justify-between bg-white rounded-2xl border-[1.5px] border-ink px-3 py-2 mb-3" style={{ boxShadow: '2px 2px 0 var(--ink)' }}>
             <div className="text-xs">
               <span className="font-bold uppercase tracking-wider">Solo mis categorías</span>
               {soloMisCats && ocultadasPorCat > 0 && (
@@ -267,6 +268,7 @@ function FeedPyme() {
             </button>
           </div>
         )}
+        <div className="squiggle mb-5" />
 
         {/* Lista */}
         {error ? (

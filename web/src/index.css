@@ -103,6 +103,17 @@
   }
   .dialog-in { animation: slideUp .22s cubic-bezier(.2,.7,.3,1) both; }
 
+  /* Decorative bg (kept for compat with v1) */
+  .bg-dots { background: transparent; }
+
+  /* Squiggle divider — igual que v1 */
+  .squiggle {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 8'><path d='M0 4 Q 10 0, 20 4 T 40 4 T 60 4 T 80 4' stroke='%230E1525' stroke-width='1.5' fill='none'/></svg>");
+    background-repeat: repeat-x;
+    background-size: 80px 8px;
+    height: 8px;
+  }
+
   /* Ocultar scrollbar horizontal en listas de filtros/pills */
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

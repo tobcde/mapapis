@@ -330,7 +330,7 @@ export function Publicar() {
           Las pymes lo verán anonimizado por zona.
         </p>
 
-        <div className="h-px bg-ink/10 my-5" />
+        <div className="squiggle my-5" />
 
         {/* Selector de grupo */}
         <div className="mb-5 rounded-2xl border-[1.5px] border-ink bg-sun/40 p-4">

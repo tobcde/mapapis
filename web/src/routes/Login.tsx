@@ -37,7 +37,7 @@ export function Login() {
   });
 
   if (!sessionLoading && session) {
-    return <Navigate to="/home" replace />;
+    return <Navigate to="/feed" replace />;
   }
 
   const onGoogle = async () => {

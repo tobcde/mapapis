@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useProfile } from '@/lib/queries/useProfile';
 import { useJoinGrupoByCode } from '@/lib/mutations/useJoinGrupoByCode';
 import { getPendingJoinCode, clearPendingJoinCode } from '@/lib/pendingJoin';
-import { useDialog } from '@/components/ui';
+import { useDialog, useToast } from '@/components/ui';
 
 /**
  * Componente invisible que se monta dentro del Shell (rutas protegidas).
@@ -19,6 +19,7 @@ export function PendingJoinHandler() {
   const { data: profile } = useProfile();
   const join = useJoinGrupoByCode();
   const { showAlert } = useDialog();
+  const { showToast } = useToast();
   const attemptedRef = useRef(false);
 
   useEffect(() => {
@@ -37,7 +38,10 @@ export function PendingJoinHandler() {
 
     join.mutateAsync(code)
       .then((result) => {
-        if (!result.ya_era_miembro) {
+        if (result.ya_era_miembro) {
+          showToast('¡Ya eras miembro de ese grupo!', 'info');
+        } else {
+          showToast('¡Te sumaste al grupo! 🎉');
           void navigate(`/grupos/${result.grupo_id}`, { replace: true });
         }
       })
