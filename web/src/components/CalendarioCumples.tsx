@@ -6,8 +6,8 @@ interface Props {
 }
 
 /**
- * Calendario de cumpleaños del grupo: mes en curso + primeros 10 días del
- * mes siguiente. La ventana la filtra la vista `proximos_cumples` en la DB.
+ * Calendario de cumpleaños del grupo: próximos 3 meses.
+ * La ventana la filtra la vista `proximos_cumples` en la DB.
  */
 export function CalendarioCumples({ grupoId }: Props) {
   const { data, isLoading, error } = useProximosCumples(grupoId);
@@ -41,9 +41,14 @@ export function CalendarioCumples({ grupoId }: Props) {
       className="bg-white rounded-2xl border-[1.5px] border-ink p-4"
       style={{ boxShadow: 'var(--shadow-pop)' }}
     >
-      <div className="flex items-center gap-2 mb-3">
-        <span className="text-xl leading-none">🎂</span>
-        <h3 className="font-display font-extrabold text-base">Próximos cumples</h3>
+      <div className="flex items-end justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <span className="text-xl leading-none">🎂</span>
+          <h3 className="font-display font-extrabold text-base">Próximos cumples</h3>
+        </div>
+        <span className="text-[10px] font-bold uppercase tracking-wider text-ink/45">
+          próx. 3 meses
+        </span>
       </div>
       <ul className="grid gap-2">
         {data.map((c) => (
