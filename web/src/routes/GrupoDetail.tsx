@@ -141,9 +141,12 @@ function InviteCard({
 // ─── NecesidadRow card ────────────────────────────────────────────────────────
 
 function NecesidadItem({ n, grupoId }: { n: NecesidadRow; grupoId: string }) {
+  const sufijo = n.modalidad === 'individual' ? ' /alumno' : '';
   const presu =
-    n.presupuesto_min_centavos != null && n.presupuesto_max_centavos != null
-      ? `${fmtMoney(n.presupuesto_min_centavos)} – ${fmtMoney(n.presupuesto_max_centavos)}`
+    n.presupuesto_max_centavos != null
+      ? n.presupuesto_min_centavos != null
+        ? `${fmtMoney(n.presupuesto_min_centavos)} – ${fmtMoney(n.presupuesto_max_centavos)}${sufijo}`
+        : `Hasta ${fmtMoney(n.presupuesto_max_centavos)}${sufijo}`
       : null;
 
   return (

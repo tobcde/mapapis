@@ -445,13 +445,21 @@ export function Publicar() {
 
           {/* Presupuesto */}
           <Field
-            label="Presupuesto máximo ($)"
-            hint="Tope que estás dispuesto a pagar para todo el pedido."
+            label={
+              modalidad === 'individual'
+                ? 'Presupuesto máximo por alumno ($)'
+                : 'Presupuesto máximo total ($)'
+            }
+            hint={
+              modalidad === 'individual'
+                ? 'Tope por alumno. El total sube automáticamente con cada inscripción (ej. $5000 × 3 alumnos = $15000).'
+                : 'Tope total que estás dispuesto a pagar por todo el pedido del grupo.'
+            }
           >
             <input
               type="number"
               min={0}
-              placeholder="50000"
+              placeholder={modalidad === 'individual' ? '5000' : '50000'}
               value={presupuestoMax}
               onChange={(e) => { setPresupuestoMax(e.target.value); }}
               className={INPUT_CLS + ' font-mono'}

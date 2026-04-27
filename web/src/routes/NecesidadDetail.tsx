@@ -45,12 +45,53 @@ function fmtPresupuesto(min: number | null, max: number | null): string {
   return `Hasta ${fmtMoney(max!)}`;
 }
 
+/**
+ * Muestra el presupuesto adaptándose a la modalidad:
+ *   - grupal      → tal cual (total fijo).
+ *   - individual  → "Hasta $X /alumno" + subtítulo "≈ $Y con N inscriptos".
+ */
+function PresupuestoDisplay({
+  maxCentavos,
+  minCentavos,
+  modalidad,
+  inscriptos,
+}: {
+  maxCentavos: number | null;
+  minCentavos: number | null;
+  modalidad: NecesidadModalidad;
+  inscriptos: number;
+}) {
+  if (modalidad === 'individual' && maxCentavos != null) {
+    const total = maxCentavos * Math.max(inscriptos, 0);
+    return (
+      <div className="mt-1">
+        <p className="font-mono text-sm font-bold">
+          Hasta {fmtMoney(maxCentavos)}{' '}
+          <span className="text-[11px] text-ink/55 font-normal">/alumno</span>
+        </p>
+        {inscriptos > 0 && (
+          <p className="text-[11px] text-ink/55 font-mono mt-0.5">
+            ≈ {fmtMoney(total)} con {inscriptos} inscripto{inscriptos === 1 ? '' : 's'}
+          </p>
+        )}
+      </div>
+    );
+  }
+  return (
+    <p className="font-mono text-sm font-bold mt-1">
+      {fmtPresupuesto(minCentavos, maxCentavos)}
+    </p>
+  );
+}
+
 const INPUT_CLS =
   'w-full px-4 py-3 rounded-xl border-[1.5px] border-ink bg-white text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-coral/30';
 
 // ─── Sección info de la necesidad ─────────────────────────────────────────────
 
 function InfoCard({ n }: { n: NecesidadRow }) {
+  const progreso = useNecesidadProgreso(n.id);
+  const inscriptos = progreso.data?.inscriptos ?? 0;
   return (
     <div className="bg-white rounded-3xl border-[1.5px] border-ink overflow-hidden shadow-pop">
       {n.foto_url && (
@@ -90,9 +131,12 @@ function InfoCard({ n }: { n: NecesidadRow }) {
         <div className="grid grid-cols-2 gap-3 pt-1">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-wider text-ink/60">Presupuesto</p>
-            <p className="font-mono text-sm font-bold mt-1">
-              {fmtPresupuesto(n.presupuesto_min_centavos, n.presupuesto_max_centavos)}
-            </p>
+            <PresupuestoDisplay
+              maxCentavos={n.presupuesto_max_centavos}
+              minCentavos={n.presupuesto_min_centavos}
+              modalidad={n.modalidad}
+              inscriptos={inscriptos}
+            />
           </div>
           <div>
             <p className="text-[10px] font-bold uppercase tracking-wider text-ink/60">Modalidad</p>

@@ -46,11 +46,12 @@ function IconArrow() {
   );
 }
 
-function fmtRango(min: number | null, max: number | null): string {
+function fmtRango(min: number | null, max: number | null, perAlumno: boolean): string {
   if (!min && !max) return 'Sin presupuesto';
-  if (min && max) return `${fmtMoney(min)} – ${fmtMoney(max)}`;
-  if (min) return `Desde ${fmtMoney(min)}`;
-  return `Hasta ${fmtMoney(max!)}`;
+  const sufijo = perAlumno ? ' /alumno' : '';
+  if (min && max) return `${fmtMoney(min)} – ${fmtMoney(max)}${sufijo}`;
+  if (min) return `Desde ${fmtMoney(min)}${sufijo}`;
+  return `Hasta ${fmtMoney(max!)}${sufijo}`;
 }
 
 export function NecesidadCard({ n, mode, to }: Props) {
@@ -131,7 +132,11 @@ export function NecesidadCard({ n, mode, to }: Props) {
 
         <div className="mt-3 flex items-center justify-between">
           <span className="font-mono text-sm font-bold">
-            {fmtRango(n.presupuesto_min_centavos, n.presupuesto_max_centavos)}
+            {fmtRango(
+              n.presupuesto_min_centavos,
+              n.presupuesto_max_centavos,
+              n.modalidad === 'individual',
+            )}
           </span>
           <span className="text-coral">
             <IconArrow />
