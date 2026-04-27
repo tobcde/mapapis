@@ -19,6 +19,7 @@ import { PymeOnboarding } from '@/routes/PymeOnboarding';
 import { Unirse } from '@/routes/Unirse';
 import { AuthGuard } from '@/components/AuthGuard';
 import { RequireProfile } from '@/components/RequireProfile';
+import { LoadingScreen } from '@/components/LoadingScreen';
 import { env } from '@/lib/env';
 
 function NotFound() {
@@ -33,11 +34,7 @@ function NotFound() {
 }
 
 function Loading() {
-  return (
-    <div className="min-h-screen flex items-center justify-center text-sm text-ink/60">
-      Cargando...
-    </div>
-  );
+  return <LoadingScreen message="Preparando la app…" />;
 }
 
 export function App() {
