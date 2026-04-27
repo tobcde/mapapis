@@ -17,7 +17,13 @@ import { useInscribirAlumno } from '@/lib/mutations/useInscribirAlumno';
 import { useCrearOferta } from '@/lib/mutations/useCrearOferta';
 import { fmtMoney } from '@/utils/fmt';
 import { estadoBadgeClass, estadoLabel, modoEntregaLabel, pymeAlias } from '@/utils/necesidad';
-import type { NecesidadRow, OfertaRow, ModoEntrega } from '@/lib/database.types';
+import type {
+  NecesidadRow,
+  NecesidadModalidad,
+  OfertaRow,
+  ModoEntrega,
+  ComposicionItem,
+} from '@/lib/database.types';
 import type { AlumnoConTutores } from '@/lib/queries/useAlumnosByGrupo';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -186,6 +192,15 @@ function ProgresoChip({
         {isCerrada ? '(cantidad final)' : '(total actual)'}
       </div>
 
+      {n.composicion && n.composicion.length > 0 && (
+        <DesgloseComposicion
+          composicion={n.composicion}
+          modalidad={n.modalidad}
+          inscriptos={inscriptosCount}
+          isCerrada={isCerrada}
+        />
+      )}
+
       {esAdmin && (
         <div className="mt-3 flex gap-2">
           {!isCerrada ? (
@@ -209,6 +224,54 @@ function ProgresoChip({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Desglose de composición (cuando el publicador cargó items estructurados) ─
+
+function DesgloseComposicion({
+  composicion,
+  modalidad,
+  inscriptos,
+  isCerrada,
+}: {
+  composicion: ComposicionItem[];
+  modalidad: NecesidadModalidad;
+  inscriptos: number;
+  isCerrada: boolean;
+}) {
+  const multiplier = modalidad === 'individual' ? inscriptos : 1;
+  const totalUnidades = composicion.reduce((acc, it) => acc + it.cantidad * multiplier, 0);
+  const labelTotal = isCerrada ? 'Pedido total final' : 'Pedido total estimado';
+
+  return (
+    <div className="mt-3 pt-3 border-t border-ink/15">
+      <div className="text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-2">
+        {labelTotal}
+      </div>
+      <ul className="space-y-1">
+        {composicion.map((it, i) => {
+          const total = it.cantidad * multiplier;
+          return (
+            <li key={i} className="text-sm flex items-baseline gap-2">
+              <span className="font-mono font-bold w-10 text-right shrink-0">
+                {total}
+              </span>
+              <span className="font-bold">×</span>
+              <span className="flex-1">{it.nombre}</span>
+              {modalidad === 'individual' && (
+                <span className="text-[10px] text-ink/50 font-mono">
+                  ({it.cantidad}/alumno × {inscriptos})
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      <div className="text-[11px] text-ink/55 mt-2 italic">
+        Total: {totalUnidades} unidades
+      </div>
     </div>
   );
 }

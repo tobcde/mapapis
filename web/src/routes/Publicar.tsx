@@ -162,6 +162,7 @@ export function Publicar() {
   const [camposValues, setCamposValues] = useState<Record<string, string>>({});
   const [modalidad, setModalidad] = useState<NecesidadModalidad>('grupal');
   const [cantidadPorAlumno, setCantidadPorAlumno] = useState('');
+  const [composicion, setComposicion] = useState<{ nombre: string; cantidad: string }[]>([]);
   const [presupuestoMin, setPresupuestoMin] = useState('');
   const [presupuestoMax, setPresupuestoMax] = useState('');
   const [fechaInscripcion, setFechaInscripcion] = useState('');
@@ -262,6 +263,10 @@ export function Publicar() {
     }
 
     try {
+      const composicionClean = composicion
+        .map((c) => ({ nombre: c.nombre.trim(), cantidad: Number(c.cantidad) }))
+        .filter((c) => c.nombre.length > 0 && Number.isFinite(c.cantidad) && c.cantidad > 0);
+
       await publicar.mutateAsync({
         grupoId,
         zona: grupoActual?.zona ?? '',
@@ -271,6 +276,7 @@ export function Publicar() {
         campos: camposClean,
         modalidad,
         cantidadPorAlumno: modalidad === 'individual' ? Number(cantidadPorAlumno) : null,
+        composicion: composicionClean.length > 0 ? composicionClean : null,
         presupuestoMinCentavos: presupuestoMin ? Math.round(Number(presupuestoMin) * 100) : null,
         presupuestoMaxCentavos: presupuestoMax ? Math.round(Number(presupuestoMax) * 100) : null,
         fechaLimiteInscripcion: fechaInscripcion ? new Date(fechaInscripcion).toISOString() : null,
@@ -441,6 +447,18 @@ export function Publicar() {
             </Field>
           )}
 
+          {/* Composición desglosada — opcional, ayuda a la pyme a saber qué cotizar */}
+          <Field
+            label="Desglose del pedido (opcional)"
+            hint={
+              modalidad === 'individual'
+                ? 'Items por alumno. La pyme verá el total multiplicado por inscriptos (ej: 1 negro × 6 alumnos = 6 negros).'
+                : 'Items totales para todo el grupo (ej: 50 vasos rojos + 50 vasos azules).'
+            }
+          >
+            <ComposicionEditor items={composicion} onChange={setComposicion} />
+          </Field>
+
           {/* Campos dinámicos de categoría */}
           <CamposDinamicos
             schema={schemaCampos}
@@ -548,5 +566,76 @@ export function Publicar() {
         </form>
       </div>
     </Shell>
+  );
+}
+
+// ─── ComposicionEditor ────────────────────────────────────────────────────────
+
+function ComposicionEditor({
+  items,
+  onChange,
+}: {
+  items: { nombre: string; cantidad: string }[];
+  onChange: (next: { nombre: string; cantidad: string }[]) => void;
+}) {
+  const update = (i: number, patch: Partial<{ nombre: string; cantidad: string }>) => {
+    onChange(items.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
+  };
+  const remove = (i: number) => {
+    onChange(items.filter((_, idx) => idx !== i));
+  };
+  const add = () => {
+    onChange([...items, { nombre: '', cantidad: '1' }]);
+  };
+
+  return (
+    <div className="space-y-2">
+      {items.length === 0 ? (
+        <button
+          type="button"
+          onClick={add}
+          className="w-full px-3 py-2.5 rounded-xl border-[1.5px] border-dashed border-ink/30 text-xs font-bold uppercase tracking-wider text-ink/55 hover:border-ink hover:text-ink transition"
+        >
+          + Agregar item
+        </button>
+      ) : (
+        <>
+          {items.map((it, i) => (
+            <div key={i} className="flex gap-2 items-start">
+              <input
+                type="text"
+                placeholder="Ej: Lápiz Negro"
+                value={it.nombre}
+                onChange={(e) => { update(i, { nombre: e.target.value }); }}
+                className="flex-1 px-3 py-2 rounded-xl border-[1.5px] border-ink/30 text-sm focus:outline-none focus:border-ink"
+              />
+              <input
+                type="number"
+                min={1}
+                placeholder="1"
+                value={it.cantidad}
+                onChange={(e) => { update(i, { cantidad: e.target.value }); }}
+                className="w-16 px-2 py-2 rounded-xl border-[1.5px] border-ink/30 text-sm font-mono text-center focus:outline-none focus:border-ink"
+              />
+              <button
+                type="button"
+                onClick={() => { remove(i); }}
+                className="px-2 py-2 text-ink/40 hover:text-coral text-lg"
+                aria-label="Quitar item"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={add}
+            className="text-[11px] font-bold uppercase tracking-wider text-coral hover:underline"
+          >
+            + Agregar otro item
+          </button>
+        </>
+      )}
+    </div>
   );
 }

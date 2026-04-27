@@ -132,6 +132,16 @@ export type NecesidadEstado =
 
 export type NecesidadModalidad = 'grupal' | 'individual';
 
+/**
+ * Item del desglose estructurado del pedido. Si modalidad=individual, la
+ * cantidad es por alumno (se multiplica por inscriptos). Si modalidad=grupal,
+ * la cantidad es total para todo el grupo.
+ */
+export interface ComposicionItem {
+  nombre: string;
+  cantidad: number;
+}
+
 export type NecesidadRow = {
   id: string;
   grupo_id: string;
@@ -150,6 +160,7 @@ export type NecesidadRow = {
   link_referencia: string | null;
   modalidad: NecesidadModalidad;
   cantidad_por_alumno: number | null;
+  composicion: ComposicionItem[] | null;
   estado: NecesidadEstado;
   cap_ofertas: number;
   ofertas_count: number;
@@ -176,6 +187,7 @@ export type NecesidadInsert = {
   link_referencia?: string | null;
   modalidad?: NecesidadModalidad;
   cantidad_por_alumno?: number | null;
+  composicion?: ComposicionItem[] | null;
   estado?: NecesidadEstado;
   cap_ofertas?: number;
   foto_url?: string | null;
