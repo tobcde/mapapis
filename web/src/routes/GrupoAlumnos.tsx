@@ -8,6 +8,8 @@ import { useMisGrupos } from '@/lib/queries/useMisGrupos';
 import { useAlumnosByGrupo } from '@/lib/queries/useAlumnosByGrupo';
 import { useAlumnoActions } from '@/lib/mutations/useAlumnoActions';
 import type { AlumnoConTutores } from '@/lib/queries/useAlumnosByGrupo';
+import type { RelacionTutor } from '@/lib/database.types';
+import { RELACIONES, relacionLabel } from '@/utils/relacion';
 
 const INPUT_CLS =
   'w-full px-4 py-3 rounded-xl border-[1.5px] border-ink bg-white text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-coral/30';
@@ -25,6 +27,7 @@ function AgregarAlumnoForm({
   const { showAlert } = useDialog();
   const [nombre, setNombre] = useState('');
   const [dni, setDni] = useState('');
+  const [relacion, setRelacion] = useState<RelacionTutor>('tutor');
   const [err, setErr] = useState<string | null>(null);
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -33,7 +36,12 @@ function AgregarAlumnoForm({
     const nombreTrim = nombre.trim();
     if (!nombreTrim) { setErr('El nombre es obligatorio.'); return; }
     try {
-      await crear.mutateAsync({ grupoId, nombre: nombreTrim, dni: dni.trim() || null });
+      await crear.mutateAsync({
+        grupoId,
+        nombre: nombreTrim,
+        dni: dni.trim() || null,
+        relacion,
+      });
       onDone();
     } catch (error) {
       setErr(error instanceof Error ? error.message : 'Error al crear alumno');
@@ -79,6 +87,29 @@ function AgregarAlumnoForm({
         />
       </label>
 
+      <div>
+        <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-1.5">
+          Tu relación
+        </span>
+        <div className="grid grid-cols-4 gap-1.5">
+          {RELACIONES.map((r) => {
+            const active = relacion === r.value;
+            return (
+              <button
+                type="button"
+                key={r.value}
+                onClick={() => { setRelacion(r.value); }}
+                className={`text-[11px] font-bold rounded-lg px-2 py-2 border-[1.5px] transition ${
+                  active ? 'border-ink bg-sun/30' : 'border-ink/20 bg-white hover:border-ink/50'
+                }`}
+              >
+                {r.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 gap-2">
         <Button type="button" variant="secondary" fullWidth onClick={onDone}>
           Cancelar
@@ -102,22 +133,37 @@ function AlumnoItem({
   grupoId: string;
   userId: string;
 }) {
-  const { joinAsTutor, leaveAsTutor } = useAlumnoActions();
+  const { joinAsTutor, leaveAsTutor, setMiRelacion } = useAlumnoActions();
   const { showConfirm, showAlert } = useDialog();
+  const [showJoinPicker, setShowJoinPicker] = useState(false);
+  const [showEditPicker, setShowEditPicker] = useState(false);
 
   const tutores = alumno.alumno_tutores;
-  const yoSoyTutor = tutores.some((t) => t.profile_id === userId);
+  const miTutor = tutores.find((t) => t.profile_id === userId);
+  const yoSoyTutor = !!miTutor;
   const inicial = alumno.nombre[0]?.toUpperCase() ?? '?';
 
-  const handleJoin = async () => {
+  const handleJoin = async (relacion: RelacionTutor) => {
+    setShowJoinPicker(false);
     try {
-      await joinAsTutor.mutateAsync({ grupoId, alumnoId: alumno.id });
+      await joinAsTutor.mutateAsync({ grupoId, alumnoId: alumno.id, relacion });
     } catch (err) {
       await showAlert(err instanceof Error ? err.message : 'Error al unirse como tutor');
     }
   };
 
+  const handleSetRelacion = async (relacion: RelacionTutor) => {
+    setShowEditPicker(false);
+    if (relacion === miTutor?.relacion) return;
+    try {
+      await setMiRelacion.mutateAsync({ grupoId, alumnoId: alumno.id, relacion });
+    } catch (err) {
+      await showAlert(err instanceof Error ? err.message : 'Error al cambiar relación');
+    }
+  };
+
   const handleLeave = async () => {
+    setShowEditPicker(false);
     const ok = await showConfirm(`¿Desregistrarte como tutor de ${alumno.nombre}?`);
     if (!ok) return;
     try {
@@ -140,7 +186,7 @@ function AlumnoItem({
           <div className="font-display font-bold text-base truncate">{alumno.nombre}</div>
           <div className="text-[10px] text-ink/50 uppercase tracking-wider font-semibold">
             {tutores.length} tutor{tutores.length !== 1 ? 'es' : ''}
-            {yoSoyTutor ? ' · sos uno' : ''}
+            {yoSoyTutor ? ` · sos ${relacionLabel(miTutor.relacion).toLowerCase()}` : ''}
           </div>
         </div>
 
@@ -148,7 +194,7 @@ function AlumnoItem({
         {!yoSoyTutor ? (
           <button
             type="button"
-            onClick={() => { void handleJoin(); }}
+            onClick={() => { setShowJoinPicker((v) => !v); }}
             disabled={joinAsTutor.isPending}
             className="text-[10px] font-bold uppercase tracking-wider px-2 py-1.5 rounded-lg bg-mist hover:bg-ink/10 transition-colors disabled:opacity-50"
           >
@@ -157,14 +203,68 @@ function AlumnoItem({
         ) : (
           <button
             type="button"
-            onClick={() => { void handleLeave(); }}
-            disabled={leaveAsTutor.isPending}
+            onClick={() => { setShowEditPicker((v) => !v); }}
+            disabled={setMiRelacion.isPending || leaveAsTutor.isPending}
             className="text-[10px] font-bold uppercase tracking-wider px-2 py-1.5 rounded-lg bg-sage/15 text-sage hover:bg-sage/25 transition-colors disabled:opacity-50"
           >
-            ✓ Tutor
+            ✓ {relacionLabel(miTutor.relacion)}
           </button>
         )}
       </div>
+
+      {/* Picker de relación al unirse */}
+      {showJoinPicker && !yoSoyTutor && (
+        <div className="mt-3 pl-12">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-1.5">
+            ¿Qué relación tenés con {alumno.nombre}?
+          </div>
+          <div className="grid grid-cols-4 gap-1.5">
+            {RELACIONES.map((r) => (
+              <button
+                key={r.value}
+                type="button"
+                onClick={() => { void handleJoin(r.value); }}
+                className="text-[11px] font-bold rounded-lg px-2 py-2 border-[1.5px] border-ink/20 hover:border-ink hover:bg-sun/30 transition"
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Picker para editar mi relación o salir como tutor */}
+      {showEditPicker && yoSoyTutor && (
+        <div className="mt-3 pl-12 space-y-2">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-ink/60">
+            Cambiar relación
+          </div>
+          <div className="grid grid-cols-4 gap-1.5">
+            {RELACIONES.map((r) => {
+              const active = miTutor.relacion === r.value;
+              return (
+                <button
+                  key={r.value}
+                  type="button"
+                  onClick={() => { void handleSetRelacion(r.value); }}
+                  className={`text-[11px] font-bold rounded-lg px-2 py-2 border-[1.5px] transition ${
+                    active ? 'border-ink bg-sun/30' : 'border-ink/20 hover:border-ink/50'
+                  }`}
+                >
+                  {r.label}
+                </button>
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            onClick={() => { void handleLeave(); }}
+            className="text-[10px] font-bold uppercase tracking-wider text-coral hover:underline"
+          >
+            ← Salir como tutor
+          </button>
+        </div>
+      )}
 
       {/* Tutores list */}
       {tutores.length > 0 && (
@@ -180,6 +280,9 @@ function AlumnoItem({
                 </div>
                 <span className="truncate">
                   {tNombre}
+                  <span className="text-[10px] text-ink/55 ml-1">
+                    · {relacionLabel(t.relacion)}
+                  </span>
                   {esYo && (
                     <span className="text-[9px] font-bold uppercase tracking-wider text-ink/40 ml-1">
                       (yo)

@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import type { AlumnoRow } from '@/lib/database.types';
+import type { AlumnoRow, RelacionTutor } from '@/lib/database.types';
 
 export interface TutorBrief {
   profile_id: string;
+  relacion: RelacionTutor;
   profiles: { id: string; nombre: string | null; email: string } | null;
 }
 
@@ -26,7 +27,7 @@ export function useAlumnosByGrupo(grupoId: string | undefined) {
       if (!grupoId) return [];
       const { data, error } = await supabase
         .from('alumnos')
-        .select('*, alumno_tutores(profile_id, profiles(id, nombre, email))')
+        .select('*, alumno_tutores(profile_id, relacion, profiles(id, nombre, email))')
         .eq('grupo_id', grupoId)
         .order('nombre');
       if (error) throw error;

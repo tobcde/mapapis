@@ -239,10 +239,13 @@ export type AlumnoInsert = {
   dni?: string | null;
 };
 
+export type RelacionTutor = 'padre' | 'madre' | 'tutor' | 'encargado';
+
 export type AlumnoTutorRow = {
   id: string;
   alumno_id: string;
   profile_id: string;
+  relacion: RelacionTutor;
   created_at: string | null;
 };
 
@@ -463,7 +466,12 @@ export type Database = {
         Returns: void;
       };
       alumno_create_with_tutor: {
-        Args: { p_grupo: string; p_nombre: string; p_dni?: string | null };
+        Args: {
+          p_grupo: string;
+          p_nombre: string;
+          p_dni?: string | null;
+          p_relacion?: RelacionTutor;
+        };
         Returns: AlumnoRow[];
       };
       alumnos_merge: {
@@ -471,7 +479,11 @@ export type Database = {
         Returns: void;
       };
       alumno_join_as_tutor: {
-        Args: { p_alumno: string };
+        Args: { p_alumno: string; p_relacion?: RelacionTutor };
+        Returns: void;
+      };
+      alumno_set_mi_relacion: {
+        Args: { p_alumno: string; p_relacion: RelacionTutor };
         Returns: void;
       };
       alumno_leave_as_tutor: {
