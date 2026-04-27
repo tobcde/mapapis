@@ -253,6 +253,124 @@ function ProgresoChip({
   );
 }
 
+// ─── Resumen para pyme (deadlines + totales del pedido + presupuesto) ────────
+
+function ResumenPyme({
+  necesidad,
+  inscriptos,
+  totalAlumnos,
+}: {
+  necesidad: NecesidadRow;
+  inscriptos: number;
+  totalAlumnos: number | null;
+}) {
+  // Para techo proyectado, usamos total_alumnos si está disponible (el grupo
+  // tiene N alumnos, todos podrían anotarse). Si no, usamos inscriptos actuales.
+  const techoAlumnos =
+    necesidad.modalidad === 'individual'
+      ? (totalAlumnos ?? inscriptos)
+      : 1;
+  const compFloor = necesidad.composicion ?? [];
+  const totalUnidadesProyectado = compFloor.reduce(
+    (acc, it) => acc + it.cantidad * techoAlumnos,
+    0,
+  );
+  const totalUnidadesActual = compFloor.reduce(
+    (acc, it) => acc + it.cantidad * (necesidad.modalidad === 'individual' ? inscriptos : 1),
+    0,
+  );
+
+  const presupuestoMax = necesidad.presupuesto_max_centavos;
+  const presupuestoTechoCentavos =
+    presupuestoMax != null && necesidad.modalidad === 'individual'
+      ? presupuestoMax * techoAlumnos
+      : presupuestoMax;
+  const presupuestoActualCentavos =
+    presupuestoMax != null && necesidad.modalidad === 'individual'
+      ? presupuestoMax * Math.max(inscriptos, 0)
+      : presupuestoMax;
+
+  const fechaEntrega = necesidad.fecha_limite_entrega;
+
+  return (
+    <div className="bg-ink rounded-3xl border-[1.5px] border-ink p-5 text-sun shadow-pop space-y-4">
+      <div className="text-[10px] font-bold uppercase tracking-wider text-sun/70">
+        Resumen para tu oferta
+      </div>
+
+      {/* Fecha de entrega — la más importante para la pyme */}
+      {fechaEntrega && (
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-sun/65 mb-1">
+            Entregar antes de
+          </div>
+          <div className="font-display font-extrabold text-2xl leading-tight">
+            {fmtFecha(fechaEntrega)}
+          </div>
+        </div>
+      )}
+
+      {/* Totales del pedido (si hay composicion) */}
+      {compFloor.length > 0 && (
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-sun/65">
+              Pedido máximo
+            </div>
+            <div className="font-mono font-extrabold text-lg leading-tight mt-0.5">
+              {totalUnidadesProyectado} u
+            </div>
+            {necesidad.modalidad === 'individual' && totalAlumnos != null && (
+              <div className="text-[10px] text-sun/55">
+                si se anotan los {totalAlumnos}
+              </div>
+            )}
+          </div>
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-sun/65">
+              Confirmado hoy
+            </div>
+            <div className="font-mono font-extrabold text-lg leading-tight mt-0.5">
+              {totalUnidadesActual} u
+            </div>
+            <div className="text-[10px] text-sun/55">
+              {inscriptos} inscripto{inscriptos === 1 ? '' : 's'}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Presupuesto total */}
+      {presupuestoMax != null && (
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-sun/65">
+              Presupuesto máx
+            </div>
+            <div className="font-mono font-bold text-base mt-0.5">
+              {presupuestoTechoCentavos != null ? fmtMoney(presupuestoTechoCentavos) : '—'}
+            </div>
+            {necesidad.modalidad === 'individual' && (
+              <div className="text-[10px] text-sun/55">techo proyectado</div>
+            )}
+          </div>
+          {necesidad.modalidad === 'individual' && (
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-sun/65">
+                Presupuesto actual
+              </div>
+              <div className="font-mono font-bold text-base mt-0.5">
+                {presupuestoActualCentavos != null ? fmtMoney(presupuestoActualCentavos) : '—'}
+              </div>
+              <div className="text-[10px] text-sun/55">con inscriptos hoy</div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Desglose de composición (cuando el publicador cargó items estructurados) ─
 
 function DesgloseComposicion({
@@ -508,15 +626,33 @@ function OfertaCardFamilia({
               </span>
             )}
           </div>
-          <div className="text-[11px] text-ink/60 mt-0.5">
-            {modoEntregaLabel(oferta.modo_entrega)}
-            {oferta.tiempo_entrega_dias != null ? ` · ${oferta.tiempo_entrega_dias} días` : ''}
+          <div className="text-[11px] text-ink/60 mt-0.5 flex items-center gap-1.5 flex-wrap">
+            <span>{modoEntregaLabel(oferta.modo_entrega)}</span>
+            {oferta.tiempo_entrega_dias != null && (
+              <>
+                <span className="text-ink/30">·</span>
+                <span>
+                  {oferta.tiempo_entrega_dias === 0 ? 'entrega inmediata' : `${oferta.tiempo_entrega_dias} días`}
+                </span>
+              </>
+            )}
+            {oferta.retiro_inmediato && (
+              <span className="px-1.5 py-0.5 rounded-full bg-sage text-white text-[9px] font-bold uppercase tracking-wider">
+                Retiro inmediato
+              </span>
+            )}
           </div>
         </div>
         <div className="text-right shrink-0">
           <div className="font-mono font-extrabold text-xl">
             {fmtMoney(oferta.precio_total_centavos)}
           </div>
+          {oferta.precio_envio_centavos > 0 && (
+            <div className="text-[10px] text-ink/55 font-mono mt-0.5">
+              {fmtMoney(oferta.precio_total_centavos - oferta.precio_envio_centavos)} +{' '}
+              {fmtMoney(oferta.precio_envio_centavos)} envío
+            </div>
+          )}
         </div>
       </div>
 
@@ -632,15 +768,29 @@ function PanelOfertaPyme({
   const { showAlert } = useDialog();
   const miOferta = ofertas.find((o) => o.pyme_id === pymeId);
   const [showForm, setShowForm] = useState(!miOferta);
-  const [precio, setPrecio] = useState('');
+  const [precioRetiro, setPrecioRetiro] = useState('');
+  const [precioEnvio, setPrecioEnvio] = useState('');
+  const [incluyeEnvio, setIncluyeEnvio] = useState(false);
+  const [retiroInmediato, setRetiroInmediato] = useState(false);
   const [dias, setDias] = useState('');
   const [descripcion, setDescripcion] = useState('');
-  const [modoEntrega, setModoEntrega] = useState<ModoEntrega>('retiro');
   const [err, setErr] = useState<string | null>(null);
+
+  const retiroNum = Number(precioRetiro) || 0;
+  const envioNum = incluyeEnvio ? Number(precioEnvio) || 0 : 0;
+  const totalNum = retiroNum + envioNum;
+  const modoEntregaCalculado: ModoEntrega =
+    incluyeEnvio && retiroNum > 0 ? 'ambos'
+    : incluyeEnvio ? 'envio'
+    : 'retiro';
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr(null);
+    if (retiroNum < 1 && envioNum < 1) {
+      setErr('Cargá un precio de retiro o de envío.');
+      return;
+    }
     if (descripcion.trim().length < 10) {
       setErr('La descripción debe tener al menos 10 caracteres.');
       return;
@@ -648,10 +798,12 @@ function PanelOfertaPyme({
     try {
       await crearOferta.mutateAsync({
         necesidadId: necesidad.id,
-        precioCentavos: Math.round(Number(precio) * 100),
+        precioCentavos: Math.round(totalNum * 100),
+        precioEnvioCentavos: Math.round(envioNum * 100),
+        retiroInmediato,
         tiempoDias: dias ? Number(dias) : null,
         descripcion: descripcion.trim(),
-        modoEntrega,
+        modoEntrega: modoEntregaCalculado,
       });
       setShowForm(false);
     } catch (error) {
@@ -662,6 +814,8 @@ function PanelOfertaPyme({
   };
 
   if (miOferta) {
+    const envio = miOferta.precio_envio_centavos ?? 0;
+    const retiro = miOferta.precio_total_centavos - envio;
     return (
       <section className="space-y-3">
         <h2 className="font-display font-bold text-xl">Tu oferta</h2>
@@ -672,13 +826,23 @@ function PanelOfertaPyme({
             </span>
             {miOferta.tiempo_entrega_dias != null && (
               <span className="text-[10px] uppercase tracking-wider font-bold text-ink/60">
-                {miOferta.tiempo_entrega_dias} días
+                {miOferta.tiempo_entrega_dias === 0 ? 'inmediato' : `${miOferta.tiempo_entrega_dias} días`}
               </span>
             )}
           </div>
-          <p className="text-[11px] text-ink/70">
-            {modoEntregaLabel(miOferta.modo_entrega)}
-          </p>
+          {envio > 0 && (
+            <p className="text-[11px] text-ink/65 font-mono">
+              {fmtMoney(retiro)} retiro + {fmtMoney(envio)} envío
+            </p>
+          )}
+          <div className="flex items-center gap-2 flex-wrap text-[11px]">
+            <span className="text-ink/70">{modoEntregaLabel(miOferta.modo_entrega)}</span>
+            {miOferta.retiro_inmediato && (
+              <span className="px-2 py-0.5 rounded-full bg-sage text-white text-[10px] font-bold uppercase tracking-wider">
+                Retiro inmediato
+              </span>
+            )}
+          </div>
           <p className="text-sm text-ink/85 whitespace-pre-wrap leading-relaxed">
             {miOferta.descripcion}
           </p>
@@ -716,17 +880,67 @@ function PanelOfertaPyme({
 
             <label className="block">
               <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-1.5">
-                Precio total ($) *
+                Precio retiro por local ($) *
               </span>
               <input
                 type="number"
-                min={1}
+                min={0}
                 required
-                value={precio}
-                onChange={(e) => { setPrecio(e.target.value); }}
+                value={precioRetiro}
+                onChange={(e) => { setPrecioRetiro(e.target.value); }}
                 placeholder="45000"
                 className={INPUT_CLS + ' font-mono'}
               />
+            </label>
+
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={incluyeEnvio}
+                onChange={(e) => { setIncluyeEnvio(e.target.checked); }}
+                className="w-4 h-4 accent-ink"
+              />
+              <span className="text-xs font-bold">También hago envío</span>
+            </label>
+
+            {incluyeEnvio && (
+              <label className="block">
+                <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-1.5">
+                  Costo del envío ($)
+                </span>
+                <input
+                  type="number"
+                  min={0}
+                  value={precioEnvio}
+                  onChange={(e) => { setPrecioEnvio(e.target.value); }}
+                  placeholder="3500"
+                  className={INPUT_CLS + ' font-mono'}
+                />
+              </label>
+            )}
+
+            {totalNum > 0 && (
+              <div className="rounded-xl bg-ink text-sun px-3 py-2 text-sm flex items-baseline justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider opacity-80">
+                  Total que paga la familia
+                </span>
+                <span className="font-mono font-extrabold">${totalNum.toLocaleString('es-AR')}</span>
+              </div>
+            )}
+
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={retiroInmediato}
+                onChange={(e) => { setRetiroInmediato(e.target.checked); }}
+                className="w-4 h-4 accent-ink mt-0.5"
+              />
+              <span className="text-xs leading-snug">
+                <span className="font-bold">Retiro inmediato disponible</span>
+                <span className="block text-ink/60 text-[10px] mt-0.5">
+                  Tengo stock para entregar hoy mismo. Aparece como ventaja en la oferta.
+                </span>
+              </span>
             </label>
 
             <label className="block">
@@ -735,41 +949,13 @@ function PanelOfertaPyme({
               </span>
               <input
                 type="number"
-                min={1}
+                min={0}
                 value={dias}
                 onChange={(e) => { setDias(e.target.value); }}
-                placeholder="7"
+                placeholder={retiroInmediato ? '0' : '7'}
                 className={INPUT_CLS + ' font-mono'}
               />
             </label>
-
-            <div>
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-2">
-                ¿Cómo entregás?
-              </span>
-              <div className="grid grid-cols-3 gap-2">
-                {(
-                  [
-                    { v: 'retiro' as ModoEntrega, label: 'Solo retiro' },
-                    { v: 'envio' as ModoEntrega, label: 'Solo envío' },
-                    { v: 'ambos' as ModoEntrega, label: 'Ambos' },
-                  ] as const
-                ).map((opt) => (
-                  <button
-                    key={opt.v}
-                    type="button"
-                    onClick={() => { setModoEntrega(opt.v); }}
-                    className={`py-2.5 rounded-xl border-[1.5px] text-[11px] font-bold uppercase tracking-wider transition-colors ${
-                      modoEntrega === opt.v
-                        ? 'bg-ink text-sun border-ink'
-                        : 'bg-white border-ink/30 text-ink/70 hover:border-ink/60'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
 
             <label className="block">
               <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-1.5">
@@ -920,6 +1106,15 @@ export function NecesidadDetail() {
 
         {/* Info */}
         <InfoCard n={n} />
+
+        {/* Resumen pyme — fecha entrega + total proyectado + presupuesto total */}
+        {isPyme && (
+          <ResumenPyme
+            necesidad={n}
+            inscriptos={progreso.data?.inscriptos ?? 0}
+            totalAlumnos={progreso.data?.total_alumnos ?? null}
+          />
+        )}
 
         {/* Progreso inscripción (individual) */}
         {n.modalidad === 'individual' && (

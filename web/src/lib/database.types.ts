@@ -223,6 +223,8 @@ export type OfertaRow = {
   necesidad_id: string;
   pyme_id: string;
   precio_total_centavos: number;
+  precio_envio_centavos: number;
+  retiro_inmediato: boolean;
   descripcion: string;
   tiempo_entrega_dias: number | null;
   estado: OfertaEstado;
@@ -235,6 +237,8 @@ export type OfertaInsert = {
   necesidad_id: string;
   pyme_id: string;
   precio_total_centavos: number;
+  precio_envio_centavos?: number;
+  retiro_inmediato?: boolean;
   descripcion: string;
   tiempo_entrega_dias?: number | null;
   estado?: OfertaEstado;
@@ -480,6 +484,8 @@ export type Database = {
           p_tiempo_dias: number | null;
           p_descripcion: string;
           p_modo_entrega?: string;
+          p_precio_envio_centavos?: number;
+          p_retiro_inmediato?: boolean;
         };
         Returns: void;
       };

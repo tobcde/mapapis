@@ -5,10 +5,12 @@ import { ofertasByNecesidadKey } from '@/lib/queries/useOfertasByNecesidad';
 
 export interface CrearOfertaInput {
   necesidadId: string;
-  precioCentavos: number;
+  precioCentavos: number;       // TOTAL (retiro + envio)
   tiempoDias: number | null;
   descripcion: string;
   modoEntrega?: ModoEntrega;
+  precioEnvioCentavos?: number; // 0 si no incluye envio
+  retiroInmediato?: boolean;    // tengo stock para retiro hoy
 }
 
 /**
@@ -26,6 +28,8 @@ export function useCrearOferta() {
         p_tiempo_dias: input.tiempoDias,
         p_descripcion: input.descripcion,
         p_modo_entrega: input.modoEntrega ?? 'retiro',
+        p_precio_envio_centavos: input.precioEnvioCentavos ?? 0,
+        p_retiro_inmediato: input.retiroInmediato ?? false,
       });
       if (error) throw error;
     },
