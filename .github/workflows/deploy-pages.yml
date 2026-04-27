@@ -56,6 +56,7 @@ jobs:
           VITE_SUPABASE_URL: https://adpbjslkswtnqklzejuy.supabase.co
           VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFkcGJqc2xrc3d0bnFrbHplanV5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwNjg5NzIsImV4cCI6MjA5MjY0NDk3Mn0.LrzDO8CtW1FeJjdUH5unjaoAdOtMHnDd9T1E4q7X_uU
           VITE_MP_PUBLIC_KEY: APP_USR-79ac6ee1-8c01-4e30-9ae5-be03cbe403ab
+          VITE_MP_CLIENT_ID: '3342777786606412'
           VITE_SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           VITE_ENV: prod
           VITE_BASE_PATH: /mapapis-next/
