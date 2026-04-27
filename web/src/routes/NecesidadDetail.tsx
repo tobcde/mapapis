@@ -266,9 +266,22 @@ function DesgloseComposicion({
   inscriptos: number;
   isCerrada: boolean;
 }) {
+  // Solo multiplicamos cuando hay inscriptos. Sin nadie anotado mostramos el
+  // desglose "por alumno" tal cual lo cargó el publicador (no "0× cosa").
+  const showPerAlumno = modalidad === 'individual' && inscriptos === 0;
   const multiplier = modalidad === 'individual' ? inscriptos : 1;
-  const totalUnidades = composicion.reduce((acc, it) => acc + it.cantidad * multiplier, 0);
-  const labelTotal = isCerrada ? 'Pedido total final' : 'Pedido total estimado';
+  const totalUnidadesProyectado = composicion.reduce(
+    (acc, it) => acc + it.cantidad * multiplier,
+    0,
+  );
+  const totalUnidadesPorAlumno = composicion.reduce((acc, it) => acc + it.cantidad, 0);
+
+  const labelTotal =
+    showPerAlumno
+      ? 'Por cada alumno que se anote'
+      : isCerrada
+        ? 'Pedido total final'
+        : 'Pedido total estimado';
 
   return (
     <div className="mt-3 pt-3 border-t border-ink/15">
@@ -277,7 +290,7 @@ function DesgloseComposicion({
       </div>
       <ul className="space-y-2">
         {composicion.map((it, i) => {
-          const total = it.cantidad * multiplier;
+          const total = showPerAlumno ? it.cantidad : it.cantidad * multiplier;
           return (
             <li key={i} className="text-sm flex items-center gap-2">
               {it.foto_url ? (
@@ -312,7 +325,7 @@ function DesgloseComposicion({
                     {it.descripcion}
                   </div>
                 )}
-                {modalidad === 'individual' && (
+                {modalidad === 'individual' && !showPerAlumno && (
                   <div className="text-[10px] text-ink/50 font-mono mt-0.5">
                     ({it.cantidad}/alumno × {inscriptos})
                   </div>
@@ -323,7 +336,9 @@ function DesgloseComposicion({
         })}
       </ul>
       <div className="text-[11px] text-ink/55 mt-2 italic">
-        Total: {totalUnidades} unidades
+        {showPerAlumno
+          ? `${totalUnidadesPorAlumno} unidades por alumno · se multiplica con cada inscripción`
+          : `Total: ${totalUnidadesProyectado} unidades`}
       </div>
     </div>
   );
