@@ -53,8 +53,12 @@ begin
   if p_relacion is null or p_relacion not in ('padre','madre','tutor','encargado') then
     raise exception 'relacion invalida (use padre/madre/tutor/encargado)';
   end if;
-  if p_fecha_nacimiento is not null
-     and (p_fecha_nacimiento < '1990-01-01' or p_fecha_nacimiento > current_date) then
+  -- Fecha de nacimiento obligatoria en alta nueva (calendario de cumples
+  -- necesita data completa). Filas existentes con null no se afectan.
+  if p_fecha_nacimiento is null then
+    raise exception 'La fecha de nacimiento es obligatoria';
+  end if;
+  if p_fecha_nacimiento < '1990-01-01' or p_fecha_nacimiento > current_date then
     raise exception 'Fecha de nacimiento fuera de rango';
   end if;
 

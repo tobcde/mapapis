@@ -47,13 +47,17 @@ function AgregarAlumnoForm({
       setErr('El DNI es obligatorio (7 u 8 dígitos).');
       return;
     }
+    if (!fechaNacimiento) {
+      setErr('La fecha de nacimiento es obligatoria.');
+      return;
+    }
     try {
       await crear.mutateAsync({
         grupoId,
         nombre: nombreTrim,
         dni: dniTrim,
         relacion,
-        fechaNacimiento: fechaNacimiento || null,
+        fechaNacimiento,
       });
       onDone();
     } catch (error) {
@@ -107,10 +111,11 @@ function AgregarAlumnoForm({
 
       <label className="block">
         <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-1.5">
-          Fecha de nacimiento (opcional)
+          Fecha de nacimiento *
         </span>
         <input
           type="date"
+          required
           value={fechaNacimiento}
           onChange={(e) => { setFechaNacimiento(e.target.value); }}
           max={new Date().toISOString().slice(0, 10)}
