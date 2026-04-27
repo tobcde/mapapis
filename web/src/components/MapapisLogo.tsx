@@ -181,7 +181,7 @@ function CloudsSvg({ x, y, w }: { x: number; y: number; w: number }) {
   const sw = Math.max(1.2, w * 0.012);
   return (
     <g transform={`translate(${x}, ${y}) rotate(-3)`}>
-      <svg x={0} y={0} width={w} height={h} viewBox="0 0 200 140">
+      <svg x={0} y={0} width={w} height={h} viewBox="0 0 200 140" overflow="visible">
         <g transform="translate(0, 8) rotate(-3 50 30)">
           <path
             d="M18 38 Q 12 26 24 22 Q 28 12 42 16 Q 50 6 64 14 Q 78 12 80 26 Q 90 30 84 42 Q 80 50 66 48 Q 54 54 42 48 Q 28 50 22 44 Q 14 44 18 38 Z"
@@ -254,7 +254,7 @@ function FamilySvg({ x, y, w, paper, accent }: FamilySvgProps) {
   const sw = Math.max(1.6, w * 0.014);
   return (
     <g transform={`translate(${x}, ${y})`}>
-      <svg x={0} y={0} width={w} height={h} viewBox="0 0 200 110">
+      <svg x={0} y={0} width={w} height={h} viewBox="0 0 200 110" overflow="visible">
         <g
           stroke={COLORS.ink}
           strokeWidth={sw}
@@ -378,15 +378,15 @@ function LockupSvg({ palette }: { palette: Palette }) {
         opacity={0.6}
       />
       {holes}
-      <SunSvg cx={W - 90} cy={90} size={120} />
+      <SunSvg cx={W - 100} cy={110} size={130} />
       <WordmarkSvg
         x={120}
-        y={320}
-        size={100}
+        y={260}
+        size={104}
         paper={palette.paper}
         pinColor={palette.pin}
       />
-      <g transform="translate(120, 540)">
+      <g transform="translate(120, 470)">
         <text
           x={0}
           y={0}
@@ -424,8 +424,9 @@ function LockupSvg({ palette }: { palette: Palette }) {
           Todos ganan.
         </text>
       </g>
-      <CloudsSvg x={420} y={510} w={220} />
-      <FamilySvg x={100} y={770} w={500} paper={palette.paper} accent={palette.pin} />
+      <CloudsSvg x={420} y={440} w={220} />
+      {/* familia abajo — más arriba, y más angosta para que entre el perro completo */}
+      <FamilySvg x={110} y={700} w={460} paper={palette.paper} accent={palette.pin} />
     </>
   );
 }

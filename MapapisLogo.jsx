@@ -132,7 +132,7 @@ function CloudsSvg({ x, y, w }) {
   const sw = Math.max(1.2, w * 0.012);
   return (
     <g transform={`translate(${x}, ${y}) rotate(-3)`}>
-      <svg x={0} y={0} width={w} height={h} viewBox="0 0 200 140">
+      <svg x={0} y={0} width={w} height={h} viewBox="0 0 200 140" overflow="visible">
         <g transform="translate(0, 8) rotate(-3 50 30)">
           <path d="M18 38 Q 12 26 24 22 Q 28 12 42 16 Q 50 6 64 14 Q 78 12 80 26 Q 90 30 84 42 Q 80 50 66 48 Q 54 54 42 48 Q 28 50 22 44 Q 14 44 18 38 Z"
             fill={COLORS.sky} stroke={COLORS.ink} strokeWidth={sw} strokeLinejoin="round" opacity={0.85} />
@@ -162,7 +162,7 @@ function FamilySvg({ x, y, w, paper, accent }) {
   const sw = Math.max(1.6, w * 0.014);
   return (
     <g transform={`translate(${x}, ${y})`}>
-      <svg x={0} y={0} width={w} height={h} viewBox="0 0 200 110">
+      <svg x={0} y={0} width={w} height={h} viewBox="0 0 200 110" overflow="visible">
         <g stroke={COLORS.ink} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" fill="none">
           {/* papá */}
           <circle cx={32} cy={20} r={9} fill={paper} />
@@ -245,12 +245,12 @@ function LockupSvg({ palette }) {
         stroke={COLORS.coral} strokeWidth={3} opacity={0.6} />
       {holes}
       {/* sol arriba derecha */}
-      <SunSvg cx={W - 90} cy={90} size={120} />
+      <SunSvg cx={W - 100} cy={110} size={130} />
       {/* wordmark */}
-      <WordmarkSvg x={120} y={320} size={100}
+      <WordmarkSvg x={120} y={260} size={104}
         paper={palette.paper} pinColor={palette.pin} />
       {/* tagline manuscrito */}
-      <g transform="translate(120, 540)">
+      <g transform="translate(120, 470)">
         <text x={0} y={0} fontFamily="'Inter', system-ui, sans-serif"
           fontWeight={800} fontSize={34} fill={COLORS.ink} opacity={0.9}
           transform="rotate(-1.5)">Solución para las</text>
@@ -262,9 +262,9 @@ function LockupSvg({ palette }) {
           transform="rotate(2)">Todos ganan.</text>
       </g>
       {/* nubes a la derecha del tagline */}
-      <CloudsSvg x={420} y={510} w={220} />
-      {/* familia abajo */}
-      <FamilySvg x={100} y={770} w={500} paper={palette.paper} pinColor={palette.pin} accent={palette.pin} />
+      <CloudsSvg x={420} y={440} w={220} />
+      {/* familia abajo — más arriba, y más angosta para que entre el perro completo */}
+      <FamilySvg x={110} y={700} w={460} paper={palette.paper} accent={palette.pin} />
     </>
   );
 }
