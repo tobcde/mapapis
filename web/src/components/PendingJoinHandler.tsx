@@ -48,6 +48,8 @@ export function PendingJoinHandler() {
       .catch(async (err) => {
         await showAlert(err instanceof Error ? err.message : 'No pudimos unirte al grupo con el código guardado');
       });
+    // Intento único al tener perfil; join/showToast/showAlert/navigate son estables
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.id, profile?.role]);
 
   return null;

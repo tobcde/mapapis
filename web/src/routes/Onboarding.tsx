@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactElement } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUpdateProfile } from '@/lib/mutations/useUpdateProfile';
 import { supabase } from '@/lib/supabase';
@@ -53,7 +53,7 @@ const ROLES: {
   label: string;
   short: string;
   color: string;
-  Icon: ({ className }: { className?: string }) => JSX.Element;
+  Icon: ({ className }: { className?: string }) => ReactElement;
 }[] = [
   {
     value: 'familia',

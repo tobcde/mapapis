@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- patrón provider + hook en un solo módulo */
 import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
 
 /* ── tipos ─────────────────────────────────────────────────────────────── */

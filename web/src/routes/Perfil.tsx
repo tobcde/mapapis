@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactElement } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Shell } from '@/components/Shell';
 import { useDialog, useToast } from '@/components/ui';
@@ -51,7 +51,7 @@ function IconLogout({ className }: { className?: string }) {
 
 // ── Rol config ────────────────────────────────────────────────────────────────
 
-type IconComp = ({ className }: { className?: string }) => JSX.Element;
+type IconComp = ({ className }: { className?: string }) => ReactElement;
 
 const ROL_INFO: Record<
   ProfileRole,

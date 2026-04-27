@@ -20,7 +20,7 @@ export function setPendingJoinCode(code: string): void {
 
 export function getPendingJoinCode(): string | null {
   try {
-    return localStorage.getItem(STORAGE_KEY) || null;
+    return localStorage.getItem(STORAGE_KEY) ?? null;
   } catch {
     return null;
   }
@@ -29,5 +29,7 @@ export function getPendingJoinCode(): string | null {
 export function clearPendingJoinCode(): void {
   try {
     localStorage.removeItem(STORAGE_KEY);
-  } catch {}
+  } catch {
+    // localStorage no disponible (modo privado, etc.)
+  }
 }

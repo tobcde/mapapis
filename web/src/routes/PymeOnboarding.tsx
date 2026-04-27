@@ -4,8 +4,6 @@ import { Button } from '@/components/ui';
 import { useCategorias } from '@/lib/queries/useCategorias';
 import { usePymeProfile } from '@/lib/queries/usePymeProfile';
 import { useActualizarPyme } from '@/lib/mutations/useActualizarPyme';
-import type { CategoriaRow } from '@/lib/database.types';
-
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
 const ZONAS_BY_REGION: Record<string, string[]> = {
@@ -101,7 +99,7 @@ export function PymeOnboarding() {
   const [catsSel, setCatsSel] = useState<string[]>([]);
   const [err, setErr] = useState<string | null>(null);
 
-  // Pre-fill with existing pyme data when editing
+  /* eslint-disable react-hooks/set-state-in-effect -- hidratar formulario desde row de pyme al editar */
   useEffect(() => {
     if (!pyme) return;
     setNombre(pyme.nombre_comercial ?? '');
@@ -116,6 +114,7 @@ export function PymeOnboarding() {
     setZonasSel(Array.isArray(pyme.zonas) ? pyme.zonas : []);
     setCatsSel(Array.isArray(pyme.categorias_ids) ? pyme.categorias_ids : []);
   }, [pyme]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const cuitOk = cuit.trim() === '' || validarCuit(cuit);
   const algunLink = [webUrl, instagram, facebook].some((s) => s.trim().length > 0);
@@ -178,15 +177,16 @@ export function PymeOnboarding() {
   return (
     <main className="min-h-screen bg-cream">
       <div className="px-6 pt-12 pb-6 max-w-md mx-auto anim-in">
-        {isEdit && (
-          <button
-            type="button"
-            onClick={() => { void navigate('/perfil'); }}
-            className="text-xs font-bold uppercase tracking-wider text-ink/60 mb-4 flex items-center gap-1 hover:text-ink"
-          >
-            ← Volver
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => {
+            if (isEdit) void navigate('/perfil');
+            else void navigate(-1);
+          }}
+          className="text-xs font-bold uppercase tracking-wider text-ink/60 mb-4 flex items-center gap-1 hover:text-ink"
+        >
+          ← Volver
+        </button>
         <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-[0.2em] text-sage">
           <span className="inline-block w-6 h-[2px] bg-sage" />
           <span>{isEdit ? 'Pyme · Editar perfil' : 'Pyme · Onboarding'}</span>
@@ -279,11 +279,11 @@ export function PymeOnboarding() {
               <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-2">
                 Categorías que cubrís *
               </span>
-              {(categoriasData as CategoriaRow[]).length === 0 ? (
-                <span className="text-xs text-ink/50">Cargando categorías…</span>
+              {categoriasData.length === 0 ? (
+                <span className="text-xs text-ink/50">Preparando categorías…</span>
               ) : (
                 <div className="flex flex-wrap gap-2">
-                  {(categoriasData as CategoriaRow[]).map((c) => (
+                  {categoriasData.map((c) => (
                     <ToggleChip
                       key={c.id}
                       label={c.nombre}

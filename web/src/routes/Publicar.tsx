@@ -5,7 +5,7 @@ import { Button } from '@/components/ui';
 import { useMisGrupos } from '@/lib/queries/useMisGrupos';
 import { useCategorias } from '@/lib/queries/useCategorias';
 import { usePublicarNecesidad } from '@/lib/mutations/usePublicarNecesidad';
-import type { CampoSchema, NecesidadModalidad, Json } from '@/lib/database.types';
+import type { CampoSchema, NecesidadModalidad } from '@/lib/database.types';
 
 // ─── Field wrapper ────────────────────────────────────────────────────────────
 
@@ -171,7 +171,7 @@ export function Publicar() {
   const [fotoPreview, setFotoPreview] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Inicializar grupo y categoría cuando cargan
+  /* eslint-disable react-hooks/set-state-in-effect -- defaults desde datos async y reset al cambiar categoría */
   useEffect(() => {
     const primero = gruposAdmin[0];
     if (gruposAdmin.length > 0 && !grupoId && primero) setGrupoId(primero.id);
@@ -182,8 +182,10 @@ export function Publicar() {
     if (categorias.length > 0 && !categoriaId && primera) setCategoriaId(primera.id);
   }, [categorias, categoriaId]);
 
-  // Resetear campos dinámicos al cambiar categoría
-  useEffect(() => { setCamposValues({}); }, [categoriaId]);
+  useEffect(() => {
+    setCamposValues({});
+  }, [categoriaId]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const categoriaActual = categorias.find((c) => c.id === categoriaId);
   const schemaCampos = (categoriaActual?.campos_obligatorios as CampoSchema[] | undefined) ?? [];
@@ -266,7 +268,7 @@ export function Publicar() {
         categoriaId,
         titulo: titulo.trim(),
         descripcion: descripcion.trim(),
-        campos: camposClean as Json,
+        campos: camposClean,
         modalidad,
         cantidadPorAlumno: modalidad === 'individual' ? Number(cantidadPorAlumno) : null,
         presupuestoMinCentavos: presupuestoMin ? Math.round(Number(presupuestoMin) * 100) : null,

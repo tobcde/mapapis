@@ -66,6 +66,8 @@ export function Unirse() {
         await showAlert(err instanceof Error ? err.message : 'No pudimos unirte al grupo');
         void navigate('/grupos', { replace: true });
       });
+    // Flujo explícito por flags de carga; no añadir join/showAlert (riesgo de doble join)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionLoading, profileLoading, session, profile?.role, code]);
 
   return (

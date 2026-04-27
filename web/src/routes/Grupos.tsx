@@ -236,6 +236,7 @@ function CrearForm({ onDone }: { onDone: () => void }) {
     defaultValues: { nombre: '', zona: '', rango_familias: '' },
   });
 
+  // eslint-disable-next-line react-hooks/incompatible-library -- RHF watch() no es memoizable; uso legítimo
   const tipoSel = watch('tipo');
 
   const onSubmit: SubmitHandler<CrearValues> = async (values) => {
