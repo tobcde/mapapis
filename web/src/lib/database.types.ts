@@ -221,13 +221,18 @@ export type ModoEntrega = 'retiro' | 'envio' | 'ambos';
 /**
  * Variante de producto dentro de una oferta. La pyme puede ofrecer varias
  * versiones del mismo producto (ej. "cuaderno tapa dura" + "cuaderno tapa
- * flexible") con su propio precio, foto y descripción. La familia ve todas
- * y compara.
+ * flexible") con su propio precio, foto y descripción.
+ *
+ * `item_ref` opcional matchea con un item de la composición de la necesidad
+ * (por nombre). Variantes con el MISMO item_ref son ALTERNATIVAS — la
+ * familia elige una al adjudicar y solo esa cuenta para el total final.
+ * Variantes sin item_ref (o cada una con item_ref único) suman al total.
  */
 export interface OfertaVariante {
   nombre: string;
   precio_centavos: number;
   cantidad?: number;
+  item_ref?: string | null;
   descripcion?: string | null;
   foto_url?: string | null;
   link_url?: string | null;
