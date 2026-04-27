@@ -747,12 +747,31 @@ function PanelOfertaPyme({
   );
 
   // Si hay variantes, el "precio retiro" se calcula sumando variantes.
-  // Si no hay variantes, usa el input manual.
-  const subtotalVariantes = variantes.reduce((acc, v) => {
-    const precio = Number(v.precio) || 0;
-    const cant = Number(v.cantidad) || 1;
-    return acc + (precio > 0 ? precio * cant : 0);
-  }, 0);
+  // Variantes con el MISMO item_ref son alternativas → se cuenta solo la más
+  // cara (techo). Variantes sin item_ref o con item_refs únicos se suman.
+  const variantesValidas = variantes.filter(
+    (v) => v.nombre.trim().length > 0 && Number(v.precio) > 0,
+  );
+  const variantesPorSlot = new Map<string, VarianteRow[]>();
+  for (const v of variantesValidas) {
+    const slot = v.item_ref.trim().toLowerCase() || `__nop_${v.nombre.trim().toLowerCase()}_${variantesPorSlot.size}`;
+    const existing = variantesPorSlot.get(slot) ?? [];
+    existing.push(v);
+    variantesPorSlot.set(slot, existing);
+  }
+  const subtotalVariantes = Array.from(variantesPorSlot.values()).reduce(
+    (acc, alternativas) => {
+      const techoSlot = alternativas.reduce(
+        (max, v) => Math.max(max, (Number(v.precio) || 0) * (Number(v.cantidad) || 1)),
+        0,
+      );
+      return acc + techoSlot;
+    },
+    0,
+  );
+  const hayAlternativasMultiples = Array.from(variantesPorSlot.values()).some(
+    (arr) => arr.length > 1,
+  );
   const retiroNum = tieneVariantes ? subtotalVariantes : Number(precioRetiro) || 0;
   const envioNum = incluyeEnvio ? Number(precioEnvio) || 0 : 0;
   const totalNum = retiroNum + envioNum;
@@ -784,6 +803,8 @@ function PanelOfertaPyme({
         };
         const cantidad = Number(v.cantidad);
         if (Number.isFinite(cantidad) && cantidad > 1) item.cantidad = Math.round(cantidad);
+        const ref = v.item_ref.trim();
+        if (ref) item.item_ref = ref;
         const desc = v.descripcion.trim();
         if (desc) item.descripcion = desc;
         if (v.foto_url) item.foto_url = v.foto_url;
@@ -901,6 +922,7 @@ function PanelOfertaPyme({
                     {
                       ...emptyVariante(),
                       nombre: nombreItem,
+                      item_ref: nombreItem,
                     },
                   ]);
                 }}
@@ -926,8 +948,15 @@ function PanelOfertaPyme({
                 necesidadId={necesidad.id}
               />
               {tieneVariantes && (
-                <div className="mt-2 px-3 py-2 rounded-lg bg-sage/15 border border-sage/40 text-[11px] font-bold">
-                  ✓ Subtotal por variantes: ${subtotalVariantes.toLocaleString('es-AR')}
+                <div className="mt-2 px-3 py-2 rounded-lg bg-sage/15 border border-sage/40 text-[11px] font-bold space-y-1">
+                  <div>
+                    ✓ Subtotal: ${subtotalVariantes.toLocaleString('es-AR')}
+                  </div>
+                  {hayAlternativasMultiples && (
+                    <div className="font-normal text-[10px] text-ink/65">
+                      Variantes con mismo item se toman como alternativas: solo cuenta la más cara para el techo. La familia elige cuál al adjudicar.
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1229,59 +1258,88 @@ export function NecesidadDetail() {
 // ─── VariantesGallery (display, lo ven familia y pyme) ──────────────────────
 
 function VariantesGallery({ variantes }: { variantes: OfertaVariante[] }) {
+  // Agrupar por item_ref. Si no tiene item_ref, va en su propio "slot".
+  const slots = new Map<string, OfertaVariante[]>();
+  variantes.forEach((v, idx) => {
+    const key = (v.item_ref ?? '').trim() || `__solo_${idx}`;
+    const lista = slots.get(key) ?? [];
+    lista.push(v);
+    slots.set(key, lista);
+  });
+
   return (
-    <div className="rounded-2xl border-[1.5px] border-ink/15 bg-cream/40 p-3 space-y-2">
+    <div className="rounded-2xl border-[1.5px] border-ink/15 bg-cream/40 p-3 space-y-3">
       <div className="text-[10px] font-bold uppercase tracking-wider text-ink/60">
         Variantes de la oferta
       </div>
-      <ul className="space-y-2">
-        {variantes.map((v, i) => (
-          <li key={i} className="flex items-center gap-3">
-            {v.foto_url ? (
-              <img
-                src={v.foto_url}
-                alt={v.nombre}
-                className="w-12 h-12 rounded-lg object-cover border-[1.5px] border-ink/20 shrink-0"
-                loading="lazy"
-                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-              />
-            ) : (
-              <div className="w-12 h-12 rounded-lg bg-mist/40 border-[1.5px] border-ink/10 shrink-0" />
-            )}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-baseline gap-2 flex-wrap">
-                <span className="font-bold text-sm">{v.nombre}</span>
-                {v.link_url && (
-                  <a
-                    href={v.link_url}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="text-[11px] text-coral hover:underline shrink-0"
-                    title="Ver link"
-                  >
-                    ↗
-                  </a>
+      {Array.from(slots.entries()).map(([slotKey, lista]) => {
+        const itemRef = slotKey.startsWith('__solo_') ? null : slotKey;
+        const esAlternativa = lista.length > 1;
+        return (
+          <div key={slotKey} className="space-y-1.5">
+            {itemRef && (
+              <div className="flex items-baseline gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-coral">
+                  Para: {itemRef}
+                </span>
+                {esAlternativa && (
+                  <span className="text-[10px] text-ink/55 italic">
+                    (elegí una)
+                  </span>
                 )}
               </div>
-              {v.descripcion && (
-                <div className="text-[11px] text-ink/65 mt-0.5 leading-snug">
-                  {v.descripcion}
-                </div>
-              )}
-            </div>
-            <div className="text-right shrink-0">
-              <div className="font-mono font-bold text-sm">
-                {fmtMoney(v.precio_centavos)}
-              </div>
-              {(v.cantidad ?? 1) > 1 && (
-                <div className="text-[10px] text-ink/55 font-mono">
-                  × {v.cantidad}
-                </div>
-              )}
-            </div>
-          </li>
-        ))}
-      </ul>
+            )}
+            <ul className="space-y-2">
+              {lista.map((v, i) => (
+                <li key={i} className="flex items-center gap-3">
+                  {v.foto_url ? (
+                    <img
+                      src={v.foto_url}
+                      alt={v.nombre}
+                      className="w-12 h-12 rounded-lg object-cover border-[1.5px] border-ink/20 shrink-0"
+                      loading="lazy"
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-lg bg-mist/40 border-[1.5px] border-ink/10 shrink-0" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-2 flex-wrap">
+                      <span className="font-bold text-sm">{v.nombre}</span>
+                      {v.link_url && (
+                        <a
+                          href={v.link_url}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className="text-[11px] text-coral hover:underline shrink-0"
+                          title="Ver link"
+                        >
+                          ↗
+                        </a>
+                      )}
+                    </div>
+                    {v.descripcion && (
+                      <div className="text-[11px] text-ink/65 mt-0.5 leading-snug">
+                        {v.descripcion}
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="font-mono font-bold text-sm">
+                      {fmtMoney(v.precio_centavos)}
+                    </div>
+                    {(v.cantidad ?? 1) > 1 && (
+                      <div className="text-[10px] text-ink/55 font-mono">
+                        × {v.cantidad}
+                      </div>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1297,11 +1355,11 @@ function ItemsDelPedido({
   variantes: VarianteRow[];
   onCotizarItem: (nombre: string) => void;
 }) {
-  // Match aproximado: cuántas variantes ya cargadas tienen el nombre del item
-  // como prefijo (case-insensitive). Best-effort, la pyme puede renombrar.
+  // Match exacto por item_ref (case-insensitive trim).
   const cuentaPorItem = (nombreItem: string) =>
-    variantes.filter((v) =>
-      v.nombre.trim().toLowerCase().startsWith(nombreItem.trim().toLowerCase()),
+    variantes.filter(
+      (v) =>
+        v.item_ref.trim().toLowerCase() === nombreItem.trim().toLowerCase(),
     ).length;
 
   return (
@@ -1352,6 +1410,7 @@ interface VarianteRow {
   nombre: string;
   precio: string;
   cantidad: string;
+  item_ref: string;       // nombre del item de la necesidad al que pertenece
   descripcion: string;
   foto_url: string;       // URL pública post-upload
   foto_uploading: boolean;
@@ -1363,6 +1422,7 @@ function emptyVariante(): VarianteRow {
     nombre: '',
     precio: '',
     cantidad: '1',
+    item_ref: '',
     descripcion: '',
     foto_url: '',
     foto_uploading: false,
@@ -1447,13 +1507,20 @@ function VariantesEditor({
                 className="rounded-xl border-[1.5px] border-ink/20 bg-white/60 p-2 space-y-2"
               >
                 <div className="flex gap-2 items-start">
-                  <input
-                    type="text"
-                    placeholder="Ej: Cuaderno tapa dura"
-                    value={it.nombre}
-                    onChange={(e) => { update(i, { nombre: e.target.value }); }}
-                    className="flex-1 px-3 py-2 rounded-lg border-[1.5px] border-ink/30 text-sm focus:outline-none focus:border-ink"
-                  />
+                  <div className="flex-1 min-w-0">
+                    {it.item_ref && (
+                      <span className="block text-[9px] font-bold uppercase tracking-wider text-coral/85 mb-0.5">
+                        Para: {it.item_ref}
+                      </span>
+                    )}
+                    <input
+                      type="text"
+                      placeholder="Ej: Faber Castell HB"
+                      value={it.nombre}
+                      onChange={(e) => { update(i, { nombre: e.target.value }); }}
+                      className="w-full px-3 py-2 rounded-lg border-[1.5px] border-ink/30 text-sm focus:outline-none focus:border-ink"
+                    />
+                  </div>
                   <input
                     type="number"
                     min={0}
