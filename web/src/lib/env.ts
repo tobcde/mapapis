@@ -16,6 +16,8 @@ export const env = {
   SUPABASE_URL: required('VITE_SUPABASE_URL', import.meta.env.VITE_SUPABASE_URL),
   SUPABASE_ANON_KEY: required('VITE_SUPABASE_ANON_KEY', import.meta.env.VITE_SUPABASE_ANON_KEY),
   MP_PUBLIC_KEY: import.meta.env.VITE_MP_PUBLIC_KEY ?? '',
+  /** Client ID público de la app MaPaPis Marketplace en MP — usado para iniciar el OAuth del receptor. */
+  MP_CLIENT_ID: import.meta.env.VITE_MP_CLIENT_ID ?? '',
   ENV: import.meta.env.VITE_ENV ?? 'dev',
   SENTRY_DSN: import.meta.env.VITE_SENTRY_DSN ?? '',
   IS_PROD: import.meta.env.PROD,

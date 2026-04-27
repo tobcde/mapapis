@@ -5,6 +5,9 @@ import { Button } from '@/components/ui';
 import { useDialog } from '@/components/ui';
 import { useProfile } from '@/lib/queries/useProfile';
 import { usePymeProfile } from '@/lib/queries/usePymeProfile';
+import { useMpLinked } from '@/lib/queries/useMpLinked';
+import { useMpUnlink } from '@/lib/mutations/useMpUnlink';
+import { buildMpAuthorizeUrl } from '@/lib/mp/oauth';
 import { supabase } from '@/lib/supabase';
 import { useQueryClient } from '@tanstack/react-query';
 import { profileQueryKey } from '@/lib/queries/useProfile';
@@ -208,14 +211,17 @@ export function Perfil() {
           </button>
         </div>
 
+        {/* Mercado Pago vinculado (OAuth) */}
+        <MpLinkCard />
+
         {/* Alias de Mercado Pago */}
         <div className="bg-white rounded-3xl border-[1.5px] border-ink p-5 shadow-pop">
           <div className="text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-1">
             Alias de Mercado Pago
           </div>
           <p className="text-[11px] text-ink/55 mb-3">
-            Cuando organicen un sobre digital de cumple para tu hijo/a, las familias del grupo
-            te transfieren acá directo (MaPaPis no toca la plata).
+            Para fallback / referencia rápida. La forma recomendada de cobrar el sobre digital es
+            la vinculación de arriba (auto-detect del pago).
           </p>
           {editAlias ? (
             <div className="flex gap-2">
@@ -328,5 +334,74 @@ export function Perfil() {
         </p>
       </div>
     </Shell>
+  );
+}
+
+// ─── MpLinkCard ───────────────────────────────────────────────────────────────
+
+function MpLinkCard() {
+  const { data: status, isLoading } = useMpLinked();
+  const unlink = useMpUnlink();
+  const { showConfirm, showAlert } = useDialog();
+
+  const onLink = () => {
+    try {
+      const url = buildMpAuthorizeUrl();
+      window.location.assign(url);
+    } catch (e) {
+      void showAlert(e instanceof Error ? e.message : 'No se pudo iniciar la vinculación');
+    }
+  };
+
+  const onUnlink = async () => {
+    const ok = await showConfirm('¿Desvincular tu Mercado Pago? Vas a tener que volver a vincular para recibir sobres digitales.');
+    if (!ok) return;
+    try {
+      await unlink.mutateAsync();
+    } catch (e) {
+      await showAlert(e instanceof Error ? e.message : 'Error al desvincular');
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-3xl border-[1.5px] border-ink p-5 shadow-pop">
+      <div className="text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-1">
+        Mercado Pago vinculado
+      </div>
+      <p className="text-[11px] text-ink/55 mb-3">
+        Para que las familias del grupo paguen el sobre digital de cumple desde la app, vinculá
+        tu Mercado Pago una vez. La plata cae directo en tu cuenta — MaPaPis no la toca.
+      </p>
+
+      {isLoading ? (
+        <div className="text-xs text-ink/50">Cargando estado…</div>
+      ) : status?.linked ? (
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="inline-block w-2 h-2 bg-sage rounded-full" />
+            <span className="text-sm font-bold">Vinculado</span>
+            {status.mp_user_id && (
+              <span className="text-[10px] text-ink/50 font-mono">· id {status.mp_user_id}</span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => { void onUnlink(); }}
+            disabled={unlink.isPending}
+            className="text-[10px] font-bold uppercase tracking-wider text-coral hover:underline disabled:opacity-50"
+          >
+            Desvincular
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={onLink}
+          className="btn-pop w-full py-3 bg-[#009ee3] text-white font-extrabold rounded-xl border-[1.5px] border-ink uppercase tracking-wider text-xs flex items-center justify-center gap-2"
+        >
+          Vincular Mercado Pago
+        </button>
+      )}
+    </div>
   );
 }

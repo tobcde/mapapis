@@ -18,6 +18,7 @@ import { MisOfertas } from '@/routes/MisOfertas';
 import { GrupoMiembros } from '@/routes/GrupoMiembros';
 import { GrupoAlumnos } from '@/routes/GrupoAlumnos';
 import { PymeOnboarding } from '@/routes/PymeOnboarding';
+import { MpOAuthCallback } from '@/routes/MpOAuthCallback';
 import { AuthGuard } from '@/components/AuthGuard';
 import { RequireProfile } from '@/components/RequireProfile';
 import { env } from '@/lib/env';
@@ -168,6 +169,14 @@ export function App() {
                   <RequireProfile>
                     <Perfil />
                   </RequireProfile>
+                </AuthGuard>
+              }
+            />
+            <Route
+              path="/oauth/mp/callback"
+              element={
+                <AuthGuard>
+                  <MpOAuthCallback />
                 </AuthGuard>
               }
             />

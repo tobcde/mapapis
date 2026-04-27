@@ -498,6 +498,14 @@ export type Database = {
         Args: { p_alumno: string; p_fecha: string | null };
         Returns: void;
       };
+      mi_mp_linked: {
+        Args: Record<string, never>;
+        Returns: { linked: boolean; mp_user_id: string | null; expires_at: string | null }[];
+      };
+      mi_mp_unlink: {
+        Args: Record<string, never>;
+        Returns: void;
+      };
       alumnos_merge: {
         Args: { p_alumno_keep: string; p_alumno_merge: string };
         Returns: void;
