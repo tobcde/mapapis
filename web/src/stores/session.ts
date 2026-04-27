@@ -30,6 +30,7 @@ export const useSessionStore = create<SessionState>((set) => ({
     const { data } = await supabase.auth.getSession();
     set({ session: data.session, user: data.session?.user ?? null, loading: false });
 
+    // La suscripción se mantiene viva durante toda la app (se crea una sola vez en main.tsx).
     supabase.auth.onAuthStateChange((_event, session) => {
       set({ session, user: session?.user ?? null });
     });

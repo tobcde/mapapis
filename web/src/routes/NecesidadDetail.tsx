@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { Shell } from '@/components/Shell';
-import { Button } from '@/components/ui';
-import { useDialog } from '@/components/ui';
+import { Button, useDialog } from '@/components/ui';
 import { useProfile } from '@/lib/queries/useProfile';
 import { useMisGrupos } from '@/lib/queries/useMisGrupos';
 import { useNecesidad } from '@/lib/queries/useNecesidad';
@@ -525,8 +524,9 @@ function PanelOfertaPyme({
       });
       setShowForm(false);
     } catch (error) {
-      setErr(error instanceof Error ? error.message : 'Error al enviar la oferta');
-      await showAlert(err ?? 'Error');
+      const msg = error instanceof Error ? error.message : 'Error al enviar la oferta';
+      setErr(msg);
+      await showAlert(msg);
     }
   };
 
@@ -563,7 +563,7 @@ function PanelOfertaPyme({
     <section className="space-y-3">
       <h2 className="font-display font-bold text-xl">¿Cubrís este pedido?</h2>
       <div className="bg-sun rounded-3xl border-[1.5px] border-ink p-5 shadow-pop">
-        <p className="text-sm font-semibold">Las ofertas son selladas — el grupo elige al cierre.</p>
+        <p className="text-sm font-semibold">Las ofertas son <span className="hl-coral">selladas</span> — el grupo elige al cierre.</p>
 
         {!showForm ? (
           <Button

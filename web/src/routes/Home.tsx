@@ -13,7 +13,7 @@ export function Home() {
         >
           <div className="text-[10px] font-bold uppercase tracking-wider text-ink/60">tu perfil</div>
           {isLoading ? (
-            <div className="text-sm text-ink/60 mt-2">Cargando...</div>
+            <div className="text-sm text-ink/60 mt-2">Preparando…</div>
           ) : profile ? (
             <dl className="mt-2 grid gap-1 text-sm">
               <div className="flex justify-between"><dt className="text-ink/60">Email</dt><dd>{profile.email}</dd></div>

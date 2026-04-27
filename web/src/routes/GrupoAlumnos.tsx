@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Shell } from '@/components/Shell';
 import { Button } from '@/components/ui';
-import { useDialog } from '@/components/ui';
+import { useDialog, useToast } from '@/components/ui';
 import { useProfile } from '@/lib/queries/useProfile';
 import { useMisGrupos } from '@/lib/queries/useMisGrupos';
 import { useAlumnosByGrupo } from '@/lib/queries/useAlumnosByGrupo';
@@ -31,6 +31,7 @@ function AgregarAlumnoForm({
 }) {
   const { crear } = useAlumnoActions();
   const { showAlert } = useDialog();
+  const { showToast } = useToast();
   const [nombre, setNombre] = useState('');
   const [dni, setDni] = useState('');
   const [fechaNacimiento, setFechaNacimiento] = useState('');
@@ -59,10 +60,12 @@ function AgregarAlumnoForm({
         relacion,
         fechaNacimiento,
       });
+      showToast(`¡${nombreTrim} agregado!`);
       onDone();
     } catch (error) {
-      setErr(error instanceof Error ? error.message : 'Error al crear alumno');
-      await showAlert(err ?? 'Error');
+      const msg = error instanceof Error ? error.message : 'Error al crear alumno';
+      setErr(msg);
+      await showAlert(msg);
     }
   };
 
@@ -174,6 +177,7 @@ function AlumnoItem({
 }) {
   const { joinAsTutor, leaveAsTutor, setMiRelacion, setFechaNacimiento } = useAlumnoActions();
   const { showConfirm, showAlert } = useDialog();
+  const { showToast } = useToast();
   const [showJoinPicker, setShowJoinPicker] = useState(false);
   const [showEditPicker, setShowEditPicker] = useState(false);
   const [editFecha, setEditFecha] = useState(false);
@@ -201,6 +205,7 @@ function AlumnoItem({
     setShowJoinPicker(false);
     try {
       await joinAsTutor.mutateAsync({ grupoId, alumnoId: alumno.id, relacion });
+      showToast(`¡Ahora sos ${relacionLabel(relacion).toLowerCase()} de ${alumno.nombre}!`);
     } catch (err) {
       await showAlert(err instanceof Error ? err.message : 'Error al unirse como tutor');
     }

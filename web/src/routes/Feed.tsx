@@ -124,7 +124,7 @@ function FeedFamilia() {
             Hola, {nombreCorto}
           </p>
           <h1 className="font-display font-black text-[2.6rem] leading-[0.95] mt-2">
-            Necesidades <em className="not-italic" style={{ fontStyle: 'italic' }}>activas</em>
+            Necesidades <span className="font-display-italic">activas</span>
           </h1>
         </div>
 
@@ -147,12 +147,13 @@ function FeedFamilia() {
         </div>
 
         {/* Filtros */}
-        <div className="flex gap-2 mb-5 overflow-x-auto pb-1 -mx-4 px-4">
+        <div className="flex gap-2 mb-4 overflow-x-auto no-scrollbar pb-1 -mx-4 px-4">
           <FilterPill active={filtro === 'activas'} onClick={() => { setFiltro('activas'); }} label="Activas" />
           <FilterPill active={filtro === 'votando'} onClick={() => { setFiltro('votando'); }} label="Votando" />
           <FilterPill active={filtro === 'cumplidas'} onClick={() => { setFiltro('cumplidas'); }} label="Cumplidas" />
           <FilterPill active={filtro === 'todas'} onClick={() => { setFiltro('todas'); }} label="Todas" />
         </div>
+        <div className="squiggle mb-5" />
 
         {/* Lista */}
         {error ? (
@@ -216,7 +217,7 @@ function FeedPyme() {
         <div className="mb-6">
           <p className="text-xs uppercase font-bold tracking-[0.2em] text-sage">Para tu pyme</p>
           <h1 className="font-display font-black text-[2.6rem] leading-[0.95] mt-2">
-            Necesidades <em className="not-italic" style={{ fontStyle: 'italic' }}>cerca</em>
+            Necesidades <span className="font-display-italic">cerca</span>
           </h1>
           <p className="text-ink/60 text-sm mt-2">
             Pedidos anonimizados — el grupo elige al final.
@@ -224,7 +225,7 @@ function FeedPyme() {
         </div>
 
         {/* Filtro de zona */}
-        <div className="flex gap-2 overflow-x-auto pb-2 mb-2 -mx-4 px-4">
+        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2 mb-2 -mx-4 px-4">
           <FilterPill
             active={filtroZona === 'todas'}
             onClick={() => { setFiltroZona('todas'); }}
@@ -242,7 +243,7 @@ function FeedPyme() {
 
         {/* Toggle: solo mis categorías */}
         {misCats.length > 0 && (
-          <div className="flex items-center justify-between bg-white rounded-2xl border-[1.5px] border-ink px-3 py-2 mb-3 shadow-pop-sm">
+          <div className="flex items-center justify-between bg-white rounded-2xl border-[1.5px] border-ink px-3 py-2 mb-3" style={{ boxShadow: '2px 2px 0 var(--ink)' }}>
             <div className="text-xs">
               <span className="font-bold uppercase tracking-wider">Solo mis categorías</span>
               {soloMisCats && ocultadasPorCat > 0 && (
@@ -267,6 +268,7 @@ function FeedPyme() {
             </button>
           </div>
         )}
+        <div className="squiggle mb-5" />
 
         {/* Lista */}
         {error ? (

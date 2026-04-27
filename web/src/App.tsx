@@ -1,13 +1,11 @@
 import { Suspense, useEffect } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { queryClient } from '@/lib/queryClient';
 import { useSessionStore } from '@/stores/session';
-import { Landing } from '@/routes/Landing';
 import { Login } from '@/routes/Login';
 import { Onboarding } from '@/routes/Onboarding';
-import { Home } from '@/routes/Home';
 import { Perfil } from '@/routes/Perfil';
 import { Grupos } from '@/routes/Grupos';
 import { GrupoDetail } from '@/routes/GrupoDetail';
@@ -19,8 +17,10 @@ import { GrupoMiembros } from '@/routes/GrupoMiembros';
 import { GrupoAlumnos } from '@/routes/GrupoAlumnos';
 import { PymeOnboarding } from '@/routes/PymeOnboarding';
 import { MpOAuthCallback } from '@/routes/MpOAuthCallback';
+import { Unirse } from '@/routes/Unirse';
 import { AuthGuard } from '@/components/AuthGuard';
 import { RequireProfile } from '@/components/RequireProfile';
+import { LoadingScreen } from '@/components/LoadingScreen';
 import { env } from '@/lib/env';
 
 function NotFound() {
@@ -35,11 +35,7 @@ function NotFound() {
 }
 
 function Loading() {
-  return (
-    <div className="min-h-screen flex items-center justify-center text-sm text-ink/60">
-      Cargando...
-    </div>
-  );
+  return <LoadingScreen message="Preparando la app…" />;
 }
 
 export function App() {
@@ -54,7 +50,7 @@ export function App() {
       <BrowserRouter basename={import.meta.env.BASE_URL}>
         <Suspense fallback={<Loading />}>
           <Routes>
-            <Route path="/" element={<Landing />} />
+            <Route path="/" element={<Login />} />
             <Route path="/login" element={<Login />} />
             <Route
               path="/onboarding"
@@ -64,16 +60,7 @@ export function App() {
                 </AuthGuard>
               }
             />
-            <Route
-              path="/home"
-              element={
-                <AuthGuard>
-                  <RequireProfile>
-                    <Home />
-                  </RequireProfile>
-                </AuthGuard>
-              }
-            />
+            <Route path="/home" element={<Navigate to="/feed" replace />} />
             <Route
               path="/grupos"
               element={
@@ -180,6 +167,8 @@ export function App() {
                 </AuthGuard>
               }
             />
+            {/* Punto de entrada de links de invitación — sin AuthGuard; la ruta lo maneja internamente */}
+            <Route path="/unirse" element={<Unirse />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>

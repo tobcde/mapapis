@@ -1,6 +1,6 @@
 import { useParams, Link } from 'react-router-dom';
 import { Shell } from '@/components/Shell';
-import { useDialog } from '@/components/ui';
+import { useDialog, useToast } from '@/components/ui';
 import { useProfile } from '@/lib/queries/useProfile';
 import { useMisGrupos } from '@/lib/queries/useMisGrupos';
 import { useMiembros } from '@/lib/queries/useMiembros';
@@ -41,6 +41,7 @@ function MiembroItem({
 }) {
   const { promote, demote, kick } = useGrupoAdmin();
   const { showConfirm, showAlert } = useDialog();
+  const { showToast } = useToast();
 
   const { profile_id, rol_en_grupo, profiles } = miembro;
   const nombre = profiles?.nombre ?? profiles?.email?.split('@')[0] ?? '—';
@@ -59,6 +60,7 @@ function MiembroItem({
     if (!ok) return;
     try {
       await promote.mutateAsync({ grupoId, targetId: profile_id });
+      showToast(`¡${nombre} es admin!`);
     } catch (err) {
       await showAlert(err instanceof Error ? err.message : 'Error al promover');
     }
@@ -67,6 +69,7 @@ function MiembroItem({
   const handleDemote = async () => {
     try {
       await demote.mutateAsync({ grupoId, targetId: profile_id });
+      showToast(`${nombre} ya no es admin`, 'info');
     } catch (err) {
       await showAlert(err instanceof Error ? err.message : 'Error al degradar');
     }
@@ -77,6 +80,7 @@ function MiembroItem({
     if (!ok) return;
     try {
       await kick.mutateAsync({ grupoId, targetId: profile_id });
+      showToast(`${nombre} fue eliminado del grupo`, 'info');
     } catch (err) {
       await showAlert(err instanceof Error ? err.message : 'Error al expulsar');
     }

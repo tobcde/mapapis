@@ -20,7 +20,7 @@ export function useInscripciones(necesidadId: string | undefined) {
         .select('alumno_id, inscripto_por, necesidad_id, id, created_at')
         .eq('necesidad_id', necesidadId);
       if (error) throw error;
-      return (data ?? []) as NecesidadInscripcionRow[];
+      return data ?? [];
     },
   });
 }
