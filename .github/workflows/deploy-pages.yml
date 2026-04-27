@@ -1,16 +1,17 @@
 name: Deploy MaPaPis to GitHub Pages
 
-# Deploy combinado: app vieja (HTML estatico) + app nueva (Vite build).
-# Ambas conviven en el mismo gh-pages:
-#   www.mapapis.com.ar/             <- app vieja (raiz, custom domain)
-#   www.mapapis.com.ar/mapapis-next/ <- app nueva (Vite)
-# Compatibilidad con github.io:
-#   tobcde.github.io/mapapis/       <- app vieja
-#   tobcde.github.io/mapapis/mapapis-next/ <- app nueva
+# Deploy combinado:
+#   www.mapapis.com.ar/              <- app vieja (HTML estatico, raiz)
+#   www.mapapis.com.ar/mapapis-next/ <- app nueva (Vite, rama main)
+#   www.mapapis.com.ar/preview/      <- preview (Vite, rama develop-pablo)
+#
+# Cada push a main o develop-pablo dispara un rebuild combinado: SIEMPRE
+# se buildea main (para /mapapis-next/) y SIEMPRE se buildea develop-pablo
+# (para /preview/). Asi una rama no pisa lo de la otra.
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop-pablo]
     paths:
       - 'github-pages/mapapis/**'
       - 'web/**'
@@ -30,7 +31,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # ── 1. main: app vieja + build Vite → /mapapis-next/ ─────────────────
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -39,20 +44,18 @@ jobs:
           cache: 'npm'
           cache-dependency-path: web/package-lock.json
 
-      - name: Install web deps
+      - name: Install web deps (main)
         working-directory: web
         run: npm ci --legacy-peer-deps
 
-      - name: Typecheck + lint + tests
+      - name: Typecheck + lint + tests (main)
         working-directory: web
         run: npm run validate
 
-      - name: Build Vite app
+      - name: Build Vite app (main)
         working-directory: web
         env:
-          # Estos valores son publicos por diseno (anon key con RLS, MP public
-          # key). Los hardcodeamos aca en lugar de usar GitHub Secrets — no
-          # ganamos nada con eso porque cualquiera los lee en el bundle.
+          # Valores publicos por diseno (anon key con RLS, MP public key).
           VITE_SUPABASE_URL: https://adpbjslkswtnqklzejuy.supabase.co
           VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFkcGJqc2xrc3d0bnFrbHplanV5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwNjg5NzIsImV4cCI6MjA5MjY0NDk3Mn0.LrzDO8CtW1FeJjdUH5unjaoAdOtMHnDd9T1E4q7X_uU
           VITE_MP_PUBLIC_KEY: APP_USR-79ac6ee1-8c01-4e30-9ae5-be03cbe403ab
@@ -62,16 +65,45 @@ jobs:
           VITE_BASE_PATH: /mapapis-next/
         run: npm run build
 
-      - name: Stage combined deploy
+      - name: Stage main artifacts
         run: |
           mkdir -p _site/mapapis-next
           # App vieja en la raiz: index.html, manifest, sw, icons quedan en /
           cp -r github-pages/mapapis/. _site/
-          # App nueva en /mapapis-next/
+          # App nueva (main) en /mapapis-next/
           cp -r web/dist/. _site/mapapis-next/
           # CNAME para custom domain GitHub Pages
           echo "www.mapapis.com.ar" > _site/CNAME
 
+      # ── 2. develop-pablo: build Vite → /preview/ ────────────────────────
+      - name: Checkout develop-pablo
+        uses: actions/checkout@v4
+        with:
+          ref: develop-pablo
+          path: develop-pablo-checkout
+
+      - name: Install web deps (develop-pablo)
+        working-directory: develop-pablo-checkout/web
+        run: npm ci --legacy-peer-deps
+
+      - name: Build Vite app (develop-pablo, preview)
+        working-directory: develop-pablo-checkout/web
+        env:
+          VITE_SUPABASE_URL: https://adpbjslkswtnqklzejuy.supabase.co
+          VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFkcGJqc2xrc3d0bnFrbHplanV5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwNjg5NzIsImV4cCI6MjA5MjY0NDk3Mn0.LrzDO8CtW1FeJjdUH5unjaoAdOtMHnDd9T1E4q7X_uU
+          VITE_MP_PUBLIC_KEY: APP_USR-79ac6ee1-8c01-4e30-9ae5-be03cbe403ab
+          VITE_MP_CLIENT_ID: '3342777786606412'
+          VITE_SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          VITE_ENV: prod
+          VITE_BASE_PATH: /preview/
+        run: npm run build
+
+      - name: Stage preview artifact
+        run: |
+          mkdir -p _site/preview
+          cp -r develop-pablo-checkout/web/dist/. _site/preview/
+
+      # ── 3. Deploy combinado ────────────────────────────────────────────
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3
