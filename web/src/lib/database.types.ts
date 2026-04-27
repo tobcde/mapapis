@@ -137,12 +137,13 @@ export type NecesidadModalidad = 'grupal' | 'individual';
  * cantidad es por alumno (se multiplica por inscriptos). Si modalidad=grupal,
  * la cantidad es total para todo el grupo.
  *
- * `foto_url` y `link_url` son opcionales — la pyme puede usarlos para ver
- * exactamente qué producto se pide (ej. link a MercadoLibre).
+ * `descripcion`, `foto_url` y `link_url` son opcionales — la pyme puede
+ * usarlos para ver exactamente qué producto se pide.
  */
 export interface ComposicionItem {
   nombre: string;
   cantidad: number;
+  descripcion?: string | null;
   foto_url?: string | null;
   link_url?: string | null;
 }

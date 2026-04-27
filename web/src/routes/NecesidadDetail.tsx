@@ -282,8 +282,13 @@ function DesgloseComposicion({
                     </a>
                   )}
                 </div>
+                {it.descripcion && (
+                  <div className="text-[11px] text-ink/70 mt-0.5 leading-snug whitespace-pre-wrap">
+                    {it.descripcion}
+                  </div>
+                )}
                 {modalidad === 'individual' && (
-                  <div className="text-[10px] text-ink/50 font-mono">
+                  <div className="text-[10px] text-ink/50 font-mono mt-0.5">
                     ({it.cantidad}/alumno × {inscriptos})
                   </div>
                 )}

@@ -163,7 +163,7 @@ export function Publicar() {
   const [modalidad, setModalidad] = useState<NecesidadModalidad>('grupal');
   const [cantidadPorAlumno, setCantidadPorAlumno] = useState('');
   const [composicion, setComposicion] = useState<
-    { nombre: string; cantidad: string; foto_url: string; link_url: string }[]
+    { nombre: string; cantidad: string; descripcion: string; foto_url: string; link_url: string }[]
   >([]);
 
   // Auto-calculo de la cantidad por alumno = suma de los items del desglose.
@@ -228,8 +228,14 @@ export function Publicar() {
       return 'El título debe tener entre 8 y 140 caracteres.';
 
     const descTrim = descripcion.trim();
-    if (descTrim.length < 10 || descTrim.length > 1200)
-      return 'La descripción debe tener entre 10 y 1200 caracteres.';
+    if (tieneDesglose) {
+      // Con desglose, la descripción es una observación general opcional.
+      if (descTrim.length > 1200)
+        return 'La observación general no puede tener más de 1200 caracteres.';
+    } else {
+      if (descTrim.length < 10 || descTrim.length > 1200)
+        return 'La descripción debe tener entre 10 y 1200 caracteres.';
+    }
 
     // Si el publicador cargó desglose estructurado, los campos dinámicos
     // de la categoría quedan ocultos y no se validan (información cubierta
@@ -248,11 +254,15 @@ export function Publicar() {
     if (min != null && max != null && min > max)
       return 'El presupuesto mínimo no puede ser mayor que el máximo.';
 
+    // Link de referencia general (solo cuando no hay desglose).
     const linkTrim = linkReferencia.trim();
-    if (linkTrim && !/^https?:\/\//i.test(linkTrim))
+    if (!tieneDesglose && linkTrim && !/^https?:\/\//i.test(linkTrim))
       return 'El link debe comenzar con http:// o https://.';
 
-    if (fechaInscripcion && fechaEntrega && new Date(fechaInscripcion) > new Date(fechaEntrega))
+    // Fechas obligatorias para que la pyme y la familia tengan deadlines firmes.
+    if (!fechaInscripcion) return 'Cargá la fecha límite de inscripción.';
+    if (!fechaEntrega) return 'Cargá la fecha límite de entrega.';
+    if (new Date(fechaInscripcion) > new Date(fechaEntrega))
       return 'La fecha de inscripción no puede ser posterior a la de entrega.';
 
     if (modalidad === 'individual' && !tieneDesglose) {
@@ -284,12 +294,20 @@ export function Publicar() {
     try {
       const composicionClean = composicion
         .map((c) => {
-          const item: { nombre: string; cantidad: number; foto_url?: string; link_url?: string } = {
+          const item: {
+            nombre: string;
+            cantidad: number;
+            descripcion?: string;
+            foto_url?: string;
+            link_url?: string;
+          } = {
             nombre: c.nombre.trim(),
             cantidad: Number(c.cantidad),
           };
+          const desc = c.descripcion.trim();
           const foto = c.foto_url.trim();
           const link = c.link_url.trim();
+          if (desc) item.descripcion = desc;
           if (foto) item.foto_url = foto;
           if (link) item.link_url = link;
           return item;
@@ -318,7 +336,7 @@ export function Publicar() {
         presupuestoMaxCentavos: presupuestoMax ? Math.round(Number(presupuestoMax) * 100) : null,
         fechaLimiteInscripcion: fechaInscripcion ? new Date(fechaInscripcion).toISOString() : null,
         fechaLimiteEntrega: fechaEntrega ? new Date(fechaEntrega).toISOString() : null,
-        linkReferencia: linkReferencia.trim() || null,
+        linkReferencia: tieneDesglose ? null : linkReferencia.trim() || null,
         fotoFile: foto,
       });
       void navigate('/feed');
@@ -550,11 +568,12 @@ export function Publicar() {
 
           {/* Fechas */}
           <Field
-            label="Cierre de inscripción (opcional)"
+            label="Cierre de inscripción *"
             hint="Hasta cuándo las familias del grupo pueden anotarse."
           >
             <input
               type="datetime-local"
+              required
               value={fechaInscripcion}
               onChange={(e) => { setFechaInscripcion(e.target.value); }}
               className={INPUT_CLS}
@@ -562,39 +581,53 @@ export function Publicar() {
           </Field>
 
           <Field
-            label="Fecha de entrega (opcional)"
+            label="Fecha de entrega *"
             hint="Cuándo se necesita en mano. Las pymes lo ven al ofertar."
           >
             <input
               type="datetime-local"
+              required
               value={fechaEntrega}
               onChange={(e) => { setFechaEntrega(e.target.value); }}
               className={INPUT_CLS}
             />
           </Field>
 
-          {/* Link de referencia */}
-          <Field
-            label="Link de referencia (opcional)"
-            hint="Mercado Libre, foto online o cualquier referencia que aclare el pedido."
-          >
-            <input
-              type="url"
-              placeholder="https://articulo.mercadolibre.com.ar/..."
-              value={linkReferencia}
-              onChange={(e) => { setLinkReferencia(e.target.value); }}
-              className={INPUT_CLS}
-            />
-          </Field>
+          {/* Link de referencia general — solo cuando NO hay desglose (cada item tiene su link) */}
+          {!tieneDesglose && (
+            <Field
+              label="Link de referencia (opcional)"
+              hint="Mercado Libre, foto online o cualquier referencia que aclare el pedido."
+            >
+              <input
+                type="url"
+                placeholder="https://articulo.mercadolibre.com.ar/..."
+                value={linkReferencia}
+                onChange={(e) => { setLinkReferencia(e.target.value); }}
+                className={INPUT_CLS}
+              />
+            </Field>
+          )}
 
-          {/* Descripción */}
-          <Field label="Descripción *">
+          {/* Descripción / Observación general según si hay desglose */}
+          <Field
+            label={tieneDesglose ? 'Observaciones generales (opcional)' : 'Descripción *'}
+            hint={
+              tieneDesglose
+                ? 'Aclaraciones que aplican a todo el pedido (ej: para el acto del 25 de mayo, entregar en horario de salida).'
+                : undefined
+            }
+          >
             <textarea
-              required
-              minLength={10}
+              required={!tieneDesglose}
+              minLength={tieneDesglose ? undefined : 10}
               maxLength={1200}
-              rows={4}
-              placeholder="Detalle del pedido. Sin nombres de institución ni datos de contacto."
+              rows={tieneDesglose ? 3 : 4}
+              placeholder={
+                tieneDesglose
+                  ? 'Algo que la pyme tenga que saber del pedido en general (opcional).'
+                  : 'Detalle del pedido. Sin nombres de institución ni datos de contacto.'
+              }
               value={descripcion}
               onChange={(e) => { setDescripcion(e.target.value); }}
               className={INPUT_CLS + ' resize-none'}
@@ -627,6 +660,7 @@ export function Publicar() {
 interface ComposicionRow {
   nombre: string;
   cantidad: string;
+  descripcion: string;
   foto_url: string;
   link_url: string;
 }
@@ -648,7 +682,10 @@ function ComposicionEditor({
     if (expanded === i) setExpanded(null);
   };
   const add = () => {
-    onChange([...items, { nombre: '', cantidad: '1', foto_url: '', link_url: '' }]);
+    onChange([
+      ...items,
+      { nombre: '', cantidad: '1', descripcion: '', foto_url: '', link_url: '' },
+    ]);
   };
 
   return (
@@ -665,7 +702,10 @@ function ComposicionEditor({
         <>
           {items.map((it, i) => {
             const isOpen = expanded === i;
-            const hasExtras = it.foto_url.trim().length > 0 || it.link_url.trim().length > 0;
+            const hasExtras =
+              it.descripcion.trim().length > 0 ||
+              it.foto_url.trim().length > 0 ||
+              it.link_url.trim().length > 0;
             return (
               <div
                 key={i}
@@ -709,6 +749,14 @@ function ComposicionEditor({
                 </div>
                 {isOpen && (
                   <div className="grid gap-2 px-1 pb-1">
+                    <textarea
+                      placeholder="Descripción del item (marca, calidad, especificaciones...) — opcional"
+                      rows={2}
+                      maxLength={400}
+                      value={it.descripcion}
+                      onChange={(e) => { update(i, { descripcion: e.target.value }); }}
+                      className="w-full px-3 py-2 rounded-lg border-[1.5px] border-ink/20 text-xs focus:outline-none focus:border-ink resize-none"
+                    />
                     <input
                       type="url"
                       placeholder="URL de foto del producto (opcional)"
