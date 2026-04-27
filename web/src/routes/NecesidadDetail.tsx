@@ -22,9 +22,11 @@ import type {
   NecesidadRow,
   NecesidadModalidad,
   OfertaRow,
+  OfertaVariante,
   ModoEntrega,
   ComposicionItem,
 } from '@/lib/database.types';
+import { uploadFotoToStorage } from '@/lib/storage/uploadFoto';
 import type { AlumnoConTutores } from '@/lib/queries/useAlumnosByGrupo';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -612,6 +614,12 @@ function OfertaCardFamilia({
         </div>
       </div>
 
+      {oferta.variantes && oferta.variantes.length > 0 && (
+        <div className="mt-3">
+          <VariantesGallery variantes={oferta.variantes} />
+        </div>
+      )}
+
       <p className="text-sm text-ink/80 mt-3 whitespace-pre-wrap leading-relaxed">
         {oferta.descripcion}
       </p>
@@ -731,8 +739,21 @@ function PanelOfertaPyme({
   const [dias, setDias] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [err, setErr] = useState<string | null>(null);
+  const [variantes, setVariantes] = useState<VarianteRow[]>([]);
+  const [uploadingFotos, setUploadingFotos] = useState(false);
 
-  const retiroNum = Number(precioRetiro) || 0;
+  const tieneVariantes = variantes.some(
+    (v) => v.nombre.trim().length > 0 && Number(v.precio) > 0,
+  );
+
+  // Si hay variantes, el "precio retiro" se calcula sumando variantes.
+  // Si no hay variantes, usa el input manual.
+  const subtotalVariantes = variantes.reduce((acc, v) => {
+    const precio = Number(v.precio) || 0;
+    const cant = Number(v.cantidad) || 1;
+    return acc + (precio > 0 ? precio * cant : 0);
+  }, 0);
+  const retiroNum = tieneVariantes ? subtotalVariantes : Number(precioRetiro) || 0;
   const envioNum = incluyeEnvio ? Number(precioEnvio) || 0 : 0;
   const totalNum = retiroNum + envioNum;
   const modoEntregaCalculado: ModoEntrega =
@@ -744,13 +765,33 @@ function PanelOfertaPyme({
     e.preventDefault();
     setErr(null);
     if (retiroNum < 1 && envioNum < 1) {
-      setErr('Cargá un precio de retiro o de envío.');
+      setErr('Cargá un precio (con variantes o manual).');
       return;
     }
     if (descripcion.trim().length < 10) {
       setErr('La descripción debe tener al menos 10 caracteres.');
       return;
     }
+    if (uploadingFotos) {
+      setErr('Esperá a que terminen de subir las fotos.');
+      return;
+    }
+    const variantesClean: OfertaVariante[] = variantes
+      .map((v) => {
+        const item: OfertaVariante = {
+          nombre: v.nombre.trim(),
+          precio_centavos: Math.round((Number(v.precio) || 0) * 100),
+        };
+        const cantidad = Number(v.cantidad);
+        if (Number.isFinite(cantidad) && cantidad > 1) item.cantidad = Math.round(cantidad);
+        const desc = v.descripcion.trim();
+        if (desc) item.descripcion = desc;
+        if (v.foto_url) item.foto_url = v.foto_url;
+        const link = v.link_url.trim();
+        if (link) item.link_url = link;
+        return item;
+      })
+      .filter((v) => v.nombre.length > 0 && v.precio_centavos > 0);
     try {
       await crearOferta.mutateAsync({
         necesidadId: necesidad.id,
@@ -760,6 +801,7 @@ function PanelOfertaPyme({
         tiempoDias: dias ? Number(dias) : null,
         descripcion: descripcion.trim(),
         modoEntrega: modoEntregaCalculado,
+        ...(variantesClean.length > 0 ? { variantes: variantesClean } : {}),
       });
       setShowForm(false);
     } catch (error) {
@@ -808,6 +850,9 @@ function PanelOfertaPyme({
               </span>
             )}
           </div>
+          {miOferta.variantes && miOferta.variantes.length > 0 && (
+            <VariantesGallery variantes={miOferta.variantes} />
+          )}
           <p className="text-sm text-ink/85 whitespace-pre-wrap leading-relaxed">
             {miOferta.descripcion}
           </p>
@@ -843,23 +888,48 @@ function PanelOfertaPyme({
               </div>
             )}
 
-            <label className="block">
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-1.5">
-                Precio del pedido completo ($) *
+            {/* Variantes — opcional. Si la pyme carga al menos una, el precio retiro
+                se deriva de la suma. Si no carga ninguna, aparece el input simple. */}
+            <div>
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-1">
+                Variantes del producto (opcional)
               </span>
-              <span className="block text-[10px] text-ink/55 mb-1.5">
-                Lo que cobrás vos por todos los items del pedido. La app lo divide automáticamente entre las familias inscriptas.
+              <span className="block text-[10px] text-ink/55 mb-2">
+                Si tenés varias opciones (ej: tapa dura $800, tapa flexible $500), cargá cada una con su precio. La familia las ve y elige. Si es un solo producto, dejá vacío y poné el precio total abajo.
               </span>
-              <input
-                type="number"
-                min={0}
-                required
-                value={precioRetiro}
-                onChange={(e) => { setPrecioRetiro(e.target.value); }}
-                placeholder="45000"
-                className={INPUT_CLS + ' font-mono'}
+              <VariantesEditor
+                items={variantes}
+                onChange={setVariantes}
+                onUploadingChange={setUploadingFotos}
+                pyomeId={pymeId}
+                necesidadId={necesidad.id}
               />
-            </label>
+              {tieneVariantes && (
+                <div className="mt-2 px-3 py-2 rounded-lg bg-sage/15 border border-sage/40 text-[11px] font-bold">
+                  ✓ Subtotal por variantes: ${subtotalVariantes.toLocaleString('es-AR')}
+                </div>
+              )}
+            </div>
+
+            {!tieneVariantes && (
+              <label className="block">
+                <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-1.5">
+                  Precio del pedido completo ($) *
+                </span>
+                <span className="block text-[10px] text-ink/55 mb-1.5">
+                  Lo que cobrás por todos los items del pedido. La app lo divide automáticamente entre las familias inscriptas.
+                </span>
+                <input
+                  type="number"
+                  min={0}
+                  required
+                  value={precioRetiro}
+                  onChange={(e) => { setPrecioRetiro(e.target.value); }}
+                  placeholder="45000"
+                  className={INPUT_CLS + ' font-mono'}
+                />
+              </label>
+            )}
 
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -1132,5 +1202,279 @@ export function NecesidadDetail() {
         )}
       </div>
     </Shell>
+  );
+}
+
+// ─── VariantesGallery (display, lo ven familia y pyme) ──────────────────────
+
+function VariantesGallery({ variantes }: { variantes: OfertaVariante[] }) {
+  return (
+    <div className="rounded-2xl border-[1.5px] border-ink/15 bg-cream/40 p-3 space-y-2">
+      <div className="text-[10px] font-bold uppercase tracking-wider text-ink/60">
+        Variantes de la oferta
+      </div>
+      <ul className="space-y-2">
+        {variantes.map((v, i) => (
+          <li key={i} className="flex items-center gap-3">
+            {v.foto_url ? (
+              <img
+                src={v.foto_url}
+                alt={v.nombre}
+                className="w-12 h-12 rounded-lg object-cover border-[1.5px] border-ink/20 shrink-0"
+                loading="lazy"
+                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+              />
+            ) : (
+              <div className="w-12 h-12 rounded-lg bg-mist/40 border-[1.5px] border-ink/10 shrink-0" />
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-baseline gap-2 flex-wrap">
+                <span className="font-bold text-sm">{v.nombre}</span>
+                {v.link_url && (
+                  <a
+                    href={v.link_url}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="text-[11px] text-coral hover:underline shrink-0"
+                    title="Ver link"
+                  >
+                    ↗
+                  </a>
+                )}
+              </div>
+              {v.descripcion && (
+                <div className="text-[11px] text-ink/65 mt-0.5 leading-snug">
+                  {v.descripcion}
+                </div>
+              )}
+            </div>
+            <div className="text-right shrink-0">
+              <div className="font-mono font-bold text-sm">
+                {fmtMoney(v.precio_centavos)}
+              </div>
+              {(v.cantidad ?? 1) > 1 && (
+                <div className="text-[10px] text-ink/55 font-mono">
+                  × {v.cantidad}
+                </div>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// ─── VariantesEditor ──────────────────────────────────────────────────────────
+
+interface VarianteRow {
+  nombre: string;
+  precio: string;
+  cantidad: string;
+  descripcion: string;
+  foto_url: string;       // URL pública post-upload
+  foto_uploading: boolean;
+  link_url: string;
+}
+
+function emptyVariante(): VarianteRow {
+  return {
+    nombre: '',
+    precio: '',
+    cantidad: '1',
+    descripcion: '',
+    foto_url: '',
+    foto_uploading: false,
+    link_url: '',
+  };
+}
+
+function VariantesEditor({
+  items,
+  onChange,
+  onUploadingChange,
+  pyomeId,
+  necesidadId,
+}: {
+  items: VarianteRow[];
+  onChange: (next: VarianteRow[]) => void;
+  onUploadingChange: (uploading: boolean) => void;
+  pyomeId: string;
+  necesidadId: string;
+}) {
+  const [expanded, setExpanded] = useState<number | null>(null);
+
+  const update = (i: number, patch: Partial<VarianteRow>) => {
+    onChange(items.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
+  };
+  const remove = (i: number) => {
+    onChange(items.filter((_, idx) => idx !== i));
+    if (expanded === i) setExpanded(null);
+  };
+  const add = () => {
+    if (items.length >= 10) return;
+    onChange([...items, emptyVariante()]);
+  };
+
+  const handleFotoUpload = async (i: number, file: File) => {
+    update(i, { foto_uploading: true });
+    onUploadingChange(true);
+    try {
+      const url = await uploadFotoToStorage(file, `ofertas/${necesidadId}/${pyomeId}`);
+      update(i, { foto_url: url, foto_uploading: false });
+    } catch (e) {
+      update(i, { foto_uploading: false });
+      alert(e instanceof Error ? e.message : 'Error al subir la foto');
+    } finally {
+      // Determinar si quedan otras subiendo
+      const stillUploading = items.some((it, idx) => idx !== i && it.foto_uploading);
+      onUploadingChange(stillUploading);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      {items.length === 0 ? (
+        <button
+          type="button"
+          onClick={add}
+          className="w-full px-3 py-2.5 rounded-xl border-[1.5px] border-dashed border-ink/30 text-xs font-bold uppercase tracking-wider text-ink/55 hover:border-ink hover:text-ink transition"
+        >
+          + Agregar variante
+        </button>
+      ) : (
+        <>
+          {items.map((it, i) => {
+            const isOpen = expanded === i;
+            const hasExtras =
+              it.descripcion.trim().length > 0 ||
+              it.foto_url.length > 0 ||
+              it.link_url.trim().length > 0 ||
+              it.foto_uploading;
+            return (
+              <div
+                key={i}
+                className="rounded-xl border-[1.5px] border-ink/20 bg-white/60 p-2 space-y-2"
+              >
+                <div className="flex gap-2 items-start">
+                  <input
+                    type="text"
+                    placeholder="Ej: Cuaderno tapa dura"
+                    value={it.nombre}
+                    onChange={(e) => { update(i, { nombre: e.target.value }); }}
+                    className="flex-1 px-3 py-2 rounded-lg border-[1.5px] border-ink/30 text-sm focus:outline-none focus:border-ink"
+                  />
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="$"
+                    value={it.precio}
+                    onChange={(e) => { update(i, { precio: e.target.value }); }}
+                    className="w-24 px-2 py-2 rounded-lg border-[1.5px] border-ink/30 text-sm font-mono text-right focus:outline-none focus:border-ink"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => { setExpanded(isOpen ? null : i); }}
+                    className={`px-2 py-2 text-lg ${
+                      hasExtras ? 'text-sage' : 'text-ink/40'
+                    } hover:text-ink`}
+                    aria-label="Detalles"
+                    title={hasExtras ? 'Tiene foto/descripcion/link' : 'Agregar foto, descripción o link'}
+                  >
+                    📎
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { remove(i); }}
+                    className="px-2 py-2 text-ink/40 hover:text-coral text-lg"
+                    aria-label="Quitar variante"
+                  >
+                    ✕
+                  </button>
+                </div>
+                {isOpen && (
+                  <div className="grid gap-2 px-1 pb-1">
+                    <label className="block">
+                      <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/55 mb-1">
+                        Cantidad
+                      </span>
+                      <input
+                        type="number"
+                        min={1}
+                        value={it.cantidad}
+                        onChange={(e) => { update(i, { cantidad: e.target.value }); }}
+                        className="w-20 px-2 py-1 rounded-lg border-[1.5px] border-ink/20 text-xs font-mono text-center"
+                      />
+                    </label>
+                    <textarea
+                      placeholder="Descripción del producto (marca, calidad...) — opcional"
+                      rows={2}
+                      maxLength={400}
+                      value={it.descripcion}
+                      onChange={(e) => { update(i, { descripcion: e.target.value }); }}
+                      className="w-full px-3 py-2 rounded-lg border-[1.5px] border-ink/20 text-xs focus:outline-none focus:border-ink resize-none"
+                    />
+                    <input
+                      type="url"
+                      placeholder="Link de referencia (ej: ML, fabricante) — opcional"
+                      value={it.link_url}
+                      onChange={(e) => { update(i, { link_url: e.target.value }); }}
+                      className="w-full px-3 py-2 rounded-lg border-[1.5px] border-ink/20 text-xs focus:outline-none focus:border-ink"
+                    />
+                    {/* Foto del producto */}
+                    <div>
+                      <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/55 mb-1">
+                        Foto del producto
+                      </span>
+                      {it.foto_url ? (
+                        <div className="flex items-center gap-2">
+                          <img
+                            src={it.foto_url}
+                            alt={it.nombre}
+                            className="w-16 h-16 rounded-lg object-cover border-[1.5px] border-ink/20"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => { update(i, { foto_url: '' }); }}
+                            className="text-[10px] font-bold uppercase tracking-wider text-coral hover:underline"
+                          >
+                            Quitar foto
+                          </button>
+                        </div>
+                      ) : it.foto_uploading ? (
+                        <div className="text-[11px] text-ink/55 italic">Subiendo…</div>
+                      ) : (
+                        <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border-[1.5px] border-dashed border-ink/30 text-xs font-bold cursor-pointer hover:border-ink hover:bg-cream transition">
+                          <span>+ Subir foto</span>
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            className="hidden"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) void handleFotoUpload(i, f);
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {items.length < 10 && (
+            <button
+              type="button"
+              onClick={add}
+              className="text-[11px] font-bold uppercase tracking-wider text-coral hover:underline"
+            >
+              + Agregar otra variante
+            </button>
+          )}
+        </>
+      )}
+    </div>
   );
 }

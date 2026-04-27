@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import type { ModoEntrega } from '@/lib/database.types';
+import type { ModoEntrega, OfertaVariante } from '@/lib/database.types';
 import { ofertasByNecesidadKey } from '@/lib/queries/useOfertasByNecesidad';
 
 export interface CrearOfertaInput {
@@ -11,6 +11,7 @@ export interface CrearOfertaInput {
   modoEntrega?: ModoEntrega;
   precioEnvioCentavos?: number; // 0 si no incluye envio
   retiroInmediato?: boolean;    // tengo stock para retiro hoy
+  variantes?: OfertaVariante[]; // hasta 10 — opcional
 }
 
 /**
@@ -30,6 +31,7 @@ export function useCrearOferta() {
         p_modo_entrega: input.modoEntrega ?? 'retiro',
         p_precio_envio_centavos: input.precioEnvioCentavos ?? 0,
         p_retiro_inmediato: input.retiroInmediato ?? false,
+        p_variantes: input.variantes ?? [],
       });
       if (error) throw error;
     },

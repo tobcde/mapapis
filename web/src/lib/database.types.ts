@@ -218,6 +218,21 @@ export type NecesidadUpdate = Partial<NecesidadRow>;
 export type OfertaEstado = 'presentada' | 'ganadora' | 'descartada' | 'retirada';
 export type ModoEntrega = 'retiro' | 'envio' | 'ambos';
 
+/**
+ * Variante de producto dentro de una oferta. La pyme puede ofrecer varias
+ * versiones del mismo producto (ej. "cuaderno tapa dura" + "cuaderno tapa
+ * flexible") con su propio precio, foto y descripción. La familia ve todas
+ * y compara.
+ */
+export interface OfertaVariante {
+  nombre: string;
+  precio_centavos: number;
+  cantidad?: number;
+  descripcion?: string | null;
+  foto_url?: string | null;
+  link_url?: string | null;
+}
+
 export type OfertaRow = {
   id: string;
   necesidad_id: string;
@@ -229,6 +244,7 @@ export type OfertaRow = {
   tiempo_entrega_dias: number | null;
   estado: OfertaEstado;
   modo_entrega: ModoEntrega | null;
+  variantes: OfertaVariante[];
   created_at: string | null;
 };
 
@@ -243,6 +259,7 @@ export type OfertaInsert = {
   tiempo_entrega_dias?: number | null;
   estado?: OfertaEstado;
   modo_entrega?: ModoEntrega | null;
+  variantes?: OfertaVariante[];
 };
 
 export type OfertaUpdate = Partial<OfertaRow>;
@@ -486,6 +503,7 @@ export type Database = {
           p_modo_entrega?: string;
           p_precio_envio_centavos?: number;
           p_retiro_inmediato?: boolean;
+          p_variantes?: OfertaVariante[];
         };
         Returns: void;
       };
