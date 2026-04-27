@@ -136,10 +136,15 @@ export type NecesidadModalidad = 'grupal' | 'individual';
  * Item del desglose estructurado del pedido. Si modalidad=individual, la
  * cantidad es por alumno (se multiplica por inscriptos). Si modalidad=grupal,
  * la cantidad es total para todo el grupo.
+ *
+ * `foto_url` y `link_url` son opcionales — la pyme puede usarlos para ver
+ * exactamente qué producto se pide (ej. link a MercadoLibre).
  */
 export interface ComposicionItem {
   nombre: string;
   cantidad: number;
+  foto_url?: string | null;
+  link_url?: string | null;
 }
 
 export type NecesidadRow = {

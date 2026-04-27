@@ -250,21 +250,44 @@ function DesgloseComposicion({
       <div className="text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-2">
         {labelTotal}
       </div>
-      <ul className="space-y-1">
+      <ul className="space-y-2">
         {composicion.map((it, i) => {
           const total = it.cantidad * multiplier;
           return (
-            <li key={i} className="text-sm flex items-baseline gap-2">
-              <span className="font-mono font-bold w-10 text-right shrink-0">
-                {total}
-              </span>
-              <span className="font-bold">×</span>
-              <span className="flex-1">{it.nombre}</span>
-              {modalidad === 'individual' && (
-                <span className="text-[10px] text-ink/50 font-mono">
-                  ({it.cantidad}/alumno × {inscriptos})
-                </span>
+            <li key={i} className="text-sm flex items-center gap-2">
+              {it.foto_url ? (
+                <img
+                  src={it.foto_url}
+                  alt={it.nombre}
+                  className="w-10 h-10 rounded-lg object-cover border-[1.5px] border-ink/20 shrink-0"
+                  loading="lazy"
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-lg bg-mist/40 border-[1.5px] border-ink/10 shrink-0" />
               )}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-baseline gap-2">
+                  <span className="font-mono font-bold">{total}×</span>
+                  <span className="truncate">{it.nombre}</span>
+                  {it.link_url && (
+                    <a
+                      href={it.link_url}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="text-[11px] text-coral hover:underline shrink-0"
+                      title="Ver link de referencia"
+                    >
+                      ↗
+                    </a>
+                  )}
+                </div>
+                {modalidad === 'individual' && (
+                  <div className="text-[10px] text-ink/50 font-mono">
+                    ({it.cantidad}/alumno × {inscriptos})
+                  </div>
+                )}
+              </div>
             </li>
           );
         })}

@@ -162,7 +162,19 @@ export function Publicar() {
   const [camposValues, setCamposValues] = useState<Record<string, string>>({});
   const [modalidad, setModalidad] = useState<NecesidadModalidad>('grupal');
   const [cantidadPorAlumno, setCantidadPorAlumno] = useState('');
-  const [composicion, setComposicion] = useState<{ nombre: string; cantidad: string }[]>([]);
+  const [composicion, setComposicion] = useState<
+    { nombre: string; cantidad: string; foto_url: string; link_url: string }[]
+  >([]);
+
+  // Auto-calculo de la cantidad por alumno = suma de los items del desglose.
+  // Solo se usa cuando modalidad=individual y hay items cargados.
+  const composicionTotal = composicion.reduce((acc, c) => {
+    const n = Number(c.cantidad);
+    return acc + (Number.isFinite(n) && n > 0 ? n : 0);
+  }, 0);
+  const tieneDesglose = composicion.some(
+    (c) => c.nombre.trim().length > 0 && Number(c.cantidad) > 0,
+  );
   const [presupuestoMin, setPresupuestoMin] = useState('');
   const [presupuestoMax, setPresupuestoMax] = useState('');
   const [fechaInscripcion, setFechaInscripcion] = useState('');
@@ -239,9 +251,9 @@ export function Publicar() {
     if (fechaInscripcion && fechaEntrega && new Date(fechaInscripcion) > new Date(fechaEntrega))
       return 'La fecha de inscripción no puede ser posterior a la de entrega.';
 
-    if (modalidad === 'individual') {
+    if (modalidad === 'individual' && !tieneDesglose) {
       if (!cantidadPorAlumno || Number(cantidadPorAlumno) < 1)
-        return 'Definí cuántas unidades suma cada alumno que se anote.';
+        return 'Definí cuántas unidades suma cada alumno (o cargá items en el desglose).';
     }
 
     return null;
@@ -264,8 +276,26 @@ export function Publicar() {
 
     try {
       const composicionClean = composicion
-        .map((c) => ({ nombre: c.nombre.trim(), cantidad: Number(c.cantidad) }))
+        .map((c) => {
+          const item: { nombre: string; cantidad: number; foto_url?: string; link_url?: string } = {
+            nombre: c.nombre.trim(),
+            cantidad: Number(c.cantidad),
+          };
+          const foto = c.foto_url.trim();
+          const link = c.link_url.trim();
+          if (foto) item.foto_url = foto;
+          if (link) item.link_url = link;
+          return item;
+        })
         .filter((c) => c.nombre.length > 0 && Number.isFinite(c.cantidad) && c.cantidad > 0);
+
+      // Si modalidad=individual con desglose, cantidad_por_alumno se deriva de la suma.
+      const cantidadPorAlumnoFinal =
+        modalidad === 'individual'
+          ? composicionClean.length > 0
+            ? composicionClean.reduce((s, c) => s + c.cantidad, 0)
+            : Number(cantidadPorAlumno)
+          : null;
 
       await publicar.mutateAsync({
         grupoId,
@@ -275,7 +305,7 @@ export function Publicar() {
         descripcion: descripcion.trim(),
         campos: camposClean,
         modalidad,
-        cantidadPorAlumno: modalidad === 'individual' ? Number(cantidadPorAlumno) : null,
+        cantidadPorAlumno: cantidadPorAlumnoFinal,
         composicion: composicionClean.length > 0 ? composicionClean : null,
         presupuestoMinCentavos: presupuestoMin ? Math.round(Number(presupuestoMin) * 100) : null,
         presupuestoMaxCentavos: presupuestoMax ? Math.round(Number(presupuestoMax) * 100) : null,
@@ -430,10 +460,34 @@ export function Publicar() {
             </div>
           </div>
 
-          {modalidad === 'individual' && (
+          {/* Items del pedido — para individual, cargás items para 1 alumno y se multiplica */}
+          <Field
+            label={
+              modalidad === 'individual'
+                ? '¿Qué necesita cada alumno?'
+                : '¿Qué necesita el grupo?'
+            }
+            hint={
+              modalidad === 'individual'
+                ? 'Cargá los items para 1 solo alumno. La pyme verá el total multiplicado por la cantidad de inscriptos.'
+                : 'Cargá la cantidad total para todo el grupo (ej: 50 vasos rojos).'
+            }
+          >
+            <ComposicionEditor items={composicion} onChange={setComposicion} />
+            {modalidad === 'individual' && tieneDesglose && (
+              <div className="mt-2 px-3 py-2 rounded-lg bg-sage/15 border border-sage/40 text-[11px] font-bold">
+                ✓ Cada alumno suma{' '}
+                <span className="font-mono">{composicionTotal}</span> unidad
+                {composicionTotal === 1 ? '' : 'es'} en total
+              </div>
+            )}
+          </Field>
+
+          {/* Fallback: si no cargaron desglose, pedimos cantidad por alumno (modalidad=individual) */}
+          {modalidad === 'individual' && !tieneDesglose && (
             <Field
               label="Cantidad por alumno *"
-              hint="Cuántas unidades suma cada alumno que se anote (ej: 2 lápices por alumno)."
+              hint="O cargá items en el desglose de arriba — se calcula sola."
             >
               <input
                 type="number"
@@ -446,18 +500,6 @@ export function Publicar() {
               />
             </Field>
           )}
-
-          {/* Composición desglosada — opcional, ayuda a la pyme a saber qué cotizar */}
-          <Field
-            label="Desglose del pedido (opcional)"
-            hint={
-              modalidad === 'individual'
-                ? 'Items por alumno. La pyme verá el total multiplicado por inscriptos (ej: 1 negro × 6 alumnos = 6 negros).'
-                : 'Items totales para todo el grupo (ej: 50 vasos rojos + 50 vasos azules).'
-            }
-          >
-            <ComposicionEditor items={composicion} onChange={setComposicion} />
-          </Field>
 
           {/* Campos dinámicos de categoría */}
           <CamposDinamicos
@@ -571,21 +613,31 @@ export function Publicar() {
 
 // ─── ComposicionEditor ────────────────────────────────────────────────────────
 
+interface ComposicionRow {
+  nombre: string;
+  cantidad: string;
+  foto_url: string;
+  link_url: string;
+}
+
 function ComposicionEditor({
   items,
   onChange,
 }: {
-  items: { nombre: string; cantidad: string }[];
-  onChange: (next: { nombre: string; cantidad: string }[]) => void;
+  items: ComposicionRow[];
+  onChange: (next: ComposicionRow[]) => void;
 }) {
-  const update = (i: number, patch: Partial<{ nombre: string; cantidad: string }>) => {
+  const [expanded, setExpanded] = useState<number | null>(null);
+
+  const update = (i: number, patch: Partial<ComposicionRow>) => {
     onChange(items.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
   };
   const remove = (i: number) => {
     onChange(items.filter((_, idx) => idx !== i));
+    if (expanded === i) setExpanded(null);
   };
   const add = () => {
-    onChange([...items, { nombre: '', cantidad: '1' }]);
+    onChange([...items, { nombre: '', cantidad: '1', foto_url: '', link_url: '' }]);
   };
 
   return (
@@ -600,33 +652,71 @@ function ComposicionEditor({
         </button>
       ) : (
         <>
-          {items.map((it, i) => (
-            <div key={i} className="flex gap-2 items-start">
-              <input
-                type="text"
-                placeholder="Ej: Lápiz Negro"
-                value={it.nombre}
-                onChange={(e) => { update(i, { nombre: e.target.value }); }}
-                className="flex-1 px-3 py-2 rounded-xl border-[1.5px] border-ink/30 text-sm focus:outline-none focus:border-ink"
-              />
-              <input
-                type="number"
-                min={1}
-                placeholder="1"
-                value={it.cantidad}
-                onChange={(e) => { update(i, { cantidad: e.target.value }); }}
-                className="w-16 px-2 py-2 rounded-xl border-[1.5px] border-ink/30 text-sm font-mono text-center focus:outline-none focus:border-ink"
-              />
-              <button
-                type="button"
-                onClick={() => { remove(i); }}
-                className="px-2 py-2 text-ink/40 hover:text-coral text-lg"
-                aria-label="Quitar item"
+          {items.map((it, i) => {
+            const isOpen = expanded === i;
+            const hasExtras = it.foto_url.trim().length > 0 || it.link_url.trim().length > 0;
+            return (
+              <div
+                key={i}
+                className="rounded-xl border-[1.5px] border-ink/20 bg-white/60 p-2 space-y-2"
               >
-                ✕
-              </button>
-            </div>
-          ))}
+                <div className="flex gap-2 items-start">
+                  <input
+                    type="text"
+                    placeholder="Ej: Lápiz Negro"
+                    value={it.nombre}
+                    onChange={(e) => { update(i, { nombre: e.target.value }); }}
+                    className="flex-1 px-3 py-2 rounded-lg border-[1.5px] border-ink/30 text-sm focus:outline-none focus:border-ink"
+                  />
+                  <input
+                    type="number"
+                    min={1}
+                    placeholder="1"
+                    value={it.cantidad}
+                    onChange={(e) => { update(i, { cantidad: e.target.value }); }}
+                    className="w-16 px-2 py-2 rounded-lg border-[1.5px] border-ink/30 text-sm font-mono text-center focus:outline-none focus:border-ink"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => { setExpanded(isOpen ? null : i); }}
+                    className={`px-2 py-2 text-lg ${
+                      hasExtras ? 'text-sage' : 'text-ink/40'
+                    } hover:text-ink`}
+                    aria-label="Foto / link"
+                    title={hasExtras ? 'Tiene foto/link' : 'Agregar foto/link'}
+                  >
+                    📎
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { remove(i); }}
+                    className="px-2 py-2 text-ink/40 hover:text-coral text-lg"
+                    aria-label="Quitar item"
+                  >
+                    ✕
+                  </button>
+                </div>
+                {isOpen && (
+                  <div className="grid gap-2 px-1 pb-1">
+                    <input
+                      type="url"
+                      placeholder="URL de foto del producto (opcional)"
+                      value={it.foto_url}
+                      onChange={(e) => { update(i, { foto_url: e.target.value }); }}
+                      className="w-full px-3 py-2 rounded-lg border-[1.5px] border-ink/20 text-xs focus:outline-none focus:border-ink"
+                    />
+                    <input
+                      type="url"
+                      placeholder="Link de referencia (ej: ML, sitio del fabricante) — opcional"
+                      value={it.link_url}
+                      onChange={(e) => { update(i, { link_url: e.target.value }); }}
+                      className="w-full px-3 py-2 rounded-lg border-[1.5px] border-ink/20 text-xs focus:outline-none focus:border-ink"
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
           <button
             type="button"
             onClick={add}
