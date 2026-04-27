@@ -179,7 +179,6 @@ export function Publicar() {
   const [presupuestoMax, setPresupuestoMax] = useState('');
   const [fechaInscripcion, setFechaInscripcion] = useState('');
   const [fechaEntrega, setFechaEntrega] = useState('');
-  const [linkReferencia, setLinkReferencia] = useState('');
   const [foto, setFoto] = useState<File | null>(null);
   const [fotoPreview, setFotoPreview] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -253,11 +252,6 @@ export function Publicar() {
     const max = presupuestoMax ? Number(presupuestoMax) : null;
     if (min != null && max != null && min > max)
       return 'El presupuesto mínimo no puede ser mayor que el máximo.';
-
-    // Link de referencia general (solo cuando no hay desglose).
-    const linkTrim = linkReferencia.trim();
-    if (!tieneDesglose && linkTrim && !/^https?:\/\//i.test(linkTrim))
-      return 'El link debe comenzar con http:// o https://.';
 
     // Fechas obligatorias para que la pyme y la familia tengan deadlines firmes.
     if (!fechaInscripcion) return 'Cargá la fecha límite de inscripción.';
@@ -336,7 +330,7 @@ export function Publicar() {
         presupuestoMaxCentavos: presupuestoMax ? Math.round(Number(presupuestoMax) * 100) : null,
         fechaLimiteInscripcion: fechaInscripcion ? new Date(fechaInscripcion).toISOString() : null,
         fechaLimiteEntrega: fechaEntrega ? new Date(fechaEntrega).toISOString() : null,
-        linkReferencia: tieneDesglose ? null : linkReferencia.trim() || null,
+        linkReferencia: null,
         fotoFile: foto,
       });
       void navigate('/feed');
@@ -593,21 +587,6 @@ export function Publicar() {
             />
           </Field>
 
-          {/* Link de referencia general — solo cuando NO hay desglose (cada item tiene su link) */}
-          {!tieneDesglose && (
-            <Field
-              label="Link de referencia (opcional)"
-              hint="Mercado Libre, foto online o cualquier referencia que aclare el pedido."
-            >
-              <input
-                type="url"
-                placeholder="https://articulo.mercadolibre.com.ar/..."
-                value={linkReferencia}
-                onChange={(e) => { setLinkReferencia(e.target.value); }}
-                className={INPUT_CLS}
-              />
-            </Field>
-          )}
 
           {/* Descripción / Observación general según si hay desglose */}
           <Field
