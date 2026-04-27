@@ -6,8 +6,15 @@ import { useMisGrupos } from '@/lib/queries/useMisGrupos';
 import { useMiembros } from '@/lib/queries/useMiembros';
 import { useAlumnosByGrupo } from '@/lib/queries/useAlumnosByGrupo';
 import { useGrupoAdmin } from '@/lib/mutations/useGrupoAdmin';
-import type { RolEnGrupo } from '@/lib/database.types';
+import { relacionPrefijo } from '@/utils/relacion';
+import type { RelacionTutor, RolEnGrupo } from '@/lib/database.types';
 import type { MiembroConProfile } from '@/lib/queries/useMiembros';
+
+interface RelacionAlumno {
+  alumno_id: string;
+  nombre: string;
+  relacion: RelacionTutor;
+}
 
 // ─── RolBadge ─────────────────────────────────────────────────────────────────
 
@@ -32,12 +39,14 @@ function MiembroItem({
   soyCreador,
   soyAdmin,
   grupoId,
+  relaciones,
 }: {
   miembro: MiembroConProfile;
   esYo: boolean;
   soyCreador: boolean;
   soyAdmin: boolean;
   grupoId: string;
+  relaciones: RelacionAlumno[];
 }) {
   const { promote, demote, kick } = useGrupoAdmin();
   const { showConfirm, showAlert } = useDialog();
@@ -106,6 +115,17 @@ function MiembroItem({
           {profiles?.email && (
             <div className="text-[10px] text-ink/50 mt-0.5 truncate">{profiles.email}</div>
           )}
+          {relaciones.length > 0 && (
+            <div className="mt-1 text-[11px] text-ink/70 leading-snug">
+              {relaciones.map((r, i) => (
+                <span key={r.alumno_id}>
+                  {i > 0 && <span className="text-ink/40"> · </span>}
+                  <span className="font-semibold">{relacionPrefijo(r.relacion)}</span>{' '}
+                  {r.nombre}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Acciones admin */}
@@ -167,12 +187,18 @@ export function GrupoMiembros() {
   const miembros = miembrosQ.data ?? [];
   const alumnos = alumnosQ.data ?? [];
 
-  // Miembros que no tienen ningún alumno registrado como tutor
-  const profilesConHijo = new Set<string>();
+  // Map profile_id → relaciones con alumnos del grupo (Papá de Juana, etc.)
+  const relacionesPorMiembro = new Map<string, RelacionAlumno[]>();
   alumnos.forEach((a) => {
-    a.alumno_tutores.forEach((t) => { profilesConHijo.add(t.profile_id); });
+    a.alumno_tutores.forEach((t) => {
+      const lista = relacionesPorMiembro.get(t.profile_id) ?? [];
+      lista.push({ alumno_id: a.id, nombre: a.nombre, relacion: t.relacion });
+      relacionesPorMiembro.set(t.profile_id, lista);
+    });
   });
-  const sinHijo = miembros.filter((m) => !profilesConHijo.has(m.profile_id));
+
+  // Miembros que no tienen ningún alumno registrado como tutor
+  const sinHijo = miembros.filter((m) => !relacionesPorMiembro.has(m.profile_id));
 
   if (miembrosQ.isLoading) {
     return (
@@ -218,6 +244,7 @@ export function GrupoMiembros() {
                 soyCreador={soyCreador}
                 soyAdmin={soyAdmin}
                 grupoId={id ?? ''}
+                relaciones={relacionesPorMiembro.get(m.profile_id) ?? []}
               />
             ))
           )}
