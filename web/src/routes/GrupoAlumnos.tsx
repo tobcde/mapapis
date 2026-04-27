@@ -11,6 +11,12 @@ import type { AlumnoConTutores } from '@/lib/queries/useAlumnosByGrupo';
 import type { RelacionTutor } from '@/lib/database.types';
 import { RELACIONES, relacionLabel } from '@/utils/relacion';
 
+function formatCumple(iso: string): string {
+  const d = new Date(iso + 'T00:00:00');
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' });
+}
+
 const INPUT_CLS =
   'w-full px-4 py-3 rounded-xl border-[1.5px] border-ink bg-white text-[15px] font-medium focus:outline-none focus:ring-2 focus:ring-coral/30';
 
@@ -27,6 +33,7 @@ function AgregarAlumnoForm({
   const { showAlert } = useDialog();
   const [nombre, setNombre] = useState('');
   const [dni, setDni] = useState('');
+  const [fechaNacimiento, setFechaNacimiento] = useState('');
   const [relacion, setRelacion] = useState<RelacionTutor>('tutor');
   const [err, setErr] = useState<string | null>(null);
 
@@ -34,13 +41,19 @@ function AgregarAlumnoForm({
     e.preventDefault();
     setErr(null);
     const nombreTrim = nombre.trim();
+    const dniTrim = dni.replace(/\D/g, '');
     if (!nombreTrim) { setErr('El nombre es obligatorio.'); return; }
+    if (dniTrim.length < 7 || dniTrim.length > 8) {
+      setErr('El DNI es obligatorio (7 u 8 dígitos).');
+      return;
+    }
     try {
       await crear.mutateAsync({
         grupoId,
         nombre: nombreTrim,
-        dni: dni.trim() || null,
+        dni: dniTrim,
         relacion,
+        fechaNacimiento: fechaNacimiento || null,
       });
       onDone();
     } catch (error) {
@@ -76,15 +89,36 @@ function AgregarAlumnoForm({
 
       <label className="block">
         <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-1.5">
-          DNI (opcional)
+          DNI *
         </span>
         <input
           type="text"
+          required
+          inputMode="numeric"
           value={dni}
           onChange={(e) => { setDni(e.target.value); }}
           placeholder="12345678"
           className={INPUT_CLS + ' font-mono'}
         />
+        <span className="block mt-1 text-[10px] text-ink/55">
+          Privado — no se muestra a los demás usuarios. Sirve para no duplicar al alumno cuando otro tutor lo cargue.
+        </span>
+      </label>
+
+      <label className="block">
+        <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-1.5">
+          Fecha de nacimiento (opcional)
+        </span>
+        <input
+          type="date"
+          value={fechaNacimiento}
+          onChange={(e) => { setFechaNacimiento(e.target.value); }}
+          max={new Date().toISOString().slice(0, 10)}
+          className={INPUT_CLS}
+        />
+        <span className="block mt-1 text-[10px] text-ink/55">
+          Aparece en el calendario de cumpleaños del grupo.
+        </span>
       </label>
 
       <div>
@@ -133,15 +167,30 @@ function AlumnoItem({
   grupoId: string;
   userId: string;
 }) {
-  const { joinAsTutor, leaveAsTutor, setMiRelacion } = useAlumnoActions();
+  const { joinAsTutor, leaveAsTutor, setMiRelacion, setFechaNacimiento } = useAlumnoActions();
   const { showConfirm, showAlert } = useDialog();
   const [showJoinPicker, setShowJoinPicker] = useState(false);
   const [showEditPicker, setShowEditPicker] = useState(false);
+  const [editFecha, setEditFecha] = useState(false);
+  const [fechaInput, setFechaInput] = useState(alumno.fecha_nacimiento ?? '');
 
   const tutores = alumno.alumno_tutores;
   const miTutor = tutores.find((t) => t.profile_id === userId);
   const yoSoyTutor = !!miTutor;
   const inicial = alumno.nombre[0]?.toUpperCase() ?? '?';
+
+  const handleSaveFecha = async () => {
+    try {
+      await setFechaNacimiento.mutateAsync({
+        grupoId,
+        alumnoId: alumno.id,
+        fecha: fechaInput || null,
+      });
+      setEditFecha(false);
+    } catch (err) {
+      await showAlert(err instanceof Error ? err.message : 'Error al guardar fecha');
+    }
+  };
 
   const handleJoin = async (relacion: RelacionTutor) => {
     setShowJoinPicker(false);
@@ -265,6 +314,57 @@ function AlumnoItem({
           </button>
         </div>
       )}
+
+      {/* Cumpleaños */}
+      <div className="mt-2 pl-12 text-xs text-ink/70 flex items-center gap-2">
+        <span className="text-ink/50">🎂</span>
+        {!editFecha ? (
+          <>
+            <span>
+              {alumno.fecha_nacimiento
+                ? formatCumple(alumno.fecha_nacimiento)
+                : <span className="text-ink/40 italic">sin fecha de nacimiento</span>}
+            </span>
+            {yoSoyTutor && (
+              <button
+                type="button"
+                onClick={() => {
+                  setFechaInput(alumno.fecha_nacimiento ?? '');
+                  setEditFecha(true);
+                }}
+                className="text-[10px] font-bold uppercase tracking-wider text-coral hover:underline"
+              >
+                {alumno.fecha_nacimiento ? 'editar' : 'cargar'}
+              </button>
+            )}
+          </>
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <input
+              type="date"
+              value={fechaInput}
+              onChange={(e) => { setFechaInput(e.target.value); }}
+              max={new Date().toISOString().slice(0, 10)}
+              className="text-xs px-2 py-1 rounded-lg border-[1.5px] border-ink/30 focus:outline-none focus:border-ink"
+            />
+            <button
+              type="button"
+              onClick={() => { void handleSaveFecha(); }}
+              disabled={setFechaNacimiento.isPending}
+              className="text-[10px] font-bold uppercase tracking-wider text-sage hover:underline disabled:opacity-50"
+            >
+              guardar
+            </button>
+            <button
+              type="button"
+              onClick={() => { setEditFecha(false); }}
+              className="text-[10px] font-bold uppercase tracking-wider text-ink/50 hover:underline"
+            >
+              cancelar
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Tutores list */}
       {tutores.length > 0 && (

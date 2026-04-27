@@ -8,6 +8,13 @@ interface CrearAlumnoArgs {
   nombre: string;
   dni?: string | null;
   relacion?: RelacionTutor;
+  fechaNacimiento?: string | null;
+}
+
+interface SetFechaArgs {
+  grupoId: string;
+  alumnoId: string;
+  fecha: string | null;
 }
 
 interface MergeAlumnoArgs {
@@ -41,17 +48,30 @@ export function useAlumnoActions() {
 
   /** Crea un alumno en el grupo y registra al usuario actual como tutor. */
   const crear = useMutation<AlumnoRow, Error, CrearAlumnoArgs>({
-    mutationFn: async ({ grupoId, nombre, dni, relacion }) => {
+    mutationFn: async ({ grupoId, nombre, dni, relacion, fechaNacimiento }) => {
       const { data, error } = await supabase.rpc('alumno_create_with_tutor', {
         p_grupo: grupoId,
         p_nombre: nombre,
         p_dni: dni ?? null,
         ...(relacion ? { p_relacion: relacion } : {}),
+        ...(fechaNacimiento ? { p_fecha_nacimiento: fechaNacimiento } : {}),
       });
       if (error) throw error;
       const alumno = (data as AlumnoRow[] | null)?.[0];
       if (!alumno) throw new Error('alumno_create_with_tutor no devolvió fila');
       return alumno;
+    },
+    onSuccess: (_data, { grupoId }) => { invalidar(grupoId); },
+  });
+
+  /** Setear/cambiar la fecha de nacimiento de un alumno (cualquier tutor). */
+  const setFechaNacimiento = useMutation<void, Error, SetFechaArgs>({
+    mutationFn: async ({ alumnoId, fecha }) => {
+      const { error } = await supabase.rpc('alumno_set_fecha_nacimiento', {
+        p_alumno: alumnoId,
+        p_fecha: fecha,
+      });
+      if (error) throw error;
     },
     onSuccess: (_data, { grupoId }) => { invalidar(grupoId); },
   });
@@ -101,5 +121,5 @@ export function useAlumnoActions() {
     onSuccess: (_data, { grupoId }) => { invalidar(grupoId); },
   });
 
-  return { crear, merge, joinAsTutor, leaveAsTutor, setMiRelacion };
+  return { crear, merge, joinAsTutor, leaveAsTutor, setMiRelacion, setFechaNacimiento };
 }

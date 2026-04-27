@@ -40,6 +40,9 @@ export function Perfil() {
   const [editing, setEditing] = useState(false);
   const [nombre, setNombre] = useState('');
   const [saving, setSaving] = useState(false);
+  const [editAlias, setEditAlias] = useState(false);
+  const [aliasMp, setAliasMp] = useState('');
+  const [savingAlias, setSavingAlias] = useState(false);
 
   const startEditing = () => {
     setNombre(profile?.nombre ?? '');
@@ -59,6 +62,28 @@ export function Perfil() {
       return;
     }
     setEditing(false);
+    void queryClient.invalidateQueries({ queryKey: profileQueryKey(profile.id) });
+  };
+
+  const startEditingAlias = () => {
+    setAliasMp(profile?.alias_mp ?? '');
+    setEditAlias(true);
+  };
+
+  const guardarAlias = async () => {
+    if (!profile) return;
+    const cleaned = aliasMp.trim();
+    setSavingAlias(true);
+    const { error } = await supabase
+      .from('profiles')
+      .update({ alias_mp: cleaned || null })
+      .eq('id', profile.id);
+    setSavingAlias(false);
+    if (error) {
+      await showAlert('No se pudo guardar el alias: ' + error.message);
+      return;
+    }
+    setEditAlias(false);
     void queryClient.invalidateQueries({ queryKey: profileQueryKey(profile.id) });
   };
 
@@ -181,6 +206,60 @@ export function Perfil() {
           >
             Cambiar de rol →
           </button>
+        </div>
+
+        {/* Alias de Mercado Pago */}
+        <div className="bg-white rounded-3xl border-[1.5px] border-ink p-5 shadow-pop">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-1">
+            Alias de Mercado Pago
+          </div>
+          <p className="text-[11px] text-ink/55 mb-3">
+            Cuando organicen un sobre digital de cumple para tu hijo/a, las familias del grupo
+            te transfieren acá directo (MaPaPis no toca la plata).
+          </p>
+          {editAlias ? (
+            <div className="flex gap-2">
+              <input
+                value={aliasMp}
+                onChange={(e) => { setAliasMp(e.target.value); }}
+                placeholder="ej. tu.alias.mp"
+                className="flex-1 px-3 py-2 rounded-lg border-[1.5px] border-ink text-sm font-mono focus:outline-none focus:ring-2 focus:ring-coral/30"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void guardarAlias();
+                  if (e.key === 'Escape') setEditAlias(false);
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => { void guardarAlias(); }}
+                disabled={savingAlias}
+                className="btn-pop bg-sage text-white px-3 py-2 rounded-lg border-[1.5px] border-ink text-xs font-bold uppercase disabled:opacity-50"
+              >
+                {savingAlias ? '…' : 'OK'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setEditAlias(false); }}
+                className="px-2 text-xs font-bold uppercase tracking-wider text-ink/50 hover:text-ink"
+              >
+                ✕
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-3">
+              <div className="font-mono text-sm">
+                {profile.alias_mp ?? <span className="text-ink/40 italic font-sans">sin alias cargado</span>}
+              </div>
+              <button
+                type="button"
+                onClick={startEditingAlias}
+                className="text-[10px] font-bold uppercase tracking-wider text-coral hover:text-coral/80"
+              >
+                {profile.alias_mp ? 'Editar' : 'Cargar alias'}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Mi negocio (solo pymes) */}

@@ -25,6 +25,7 @@ export type ProfileRow = {
   telefono_verificado: boolean | null;
   terms_version_aceptada: string | null;
   terms_accepted_at: string | null;
+  alias_mp: string | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -38,6 +39,7 @@ export type ProfileInsert = {
   telefono_verificado?: boolean | null;
   terms_version_aceptada?: string | null;
   terms_accepted_at?: string | null;
+  alias_mp?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -51,6 +53,7 @@ export type ProfileUpdate = {
   telefono_verificado?: boolean | null;
   terms_version_aceptada?: string | null;
   terms_accepted_at?: string | null;
+  alias_mp?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -229,6 +232,7 @@ export type AlumnoRow = {
   grupo_id: string;
   nombre: string;
   dni: string | null;
+  fecha_nacimiento: string | null;
   created_at: string | null;
 };
 
@@ -237,6 +241,17 @@ export type AlumnoInsert = {
   grupo_id: string;
   nombre: string;
   dni?: string | null;
+  fecha_nacimiento?: string | null;
+};
+
+export type ProximoCumple = {
+  alumno_id: string;
+  grupo_id: string;
+  nombre: string;
+  fecha_nacimiento: string;
+  proximo_cumple: string;
+  dias_para_cumple: number;
+  edad_que_cumple: number;
 };
 
 export type RelacionTutor = 'padre' | 'madre' | 'tutor' | 'encargado';
@@ -387,6 +402,10 @@ export type Database = {
         Row: NecesidadPublicaRow;
         Relationships: [];
       };
+      proximos_cumples: {
+        Row: ProximoCumple;
+        Relationships: [];
+      };
     };
     Functions: {
       crear_grupo: {
@@ -471,8 +490,13 @@ export type Database = {
           p_nombre: string;
           p_dni?: string | null;
           p_relacion?: RelacionTutor;
+          p_fecha_nacimiento?: string | null;
         };
         Returns: AlumnoRow[];
+      };
+      alumno_set_fecha_nacimiento: {
+        Args: { p_alumno: string; p_fecha: string | null };
+        Returns: void;
       };
       alumnos_merge: {
         Args: { p_alumno_keep: string; p_alumno_merge: string };

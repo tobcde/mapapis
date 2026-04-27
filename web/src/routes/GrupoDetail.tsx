@@ -9,6 +9,7 @@ import { useNecesidadesByGrupo } from '@/lib/queries/useNecesidadesByGrupo';
 import { useMiembros } from '@/lib/queries/useMiembros';
 import { useAlumnosByGrupo } from '@/lib/queries/useAlumnosByGrupo';
 import { useGrupoAdmin } from '@/lib/mutations/useGrupoAdmin';
+import { CalendarioCumples } from '@/components/CalendarioCumples';
 import { fmtMoney } from '@/utils/fmt';
 import { estadoBadgeClass, estadoLabel } from '@/utils/necesidad';
 import type { NecesidadRow, RolEnGrupo, GrupoRow } from '@/lib/database.types';
@@ -322,6 +323,9 @@ export function GrupoDetail() {
             </div>
           </Link>
         )}
+
+        {/* Próximos cumpleaños del grupo */}
+        <CalendarioCumples grupoId={id} />
 
         {/* Necesidades */}
         <section className="space-y-3">
