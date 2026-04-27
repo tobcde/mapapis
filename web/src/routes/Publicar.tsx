@@ -231,8 +231,12 @@ export function Publicar() {
     if (descTrim.length < 10 || descTrim.length > 1200)
       return 'La descripción debe tener entre 10 y 1200 caracteres.';
 
+    // Si el publicador cargó desglose estructurado, los campos dinámicos
+    // de la categoría quedan ocultos y no se validan (información cubierta
+    // por los items del desglose).
     for (const campo of schemaCampos) {
       if (!campo.required) continue;
+      if (tieneDesglose) continue;
       const v = camposValues[campo.key];
       if (v == null || v === '') return `Falta completar: ${campo.label}`;
       if (campo.type === 'int' && (Number.isNaN(Number(v)) || Number(v) < (campo.min ?? 0)))
@@ -266,12 +270,15 @@ export function Publicar() {
     const error = validate();
     if (error) { setFormError(error); return; }
 
-    // Convertir campos int a número
+    // Convertir campos int a número. Si hay desglose, el bloque está oculto
+    // y mandamos {} para que la necesidad guarde solo la composición.
     const camposClean: Record<string, string | number> = {};
-    for (const campo of schemaCampos) {
-      const v = camposValues[campo.key];
-      if (v == null || v === '') continue;
-      camposClean[campo.key] = campo.type === 'int' ? Number(v) : v;
+    if (!tieneDesglose) {
+      for (const campo of schemaCampos) {
+        const v = camposValues[campo.key];
+        if (v == null || v === '') continue;
+        camposClean[campo.key] = campo.type === 'int' ? Number(v) : v;
+      }
     }
 
     try {
@@ -501,17 +508,21 @@ export function Publicar() {
             </Field>
           )}
 
-          {/* Campos dinámicos de categoría */}
-          <CamposDinamicos
-            schema={schemaCampos}
-            valores={camposValues}
-            onChange={setCampo}
-          />
+          {/* Campos dinámicos de categoría — se ocultan cuando el desglose ya cubre la info */}
+          {!tieneDesglose && (
+            <CamposDinamicos
+              schema={schemaCampos}
+              valores={camposValues}
+              onChange={setCampo}
+            />
+          )}
 
-          {/* Foto */}
-          <Field label="Foto de referencia (opcional)">
-            <FotoPicker preview={fotoPreview} onPick={onPickFoto} onRemove={onRemoveFoto} />
-          </Field>
+          {/* Foto general — solo cuando NO hay desglose (cada item tiene la suya) */}
+          {!tieneDesglose && (
+            <Field label="Foto de referencia (opcional)">
+              <FotoPicker preview={fotoPreview} onPick={onPickFoto} onRemove={onRemoveFoto} />
+            </Field>
+          )}
 
           {/* Presupuesto */}
           <div className="grid grid-cols-2 gap-3">
