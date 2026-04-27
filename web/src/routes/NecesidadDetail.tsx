@@ -51,8 +51,6 @@ const INPUT_CLS =
 // ─── Sección info de la necesidad ─────────────────────────────────────────────
 
 function InfoCard({ n }: { n: NecesidadRow }) {
-  const campos = n.campos as Record<string, unknown> | null;
-
   return (
     <div className="bg-white rounded-3xl border-[1.5px] border-ink overflow-hidden shadow-pop">
       {n.foto_url && (
@@ -70,23 +68,6 @@ function InfoCard({ n }: { n: NecesidadRow }) {
             {n.descripcion}
           </p>
         </div>
-
-        {/* Campos dinámicos */}
-        {campos && Object.keys(campos).length > 0 && (
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-2">
-              Detalle del pedido
-            </p>
-            <div className="space-y-1 text-sm">
-              {Object.entries(campos).map(([k, v]) => (
-                <div key={k} className="flex items-baseline gap-2">
-                  <span className="text-ink/55 capitalize">{k.replace(/_/g, ' ')}:</span>
-                  <span className="font-semibold">{String(v)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Link de referencia */}
         {n.link_referencia && (

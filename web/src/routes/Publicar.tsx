@@ -5,7 +5,7 @@ import { Button } from '@/components/ui';
 import { useMisGrupos } from '@/lib/queries/useMisGrupos';
 import { useCategorias } from '@/lib/queries/useCategorias';
 import { usePublicarNecesidad } from '@/lib/mutations/usePublicarNecesidad';
-import type { CampoSchema, NecesidadModalidad } from '@/lib/database.types';
+import type { NecesidadModalidad } from '@/lib/database.types';
 
 // ─── Field wrapper ────────────────────────────────────────────────────────────
 
@@ -26,66 +26,6 @@ const INPUT_CLS =
 
 const SELECT_CLS =
   'w-full px-4 py-3 rounded-xl border-[1.5px] border-ink bg-white text-[15px] font-medium focus:outline-none';
-
-// ─── Campos dinámicos según categoría ────────────────────────────────────────
-
-function CamposDinamicos({
-  schema,
-  valores,
-  onChange,
-}: {
-  schema: CampoSchema[];
-  valores: Record<string, string>;
-  onChange: (key: string, value: string) => void;
-}) {
-  if (schema.length === 0) return null;
-
-  return (
-    <div className="rounded-2xl border-[1.5px] border-ink/20 bg-mist p-4 space-y-3">
-      <div className="text-[10px] font-bold uppercase tracking-wider text-ink/70">
-        Detalle del pedido
-      </div>
-      {schema.map((campo) => (
-        <Field
-          key={campo.key}
-          label={campo.label + (campo.required ? ' *' : '')}
-          hint={campo.help}
-        >
-          {campo.type === 'int' && (
-            <input
-              type="number"
-              min={campo.min ?? 0}
-              required={campo.required}
-              placeholder={campo.placeholder ?? ''}
-              value={valores[campo.key] ?? ''}
-              onChange={(e) => { onChange(campo.key, e.target.value); }}
-              className={INPUT_CLS + ' font-mono'}
-            />
-          )}
-          {campo.type === 'text' && (
-            <input
-              type="text"
-              required={campo.required}
-              placeholder={campo.placeholder ?? ''}
-              value={valores[campo.key] ?? ''}
-              onChange={(e) => { onChange(campo.key, e.target.value); }}
-              className={INPUT_CLS}
-            />
-          )}
-          {campo.type === 'date' && (
-            <input
-              type="date"
-              required={campo.required}
-              value={valores[campo.key] ?? ''}
-              onChange={(e) => { onChange(campo.key, e.target.value); }}
-              className={INPUT_CLS}
-            />
-          )}
-        </Field>
-      ))}
-    </div>
-  );
-}
 
 // ─── Foto picker ──────────────────────────────────────────────────────────────
 
@@ -159,7 +99,6 @@ export function Publicar() {
   const [categoriaId, setCategoriaId] = useState<string>('');
   const [titulo, setTitulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
-  const [camposValues, setCamposValues] = useState<Record<string, string>>({});
   const [modalidad, setModalidad] = useState<NecesidadModalidad>('grupal');
   const [cantidadPorAlumno, setCantidadPorAlumno] = useState('');
   const [composicion, setComposicion] = useState<
@@ -175,7 +114,6 @@ export function Publicar() {
   const tieneDesglose = composicion.some(
     (c) => c.nombre.trim().length > 0 && Number(c.cantidad) > 0,
   );
-  const [presupuestoMin, setPresupuestoMin] = useState('');
   const [presupuestoMax, setPresupuestoMax] = useState('');
   const [fechaInscripcion, setFechaInscripcion] = useState('');
   const [fechaEntrega, setFechaEntrega] = useState('');
@@ -185,8 +123,13 @@ export function Publicar() {
 
   /* eslint-disable react-hooks/set-state-in-effect -- defaults desde datos async y reset al cambiar categoría */
   useEffect(() => {
-    const primero = gruposAdmin[0];
-    if (gruposAdmin.length > 0 && !grupoId && primero) setGrupoId(primero.id);
+    // Auto-seleccionar SOLO si el publicador tiene un único grupo. Con dos
+    // o más, lo obligamos a elegir explícitamente para que no se publique
+    // por error en el grupo equivocado.
+    if (gruposAdmin.length === 1 && !grupoId) {
+      const unico = gruposAdmin[0];
+      if (unico) setGrupoId(unico.id);
+    }
   }, [gruposAdmin, grupoId]);
 
   useEffect(() => {
@@ -194,18 +137,9 @@ export function Publicar() {
     if (categorias.length > 0 && !categoriaId && primera) setCategoriaId(primera.id);
   }, [categorias, categoriaId]);
 
-  useEffect(() => {
-    setCamposValues({});
-  }, [categoriaId]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  const categoriaActual = categorias.find((c) => c.id === categoriaId);
-  const schemaCampos = (categoriaActual?.campos_obligatorios as CampoSchema[] | undefined) ?? [];
   const grupoActual = gruposAdmin.find((g) => g.id === grupoId);
-
-  const setCampo = useCallback((key: string, value: string) => {
-    setCamposValues((prev) => ({ ...prev, [key]: value }));
-  }, []);
 
   const onPickFoto = useCallback((file: File) => {
     if (file.size > 5 * 1024 * 1024) { setFormError('La foto no puede pesar más de 5 MB.'); return; }
@@ -222,6 +156,8 @@ export function Publicar() {
   }, [fotoPreview]);
 
   const validate = (): string | null => {
+    if (!grupoId) return 'Elegí el grupo en el que querés publicar.';
+
     const tituloTrim = titulo.trim();
     if (tituloTrim.length < 8 || tituloTrim.length > 140)
       return 'El título debe tener entre 8 y 140 caracteres.';
@@ -235,23 +171,6 @@ export function Publicar() {
       if (descTrim.length < 10 || descTrim.length > 1200)
         return 'La descripción debe tener entre 10 y 1200 caracteres.';
     }
-
-    // Si el publicador cargó desglose estructurado, los campos dinámicos
-    // de la categoría quedan ocultos y no se validan (información cubierta
-    // por los items del desglose).
-    for (const campo of schemaCampos) {
-      if (!campo.required) continue;
-      if (tieneDesglose) continue;
-      const v = camposValues[campo.key];
-      if (v == null || v === '') return `Falta completar: ${campo.label}`;
-      if (campo.type === 'int' && (Number.isNaN(Number(v)) || Number(v) < (campo.min ?? 0)))
-        return `${campo.label}: debe ser un número${campo.min != null ? ` mayor o igual a ${campo.min}` : ''}.`;
-    }
-
-    const min = presupuestoMin ? Number(presupuestoMin) : null;
-    const max = presupuestoMax ? Number(presupuestoMax) : null;
-    if (min != null && max != null && min > max)
-      return 'El presupuesto mínimo no puede ser mayor que el máximo.';
 
     // Fechas obligatorias para que la pyme y la familia tengan deadlines firmes.
     if (!fechaInscripcion) return 'Cargá la fecha límite de inscripción.';
@@ -274,16 +193,9 @@ export function Publicar() {
     const error = validate();
     if (error) { setFormError(error); return; }
 
-    // Convertir campos int a número. Si hay desglose, el bloque está oculto
-    // y mandamos {} para que la necesidad guarde solo la composición.
+    // Detalle del pedido (campos dinámicos por categoría) eliminado del form.
+    // El desglose por items + descripción + observación general lo reemplaza.
     const camposClean: Record<string, string | number> = {};
-    if (!tieneDesglose) {
-      for (const campo of schemaCampos) {
-        const v = camposValues[campo.key];
-        if (v == null || v === '') continue;
-        camposClean[campo.key] = campo.type === 'int' ? Number(v) : v;
-      }
-    }
 
     try {
       const composicionClean = composicion
@@ -326,7 +238,7 @@ export function Publicar() {
         modalidad,
         cantidadPorAlumno: cantidadPorAlumnoFinal,
         composicion: composicionClean.length > 0 ? composicionClean : null,
-        presupuestoMinCentavos: presupuestoMin ? Math.round(Number(presupuestoMin) * 100) : null,
+        presupuestoMinCentavos: null,
         presupuestoMaxCentavos: presupuestoMax ? Math.round(Number(presupuestoMax) * 100) : null,
         fechaLimiteInscripcion: fechaInscripcion ? new Date(fechaInscripcion).toISOString() : null,
         fechaLimiteEntrega: fechaEntrega ? new Date(fechaEntrega).toISOString() : null,
@@ -398,10 +310,14 @@ export function Publicar() {
             <div className="h-8 bg-white/60 rounded-lg animate-pulse" />
           ) : gruposAdmin.length > 1 ? (
             <select
+              required
               value={grupoId}
               onChange={(e) => { setGrupoId(e.target.value); }}
               className={SELECT_CLS}
             >
+              <option value="" disabled>
+                Elegí el grupo…
+              </option>
               {gruposAdmin.map((g) => (
                 <option key={g.id} value={g.id}>
                   {g.nombre} · {g.zona}
@@ -520,15 +436,6 @@ export function Publicar() {
             </Field>
           )}
 
-          {/* Campos dinámicos de categoría — se ocultan cuando el desglose ya cubre la info */}
-          {!tieneDesglose && (
-            <CamposDinamicos
-              schema={schemaCampos}
-              valores={camposValues}
-              onChange={setCampo}
-            />
-          )}
-
           {/* Foto general — solo cuando NO hay desglose (cada item tiene la suya) */}
           {!tieneDesglose && (
             <Field label="Foto de referencia (opcional)">
@@ -537,28 +444,19 @@ export function Publicar() {
           )}
 
           {/* Presupuesto */}
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Presupuesto mín ($)">
-              <input
-                type="number"
-                min={0}
-                placeholder="30000"
-                value={presupuestoMin}
-                onChange={(e) => { setPresupuestoMin(e.target.value); }}
-                className={INPUT_CLS + ' font-mono'}
-              />
-            </Field>
-            <Field label="Presupuesto máx ($)">
-              <input
-                type="number"
-                min={0}
-                placeholder="50000"
-                value={presupuestoMax}
-                onChange={(e) => { setPresupuestoMax(e.target.value); }}
-                className={INPUT_CLS + ' font-mono'}
-              />
-            </Field>
-          </div>
+          <Field
+            label="Presupuesto máximo ($)"
+            hint="Tope que estás dispuesto a pagar para todo el pedido."
+          >
+            <input
+              type="number"
+              min={0}
+              placeholder="50000"
+              value={presupuestoMax}
+              onChange={(e) => { setPresupuestoMax(e.target.value); }}
+              className={INPUT_CLS + ' font-mono'}
+            />
+          </Field>
 
           {/* Fechas */}
           <Field
