@@ -333,6 +333,22 @@ export type VotoOfertaRow = {
 export type PymeTier = 0 | 1 | 2 | 3;
 export type PymeEstado = 'activa' | 'suspendida' | 'pendiente';
 
+/** Rango horario [desde, hasta] en formato HH:MM. */
+export interface RangoHorario {
+  desde: string;
+  hasta: string;
+}
+
+/** Horarios de atención por día. Las claves son lun..dom. */
+export interface HorarioDia {
+  abierto: boolean;
+  rangos: RangoHorario[];
+}
+
+export type DiaSemana = 'lun' | 'mar' | 'mie' | 'jue' | 'vie' | 'sab' | 'dom';
+
+export type HorariosSemana = Partial<Record<DiaSemana, HorarioDia>>;
+
 export type PymeRow = {
   id: string;
   profile_id: string;
@@ -350,6 +366,10 @@ export type PymeRow = {
   anios_rubro: number | null;
   cbu: string | null;
   alias_cbu: string | null;
+  direccion: string | null;
+  local_a_la_calle: boolean;
+  hace_envios: boolean;
+  horarios: HorariosSemana;
   tier: PymeTier | null;
   estado: PymeEstado | null;
   created_at: string | null;
@@ -528,6 +548,10 @@ export type Database = {
           p_anios_rubro?: number | null;
           p_cbu?: string | null;
           p_alias_cbu?: string | null;
+          p_direccion?: string | null;
+          p_local_a_la_calle?: boolean | null;
+          p_hace_envios?: boolean | null;
+          p_horarios?: HorariosSemana | null;
         };
         Returns: void;
       };

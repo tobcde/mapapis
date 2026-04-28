@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useSessionStore } from '@/stores/session';
 import { pymeProfileQueryKey } from '@/lib/queries/usePymeProfile';
+import type { HorariosSemana } from '@/lib/database.types';
 
 export interface ActualizarPymeInput {
   nombre: string;
@@ -18,6 +19,10 @@ export interface ActualizarPymeInput {
   aniosRubro?: number | null;
   cbu?: string | null;
   aliasCbu?: string | null;
+  direccion?: string | null;
+  localALaCalle?: boolean | null;
+  haceEnvios?: boolean | null;
+  horarios?: HorariosSemana | null;
 }
 
 /**
@@ -45,6 +50,10 @@ export function useActualizarPyme() {
         p_anios_rubro: Number.isFinite(input.aniosRubro) ? (input.aniosRubro ?? null) : null,
         p_cbu: input.cbu ?? null,
         p_alias_cbu: input.aliasCbu ?? null,
+        p_direccion: input.direccion ?? null,
+        p_local_a_la_calle: input.localALaCalle ?? null,
+        p_hace_envios: input.haceEnvios ?? null,
+        p_horarios: input.horarios ?? null,
       });
       if (error) throw error;
     },

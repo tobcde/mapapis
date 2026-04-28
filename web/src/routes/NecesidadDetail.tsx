@@ -3,6 +3,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import { Shell } from '@/components/Shell';
 import { Button, useDialog } from '@/components/ui';
 import { useProfile } from '@/lib/queries/useProfile';
+import { usePymeProfile } from '@/lib/queries/usePymeProfile';
 import { useMisGrupos } from '@/lib/queries/useMisGrupos';
 import { useNecesidad } from '@/lib/queries/useNecesidad';
 import { useOfertasByNecesidad } from '@/lib/queries/useOfertasByNecesidad';
@@ -1116,9 +1117,11 @@ export function NecesidadDetail() {
   const inscripcionesQ = useInscripciones(necesidadId);
   const alumnosQ = useAlumnosByGrupo(grupoId);
   const progreso = useNecesidadProgreso(necesidadId);
+  const pymeProfileQ = usePymeProfile();
 
   const isPyme = profile?.role === 'pyme';
   const userId = profile?.id ?? '';
+  const pymePerfilIncompleto = isPyme && !pymeProfileQ.isLoading && !pymeProfileQ.data;
 
   // Alumnos del usuario (filtrando por tutor)
   const misAlumnos = (alumnosQ.data ?? []).filter((a) =>
@@ -1169,6 +1172,45 @@ export function NecesidadDetail() {
           >
             {isPyme ? '← Volver al feed' : '← Volver al grupo'}
           </button>
+        </div>
+      </Shell>
+    );
+  }
+
+  // Pyme sin perfil de pyme cargado: bloquear acceso al detalle.
+  if (pymePerfilIncompleto) {
+    return (
+      <Shell>
+        <div className="space-y-4 anim-in max-w-md">
+          <h1 className="font-display font-extrabold text-2xl">
+            Completá tu perfil de pyme
+          </h1>
+          <div className="bg-sun/30 border-[1.5px] border-ink rounded-2xl p-4 space-y-2">
+            <p className="text-sm">
+              Para ver y ofertar en pedidos de las familias necesitás
+              completar tu perfil de pyme.
+            </p>
+            <p className="text-[11px] text-ink/65">
+              Es un paso rápido: cargás los datos del negocio, las zonas
+              donde operás y tu contacto.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => { void navigate('/pyme/onboarding'); }}
+              className="btn-pop bg-ink text-sun font-extrabold rounded-xl uppercase tracking-wider text-xs px-4 py-3 flex-1"
+            >
+              Completar perfil →
+            </button>
+            <button
+              type="button"
+              onClick={() => { void navigate('/feed'); }}
+              className="btn-pop bg-white text-ink font-extrabold rounded-xl border-[1.5px] border-ink uppercase tracking-wider text-xs px-4 py-3"
+            >
+              Volver
+            </button>
+          </div>
         </div>
       </Shell>
     );
