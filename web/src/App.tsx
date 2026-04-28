@@ -1,9 +1,11 @@
-import { Suspense, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Suspense, useEffect, useState, type ReactNode } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { queryClient } from '@/lib/queryClient';
 import { useSessionStore } from '@/stores/session';
+import { consumeAccessQueryParam, isBypassPath } from '@/lib/earlyAccess';
+import { EnConstruccion } from '@/routes/EnConstruccion';
 import { Login } from '@/routes/Login';
 import { Onboarding } from '@/routes/Onboarding';
 import { Perfil } from '@/routes/Perfil';
@@ -38,6 +40,29 @@ function Loading() {
   return <LoadingScreen message="Preparando la app…" />;
 }
 
+/**
+ * Mientras la web está en construcción, mostramos `EnConstruccion` salvo que:
+ *  - el visitante haya entrado alguna vez con `?acceso=mapapis`
+ *  - tenga una sesión Supabase activa
+ *  - esté en una ruta técnica (callback OAuth, link de invitación)
+ */
+function EarlyAccessGate({ children }: { children: ReactNode }) {
+  const location = useLocation();
+  const session = useSessionStore((s) => s.session);
+  const sessionLoading = useSessionStore((s) => s.loading);
+  const [hasAccess] = useState<boolean>(() => consumeAccessQueryParam());
+
+  if (sessionLoading) {
+    return <Loading />;
+  }
+
+  if (hasAccess || session || isBypassPath(location.pathname)) {
+    return <>{children}</>;
+  }
+
+  return <EnConstruccion />;
+}
+
 export function App() {
   const init = useSessionStore((s) => s.init);
 
@@ -49,6 +74,7 @@ export function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter basename={import.meta.env.BASE_URL}>
         <Suspense fallback={<Loading />}>
+          <EarlyAccessGate>
           <Routes>
             <Route path="/" element={<Login />} />
             <Route path="/login" element={<Login />} />
@@ -181,6 +207,7 @@ export function App() {
             <Route path="/unirse" element={<Unirse />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </EarlyAccessGate>
         </Suspense>
       </BrowserRouter>
       {!env.IS_PROD && <ReactQueryDevtools initialIsOpen={false} />}
