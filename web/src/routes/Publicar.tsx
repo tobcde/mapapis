@@ -5,6 +5,8 @@ import { Button } from '@/components/ui';
 import { useMisGrupos } from '@/lib/queries/useMisGrupos';
 import { useCategorias } from '@/lib/queries/useCategorias';
 import { usePublicarNecesidad } from '@/lib/mutations/usePublicarNecesidad';
+import { useSessionStore } from '@/stores/session';
+import { uploadFotoToStorage } from '@/lib/storage/uploadFoto';
 import type { NecesidadModalidad } from '@/lib/database.types';
 
 // ─── Field wrapper ────────────────────────────────────────────────────────────
@@ -89,6 +91,7 @@ export function Publicar() {
   const { data: misGrupos = [], isLoading: loadingGrupos } = useMisGrupos();
   const { data: categorias = [], isLoading: loadingCats } = useCategorias();
   const publicar = usePublicarNecesidad();
+  const userId = useSessionStore((s) => s.user?.id);
 
   // Solo grupos donde el usuario es admin o creador
   const gruposAdmin = misGrupos.filter(
@@ -102,8 +105,16 @@ export function Publicar() {
   const [modalidad, setModalidad] = useState<NecesidadModalidad>('grupal');
   const [cantidadPorAlumno, setCantidadPorAlumno] = useState('');
   const [composicion, setComposicion] = useState<
-    { nombre: string; cantidad: string; descripcion: string; foto_url: string; link_url: string }[]
+    {
+      nombre: string;
+      cantidad: string;
+      descripcion: string;
+      foto_url: string;
+      foto_uploading: boolean;
+      link_url: string;
+    }[]
   >([]);
+  const [uploadingFotos, setUploadingFotos] = useState(false);
 
   // Auto-calculo de la cantidad por alumno = suma de los items del desglose.
   // Solo se usa cuando modalidad=individual y hay items cargados.
@@ -190,6 +201,10 @@ export function Publicar() {
     e.preventDefault();
     setFormError(null);
 
+    if (uploadingFotos) {
+      setFormError('Esperá a que terminen de subir las fotos.');
+      return;
+    }
     const error = validate();
     if (error) { setFormError(error); return; }
 
@@ -408,7 +423,12 @@ export function Publicar() {
                 : 'Cargá la cantidad total para todo el grupo (ej: 50 vasos rojos).'
             }
           >
-            <ComposicionEditor items={composicion} onChange={setComposicion} />
+            <ComposicionEditor
+              items={composicion}
+              onChange={setComposicion}
+              onUploadingChange={setUploadingFotos}
+              userId={userId}
+            />
             {modalidad === 'individual' && tieneDesglose && (
               <div className="mt-2 px-3 py-2 rounded-lg bg-sage/15 border border-sage/40 text-[11px] font-bold">
                 ✓ Cada alumno suma{' '}
@@ -546,16 +566,21 @@ interface ComposicionRow {
   nombre: string;
   cantidad: string;
   descripcion: string;
-  foto_url: string;
+  foto_url: string;        // URL pública post-upload
+  foto_uploading: boolean; // transient
   link_url: string;
 }
 
 function ComposicionEditor({
   items,
   onChange,
+  onUploadingChange,
+  userId,
 }: {
   items: ComposicionRow[];
   onChange: (next: ComposicionRow[]) => void;
+  onUploadingChange: (uploading: boolean) => void;
+  userId: string | undefined;
 }) {
   const [expanded, setExpanded] = useState<number | null>(null);
 
@@ -569,8 +594,25 @@ function ComposicionEditor({
   const add = () => {
     onChange([
       ...items,
-      { nombre: '', cantidad: '1', descripcion: '', foto_url: '', link_url: '' },
+      { nombre: '', cantidad: '1', descripcion: '', foto_url: '', foto_uploading: false, link_url: '' },
     ]);
+  };
+
+  const handleFotoUpload = async (i: number, file: File) => {
+    if (!userId) return;
+    update(i, { foto_uploading: true });
+    onUploadingChange(true);
+    try {
+      // Path convention: segment [2] = auth.uid() para pasar la RLS del bucket.
+      const url = await uploadFotoToStorage(file, `items/${userId}`);
+      update(i, { foto_url: url, foto_uploading: false });
+    } catch (e) {
+      update(i, { foto_uploading: false });
+      alert(e instanceof Error ? e.message : 'Error al subir la foto');
+    } finally {
+      const stillUploading = items.some((it, idx) => idx !== i && it.foto_uploading);
+      onUploadingChange(stillUploading);
+    }
   };
 
   return (
@@ -644,18 +686,49 @@ function ComposicionEditor({
                     />
                     <input
                       type="url"
-                      placeholder="URL de foto del producto (opcional)"
-                      value={it.foto_url}
-                      onChange={(e) => { update(i, { foto_url: e.target.value }); }}
-                      className="w-full px-3 py-2 rounded-lg border-[1.5px] border-ink/20 text-xs focus:outline-none focus:border-ink"
-                    />
-                    <input
-                      type="url"
                       placeholder="Link de referencia (ej: ML, sitio del fabricante) — opcional"
                       value={it.link_url}
                       onChange={(e) => { update(i, { link_url: e.target.value }); }}
                       className="w-full px-3 py-2 rounded-lg border-[1.5px] border-ink/20 text-xs focus:outline-none focus:border-ink"
                     />
+                    {/* Foto del item */}
+                    <div>
+                      <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/55 mb-1">
+                        Foto del item
+                      </span>
+                      {it.foto_url ? (
+                        <div className="flex items-center gap-2">
+                          <img
+                            src={it.foto_url}
+                            alt={it.nombre || 'item'}
+                            className="w-16 h-16 rounded-lg object-cover border-[1.5px] border-ink/20"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => { update(i, { foto_url: '' }); }}
+                            className="text-[10px] font-bold uppercase tracking-wider text-coral hover:underline"
+                          >
+                            Quitar foto
+                          </button>
+                        </div>
+                      ) : it.foto_uploading ? (
+                        <div className="text-[11px] text-ink/55 italic">Subiendo…</div>
+                      ) : (
+                        <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border-[1.5px] border-dashed border-ink/30 text-xs font-bold cursor-pointer hover:border-ink hover:bg-cream transition">
+                          <span>+ Subir foto</span>
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,image/webp"
+                            className="hidden"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) void handleFotoUpload(i, f);
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
