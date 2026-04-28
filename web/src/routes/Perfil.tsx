@@ -285,61 +285,63 @@ export function Perfil() {
           </button>
         </div>
 
-        {/* Mercado Pago vinculado (OAuth) */}
-        <MpLinkCard />
+        {/* Mercado Pago + alias: espacio explícito entre cards */}
+        <div className="space-y-4 mb-4">
+          <MpLinkCard />
 
-        {/* Alias de Mercado Pago */}
-        <div className="bg-white rounded-3xl border-[1.5px] border-ink p-5 shadow-pop">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-1">
-            Alias de Mercado Pago
-          </div>
-          <p className="text-[11px] text-ink/55 mb-3">
-            Para fallback / referencia rápida. La forma recomendada de cobrar el sobre digital es
-            la vinculación de arriba (auto-detect del pago).
-          </p>
-          {editAlias ? (
-            <div className="flex gap-2">
-              <input
-                value={aliasMp}
-                onChange={(e) => { setAliasMp(e.target.value); }}
-                placeholder="ej. tu.alias.mp"
-                className="flex-1 px-3 py-2 rounded-lg border-[1.5px] border-ink text-sm font-mono focus:outline-none focus:ring-2 focus:ring-coral/30"
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') void guardarAlias();
-                  if (e.key === 'Escape') setEditAlias(false);
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => { void guardarAlias(); }}
-                disabled={savingAlias}
-                className="btn-pop bg-sage text-white px-3 py-2 rounded-lg border-[1.5px] border-ink text-xs font-bold uppercase disabled:opacity-50"
-              >
-                {savingAlias ? '…' : 'OK'}
-              </button>
-              <button
-                type="button"
-                onClick={() => { setEditAlias(false); }}
-                className="px-2 text-xs font-bold uppercase tracking-wider text-ink/50 hover:text-ink"
-              >
-                ✕
-              </button>
+          {/* Alias de Mercado Pago */}
+          <div className="bg-white rounded-3xl border-[1.5px] border-ink p-5 shadow-pop">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-1">
+              Alias de Mercado Pago
             </div>
-          ) : (
-            <div className="flex items-center justify-between gap-3">
-              <div className="font-mono text-sm">
-                {profile.alias_mp ?? <span className="text-ink/40 italic font-sans">sin alias cargado</span>}
+            <p className="text-[11px] text-ink/55 mb-3">
+              Para fallback / referencia rápida. La forma recomendada de cobrar el sobre digital es
+              la vinculación de arriba (auto-detect del pago).
+            </p>
+            {editAlias ? (
+              <div className="flex gap-2">
+                <input
+                  value={aliasMp}
+                  onChange={(e) => { setAliasMp(e.target.value); }}
+                  placeholder="ej. tu.alias.mp"
+                  className="flex-1 px-3 py-2 rounded-lg border-[1.5px] border-ink text-sm font-mono focus:outline-none focus:ring-2 focus:ring-coral/30"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void guardarAlias();
+                    if (e.key === 'Escape') setEditAlias(false);
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => { void guardarAlias(); }}
+                  disabled={savingAlias}
+                  className="btn-pop bg-sage text-white px-3 py-2 rounded-lg border-[1.5px] border-ink text-xs font-bold uppercase disabled:opacity-50"
+                >
+                  {savingAlias ? '…' : 'OK'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setEditAlias(false); }}
+                  className="px-2 text-xs font-bold uppercase tracking-wider text-ink/50 hover:text-ink"
+                >
+                  ✕
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={startEditingAlias}
-                className="text-[10px] font-bold uppercase tracking-wider text-coral hover:text-coral/80"
-              >
-                {profile.alias_mp ? 'Editar' : 'Cargar alias'}
-              </button>
-            </div>
-          )}
+            ) : (
+              <div className="flex items-center justify-between gap-3">
+                <div className="font-mono text-sm">
+                  {profile.alias_mp ?? <span className="text-ink/40 italic font-sans">sin alias cargado</span>}
+                </div>
+                <button
+                  type="button"
+                  onClick={startEditingAlias}
+                  className="text-[10px] font-bold uppercase tracking-wider text-coral hover:text-coral/80"
+                >
+                  {profile.alias_mp ? 'Editar' : 'Cargar alias'}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Mi negocio (solo pymes) */}
@@ -398,7 +400,7 @@ export function Perfil() {
         <button
           type="button"
           onClick={() => { void logout(); }}
-          className="btn-pop w-full py-3.5 bg-white text-ink font-extrabold rounded-xl border-[1.5px] border-ink uppercase tracking-wider text-sm flex items-center justify-center gap-2"
+          className="btn-pop w-full mt-4 py-3.5 bg-white text-ink font-extrabold rounded-xl border-[1.5px] border-ink uppercase tracking-wider text-sm flex items-center justify-center gap-2"
         >
           <IconLogout className="w-4 h-4" /> Cerrar sesión
         </button>
@@ -442,7 +444,7 @@ function MpLinkCard() {
       <div className="text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-1">
         Mercado Pago vinculado
       </div>
-      <p className="text-[11px] text-ink/55 mb-3">
+      <p className="text-[11px] text-ink/55 mb-4">
         Para que las familias del grupo paguen el sobre digital de cumple desde la app, vinculá
         tu Mercado Pago una vez. La plata cae directo en tu cuenta — MaPaPis no la toca.
       </p>
