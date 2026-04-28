@@ -250,6 +250,10 @@ export type OfertaRow = {
   estado: OfertaEstado;
   modo_entrega: ModoEntrega | null;
   variantes: OfertaVariante[];
+  local_a_la_calle_override: boolean | null;
+  hace_envio_override: boolean | null;
+  horarios_dia_entrega_override: RangoHorario[] | null;
+  notas_disponibilidad: string | null;
   created_at: string | null;
 };
 
@@ -529,6 +533,10 @@ export type Database = {
           p_precio_envio_centavos?: number;
           p_retiro_inmediato?: boolean;
           p_variantes?: OfertaVariante[];
+          p_local_a_la_calle_override?: boolean | null;
+          p_hace_envio_override?: boolean | null;
+          p_horarios_dia_entrega_override?: RangoHorario[] | null;
+          p_notas_disponibilidad?: string | null;
         };
         Returns: void;
       };
