@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 220" role="img" aria-label="MaPaPis">
+  <title>MaPaPis</title>
+  <defs>
+    <style>
+      .wm { font-family: Geist, Inter, -apple-system, system-ui, sans-serif; font-weight: 900; letter-spacing: -0.04em; }
+    </style>
+  </defs>
+
+  <!-- Mark (mapa pin) a la izquierda -->
+  <g transform="translate(20 20)">
+    <rect x="6" y="6" width="180" height="180" rx="36" ry="36" fill="#FFF7EE" stroke="#0E1525" stroke-width="6"/>
+    <path d="M 96 36
+             C 60 36 32 60 32 92
+             C 32 120 54 148 96 178
+             C 138 148 160 120 160 92
+             C 160 60 132 36 96 36 Z"
+          fill="#0E1525"/>
+    <circle cx="96" cy="92" r="38" fill="#FFF7EE"/>
+    <circle cx="76" cy="92" r="9" fill="#FF5A4E"/>
+    <circle cx="96" cy="92" r="9" fill="#2BC48A"/>
+    <circle cx="116" cy="92" r="9" fill="#6E5BFF"/>
+  </g>
+
+  <!-- Highlight sun bajo "ma" -->
+  <rect x="248" y="128" width="146" height="42" fill="#FFC83D"/>
+
+  <!-- Wordmark -->
+  <text x="246" y="160" class="wm" font-size="148" fill="#0E1525">mapapis</text>
+
+  <!-- Mini map-pin como punto de la "i" -->
+  <g transform="translate(723 45)">
+    <path d="M 14 0 C 6 0 0 6 0 14 C 0 22 5 31 14 39 C 23 31 28 22 28 14 C 28 6 22 0 14 0 Z" fill="#FF5A4E"/>
+    <circle cx="14" cy="14" r="5" fill="#FFF7EE"/>
+  </g>
+</svg>

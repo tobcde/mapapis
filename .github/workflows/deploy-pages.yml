@@ -1,7 +1,8 @@
 name: Deploy MaPaPis to GitHub Pages
 
 # Deploy combinado:
-#   www.mapapis.com.ar/              <- app vieja (HTML estatico, raiz)
+#   www.mapapis.com.ar/              <- landing publico (HTML estatico, marketing)
+#   www.mapapis.com.ar/mapapis/      <- app vieja (HTML+React UMD, beta)
 #   www.mapapis.com.ar/mapapis-next/ <- app nueva (Vite, rama main)
 #   www.mapapis.com.ar/develop/      <- pre-produccion (Vite, rama develop)
 #   www.mapapis.com.ar/preview/      <- preview (Vite, rama pablo)
@@ -14,6 +15,7 @@ on:
   push:
     branches: [main, develop, pablo]
     paths:
+      - 'github-pages/landing/**'
       - 'github-pages/mapapis/**'
       - 'web/**'
       - '.github/workflows/deploy-pages.yml'
@@ -68,9 +70,11 @@ jobs:
 
       - name: Stage main artifacts
         run: |
-          mkdir -p _site/mapapis-next
-          # App vieja en la raiz: index.html, manifest, sw, icons quedan en /
-          cp -r github-pages/mapapis/. _site/
+          mkdir -p _site/mapapis _site/mapapis-next
+          # Landing publico en la raiz (marketing inicial)
+          cp -r github-pages/landing/. _site/
+          # App vieja (HTML estatico beta) movida a /mapapis/
+          cp -r github-pages/mapapis/. _site/mapapis/
           # App nueva (main) en /mapapis-next/
           cp -r web/dist/. _site/mapapis-next/
           # CNAME para custom domain GitHub Pages

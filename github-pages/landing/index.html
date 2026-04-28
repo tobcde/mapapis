@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MaPaPis — Para que el grupo del cole deje de ser un trabajo de medio tiempo</title>
+    <meta
+      name="description"
+      content="MaPaPis: una app para que las familias y las pymes coordinen las compras del jardín o colegio. Sin grupos de WhatsApp caóticos."
+    />
+    <meta name="theme-color" content="#FFC83D" />
+    <meta property="og:title" content="MaPaPis" />
+    <meta
+      property="og:description"
+      content="Para que el grupo del cole deje de ser un trabajo de medio tiempo."
+    />
+    <meta property="og:image" content="/icons/icon-512.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Inter:wght@400;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --ink: #0e1525;
+        --cream: #fff7ee;
+        --cream2: #fbf6ee;
+        --coral: #ff5a4e;
+        --sun: #ffc83d;
+        --sage: #2bc48a;
+        --sky: #9ec9ef;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        font-family: 'Inter', system-ui, sans-serif;
+        color: var(--ink);
+        background: var(--cream2);
+        min-height: 100vh;
+        -webkit-font-smoothing: antialiased;
+      }
+      .page {
+        min-height: 100vh;
+        padding: 32px 16px;
+        display: grid;
+        place-items: center;
+      }
+      .sheet {
+        width: 100%;
+        max-width: 560px;
+        background: var(--cream);
+        border: 1.5px solid var(--ink);
+        border-radius: 18px;
+        position: relative;
+        padding: 64px 32px 32px 60px;
+        box-shadow: 6px 6px 0 var(--ink);
+        overflow: hidden;
+      }
+      /* Línea roja izquierda (ringed sheet) */
+      .sheet::before {
+        content: '';
+        position: absolute;
+        top: 24px;
+        bottom: 24px;
+        left: 36px;
+        width: 2px;
+        background: var(--coral);
+        opacity: 0.5;
+      }
+      /* Agujeros de cuaderno */
+      .holes {
+        position: absolute;
+        left: 12px;
+        top: 28px;
+        bottom: 28px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+      .hole {
+        width: 12px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--ink);
+        opacity: 0.85;
+      }
+      /* Reglones de papel */
+      .ruled-bg {
+        position: absolute;
+        left: 60px;
+        right: 24px;
+        top: 60px;
+        bottom: 24px;
+        background: repeating-linear-gradient(
+          to bottom,
+          transparent 0,
+          transparent 40px,
+          rgba(14, 21, 37, 0.12) 40px,
+          rgba(14, 21, 37, 0.12) 41px
+        );
+        pointer-events: none;
+      }
+
+      /* Header chip */
+      .meta {
+        display: flex;
+        justify-content: space-between;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+        color: rgba(14, 21, 37, 0.55);
+        margin-bottom: 20px;
+        position: relative;
+        z-index: 1;
+      }
+
+      .eyebrow {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        color: var(--coral);
+        text-transform: uppercase;
+        margin-bottom: 12px;
+        position: relative;
+        z-index: 1;
+      }
+
+      .title {
+        font-size: clamp(40px, 9vw, 64px);
+        font-weight: 900;
+        line-height: 1;
+        letter-spacing: -0.04em;
+        margin-bottom: 24px;
+        position: relative;
+        z-index: 1;
+      }
+      .title .word {
+        display: inline-block;
+      }
+      .title .hl {
+        position: relative;
+        display: inline-block;
+        padding: 0 8px;
+        background: var(--sun);
+        transform: skew(-3deg) rotate(-1.5deg);
+      }
+      .title .pin {
+        display: inline-block;
+        vertical-align: super;
+        margin-left: 4px;
+        font-size: 0.5em;
+      }
+
+      .tagline {
+        font-family: 'Caveat', cursive;
+        font-size: clamp(22px, 4.5vw, 30px);
+        line-height: 1.35;
+        max-width: 28ch;
+        margin: 30px 0 28px;
+        position: relative;
+        z-index: 1;
+      }
+      .tagline .hl {
+        background: var(--sun);
+        padding: 0 6px;
+        font-style: normal;
+      }
+
+      .cta-row {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 12px;
+        margin-top: 36px;
+        position: relative;
+        z-index: 1;
+      }
+      @media (min-width: 480px) {
+        .cta-row {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+      .btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 14px 18px;
+        border: 1.5px solid var(--ink);
+        border-radius: 14px;
+        text-decoration: none;
+        font-weight: 800;
+        font-size: 12px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        transition: transform 0.1s;
+        box-shadow: 3px 3px 0 var(--ink);
+      }
+      .btn:active {
+        transform: translate(2px, 2px);
+        box-shadow: 1px 1px 0 var(--ink);
+      }
+      .btn-primary {
+        background: var(--ink);
+        color: var(--sun);
+      }
+      .btn-secondary {
+        background: var(--cream);
+        color: var(--ink);
+      }
+      .footer {
+        margin-top: 28px;
+        padding-top: 16px;
+        border-top: 1px solid rgba(14, 21, 37, 0.15);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 11px;
+        color: rgba(14, 21, 37, 0.55);
+        font-family: 'JetBrains Mono', monospace;
+        position: relative;
+        z-index: 1;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      .footer a {
+        color: inherit;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+      .footer a:hover {
+        color: var(--coral);
+      }
+
+      .pin-deco {
+        position: absolute;
+        top: 80px;
+        right: 32px;
+        z-index: 0;
+        opacity: 0.95;
+      }
+      @media (max-width: 540px) {
+        .pin-deco {
+          top: 56px;
+          right: 16px;
+          width: 56px;
+          height: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <article class="sheet" aria-labelledby="title">
+        <div class="holes" aria-hidden="true">
+          <span class="hole"></span><span class="hole"></span><span class="hole"></span>
+          <span class="hole"></span><span class="hole"></span><span class="hole"></span>
+          <span class="hole"></span><span class="hole"></span><span class="hole"></span>
+          <span class="hole"></span><span class="hole"></span>
+        </div>
+        <div class="ruled-bg" aria-hidden="true"></div>
+
+        <!-- Pin map decorativo -->
+        <svg
+          class="pin-deco"
+          width="80"
+          height="100"
+          viewBox="0 0 100 128"
+          fill="none"
+          aria-hidden="true"
+        >
+          <path
+            d="M50 4 C76 4 94 22 94 48 C94 74 64 110 50 124 C36 110 6 74 6 48 C6 22 24 4 50 4 Z"
+            fill="#FF5A4E"
+            stroke="#0E1525"
+            stroke-width="6"
+            stroke-linejoin="round"
+          />
+          <circle cx="50" cy="46" r="14" fill="#FFF7EE" stroke="#0E1525" stroke-width="6" />
+        </svg>
+
+        <div class="meta">
+          <span>Sáb · 10:00</span>
+          <span>v0.1</span>
+        </div>
+
+        <p class="eyebrow">▸ Por eso existimos</p>
+
+        <h1 id="title" class="title">
+          <span class="word">Hola,</span><br />
+          <span class="word">somos</span><br />
+          <span class="hl">mapapis</span>
+        </h1>
+
+        <p class="tagline">
+          Estamos haciendo algo para que <span class="hl">el grupo del cole</span>
+          deje de ser un trabajo de medio tiempo. 🤝
+        </p>
+
+        <div class="cta-row">
+          <a class="btn btn-primary" href="/mapapis-next/">
+            Probar la beta →
+          </a>
+          <a
+            class="btn btn-secondary"
+            href="https://www.instagram.com/mapapis"
+            target="_blank"
+            rel="noopener"
+          >
+            Seguinos · @mapapis
+          </a>
+        </div>
+
+        <footer class="footer">
+          <span>www.mapapis.com.ar</span>
+          <span>
+            ¿Sos pyme y querés sumarte? · <a href="/mapapis-next/">entrá acá</a>
+          </span>
+        </footer>
+      </article>
+    </main>
+  </body>
+</html>
