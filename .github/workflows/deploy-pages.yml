@@ -1,19 +1,11 @@
 name: Deploy MaPaPis to GitHub Pages
 
-# Deploy combinado:
-#   www.mapapis.com.ar/              <- landing publico (HTML estatico, marketing)
-#   www.mapapis.com.ar/mapapis/      <- app vieja (HTML+React UMD, beta)
-#   www.mapapis.com.ar/develop/      <- la app Vite (rama develop)
-#
-# Solo se buildea develop. main Vite (mapapis-next) y pablo (preview)
-# fueron removidos del deploy publico por simplicidad.
+# www.mapapis.com.ar/ <- app Vite (rama develop)
 
 on:
   push:
     branches: [main, develop]
     paths:
-      - 'github-pages/landing/**'
-      - 'github-pages/mapapis/**'
       - 'web/**'
       - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
@@ -31,11 +23,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # ── 1. main: assets staticos (landing + app vieja) ───────────────────
-      - name: Checkout main
+      - name: Checkout develop
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: develop
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -44,29 +35,12 @@ jobs:
           cache: 'npm'
           cache-dependency-path: web/package-lock.json
 
-      - name: Stage main static artifacts
-        run: |
-          mkdir -p _site/mapapis _site/develop
-          # Landing publico en la raiz
-          cp -r github-pages/landing/. _site/
-          # App vieja (HTML estatico beta) en /mapapis/
-          cp -r github-pages/mapapis/. _site/mapapis/
-          # CNAME para custom domain GitHub Pages
-          echo "www.mapapis.com.ar" > _site/CNAME
-
-      # ── 2. develop: build Vite → /develop/ ──────────────────────────────
-      - name: Checkout develop
-        uses: actions/checkout@v4
-        with:
-          ref: develop
-          path: develop-checkout
-
-      - name: Install web deps (develop)
-        working-directory: develop-checkout/web
+      - name: Install web deps
+        working-directory: web
         run: npm ci --legacy-peer-deps
 
-      - name: Build Vite app (develop)
-        working-directory: develop-checkout/web
+      - name: Build Vite app
+        working-directory: web
         env:
           # Valores publicos por diseno (anon key con RLS, MP public key).
           VITE_SUPABASE_URL: https://adpbjslkswtnqklzejuy.supabase.co
@@ -75,19 +49,17 @@ jobs:
           VITE_MP_CLIENT_ID: '3342777786606412'
           VITE_SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           VITE_ENV: prod
-          VITE_BASE_PATH: /develop/
+          VITE_BASE_PATH: /
         run: npm run build
 
-      - name: Stage develop artifact
-        run: |
-          cp -r develop-checkout/web/dist/. _site/develop/
+      - name: Add CNAME
+        run: echo "www.mapapis.com.ar" > web/dist/CNAME
 
-      # ── 3. Deploy combinado ────────────────────────────────────────────
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: _site
+          path: web/dist
 
   deploy:
     needs: build
