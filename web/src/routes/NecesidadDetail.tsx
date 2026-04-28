@@ -1522,10 +1522,13 @@ function VariantesEditor({
               it.foto_url.length > 0 ||
               it.link_url.trim().length > 0 ||
               it.foto_uploading;
+            const cantidadNum = Number(it.cantidad) || 1;
+            const precioNum = Number(it.precio) || 0;
+            const totalCalc = precioNum * cantidadNum;
             return (
               <div
                 key={i}
-                className="rounded-xl border-[1.5px] border-ink/20 bg-white/60 p-2 space-y-2"
+                className="rounded-xl border-[1.5px] border-ink/20 bg-white/60 p-3 space-y-2"
               >
                 <div className="flex gap-2 items-start">
                   <div className="flex-1 min-w-0">
@@ -1542,14 +1545,6 @@ function VariantesEditor({
                       className="w-full px-3 py-2 rounded-lg border-[1.5px] border-ink/30 text-sm focus:outline-none focus:border-ink"
                     />
                   </div>
-                  <input
-                    type="number"
-                    min={0}
-                    placeholder="$"
-                    value={it.precio}
-                    onChange={(e) => { update(i, { precio: e.target.value }); }}
-                    className="w-24 px-2 py-2 rounded-lg border-[1.5px] border-ink/30 text-sm font-mono text-right focus:outline-none focus:border-ink"
-                  />
                   <button
                     type="button"
                     onClick={() => { setExpanded(isOpen ? null : i); }}
@@ -1570,6 +1565,48 @@ function VariantesEditor({
                     ✕
                   </button>
                 </div>
+
+                {/* Precio unitario + Total (bidireccional) */}
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="block">
+                    <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/55 mb-1">
+                      Precio /unidad ($)
+                    </span>
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      placeholder="0"
+                      value={it.precio}
+                      onChange={(e) => { update(i, { precio: e.target.value }); }}
+                      className="w-full px-3 py-2 rounded-lg border-[1.5px] border-ink/30 text-sm font-mono text-right focus:outline-none focus:border-ink"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/55 mb-1">
+                      Total ({cantidadNum} u)
+                    </span>
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      placeholder="0"
+                      value={precioNum > 0 ? totalCalc.toString() : ''}
+                      onChange={(e) => {
+                        const t = Number(e.target.value);
+                        if (cantidadNum > 0 && Number.isFinite(t)) {
+                          // Round a 2 decimales para evitar deriva en floats
+                          const nuevoUnit = Math.round((t / cantidadNum) * 100) / 100;
+                          update(i, { precio: String(nuevoUnit) });
+                        } else {
+                          update(i, { precio: '' });
+                        }
+                      }}
+                      className="w-full px-3 py-2 rounded-lg border-[1.5px] border-coral/40 text-sm font-mono text-right focus:outline-none focus:border-coral bg-coral/5"
+                    />
+                  </label>
+                </div>
+
                 {isOpen && (
                   <div className="grid gap-2 px-1 pb-1">
                     <label className="block">
