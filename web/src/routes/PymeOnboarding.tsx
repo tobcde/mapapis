@@ -153,13 +153,26 @@ export function PymeOnboarding() {
       setErr('Sumá al menos un link (web, Instagram o Facebook) para que las familias puedan verificar tu negocio.');
       return;
     }
+    if (telefono.trim().length < 6) {
+      setErr('El teléfono / WhatsApp es obligatorio (mínimo 6 dígitos).');
+      return;
+    }
     if (catsSel.length === 0) {
       setErr('Elegí al menos una categoría que cubrís.');
       return;
     }
-    if (zonasSel.length === 0) {
-      setErr('Elegí al menos una zona donde operás.');
-      return;
+    // Zonas: si hace envíos, necesita 1+ zonas de cobertura.
+    // Si NO hace envíos, alcanza con la zona del local (1 sola).
+    if (haceEnvios) {
+      if (zonasSel.length === 0) {
+        setErr('Elegí al menos una zona donde hacés envíos.');
+        return;
+      }
+    } else {
+      if (zonasSel.length === 0) {
+        setErr('Indicá la zona donde está el local.');
+        return;
+      }
     }
 
     try {
@@ -310,8 +323,13 @@ export function PymeOnboarding() {
             </div>
 
             <div>
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-2">
-                Zonas donde operás *
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-1">
+                {haceEnvios ? 'Zonas donde hacés envíos *' : 'Zona del local *'}
+              </span>
+              <span className="block text-[10px] text-ink/55 mb-2">
+                {haceEnvios
+                  ? 'Las familias en estas zonas verán tus ofertas. Podés elegir varias.'
+                  : 'Solo una zona donde está tu local. Activá "Hago envíos" arriba si cubrís otras zonas.'}
               </span>
               <div className="space-y-3">
                 {Object.entries(ZONAS_BY_REGION).map(([region, zonas]) => (
@@ -325,7 +343,14 @@ export function PymeOnboarding() {
                           key={z}
                           label={z}
                           active={zonasSel.includes(z)}
-                          onClick={() => { toggleZona(z); }}
+                          onClick={() => {
+                            if (haceEnvios) {
+                              toggleZona(z);
+                            } else {
+                              // Sin envíos: una sola zona seleccionada (radio).
+                              setZonasSel(zonasSel.includes(z) ? [] : [z]);
+                            }
+                          }}
                         />
                       ))}
                     </div>
@@ -417,16 +442,20 @@ export function PymeOnboarding() {
 
             <label className="block">
               <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-1.5">
-                Teléfono / WhatsApp (opcional)
+                Teléfono / WhatsApp *
               </span>
               <input
                 type="tel"
+                required
                 maxLength={30}
                 value={telefono}
                 onChange={(e) => { setTelefono(e.target.value); }}
                 placeholder="+54 9 11 ..."
                 className={INPUT_CLS + ' font-mono'}
               />
+              <span className="block mt-1 text-[10px] text-ink/55">
+                La familia ganadora va a contactarte por acá una vez adjudicada la oferta.
+              </span>
             </label>
           </div>
 

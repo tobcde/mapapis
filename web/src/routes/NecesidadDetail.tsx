@@ -26,6 +26,8 @@ import type {
   OfertaVariante,
   ModoEntrega,
   ComposicionItem,
+  RangoHorario,
+  DiaSemana,
 } from '@/lib/database.types';
 import { uploadFotoToStorage } from '@/lib/storage/uploadFoto';
 import type { AlumnoConTutores } from '@/lib/queries/useAlumnosByGrupo';
@@ -732,6 +734,7 @@ function PanelOfertaPyme({
   const crearOferta = useCrearOferta();
   const progreso = useNecesidadProgreso(necesidad.id);
   const inscriptos = progreso.data?.inscriptos ?? 0;
+  const { data: pymeProfile } = usePymeProfile();
   const { showAlert } = useDialog();
   const miOferta = ofertas.find((o) => o.pyme_id === pymeId);
   const [showForm, setShowForm] = useState(!miOferta);
@@ -744,6 +747,11 @@ function PanelOfertaPyme({
   const [err, setErr] = useState<string | null>(null);
   const [variantes, setVariantes] = useState<VarianteRow[]>([]);
   const [uploadingFotos, setUploadingFotos] = useState(false);
+  // Disponibilidad — overrides (null = usar config pyme)
+  const [localOverride, setLocalOverride] = useState<boolean | null>(null);
+  const [envioOverride, setEnvioOverride] = useState<boolean | null>(null);
+  const [horariosOverride, setHorariosOverride] = useState<RangoHorario[] | null>(null);
+  const [notasDisponibilidad, setNotasDisponibilidad] = useState('');
 
   const tieneVariantes = variantes.some(
     (v) => v.nombre.trim().length > 0 && Number(v.precio) > 0,
@@ -826,6 +834,10 @@ function PanelOfertaPyme({
         descripcion: descripcion.trim(),
         modoEntrega: modoEntregaCalculado,
         ...(variantesClean.length > 0 ? { variantes: variantesClean } : {}),
+        ...(localOverride !== null ? { localALaCalleOverride: localOverride } : {}),
+        ...(envioOverride !== null ? { haceEnvioOverride: envioOverride } : {}),
+        ...(horariosOverride !== null ? { horariosDiaEntregaOverride: horariosOverride } : {}),
+        ...(notasDisponibilidad.trim() ? { notasDisponibilidad: notasDisponibilidad.trim() } : {}),
       });
       setShowForm(false);
     } catch (error) {
@@ -1062,6 +1074,20 @@ function PanelOfertaPyme({
                 className={INPUT_CLS + ' font-mono'}
               />
             </label>
+
+            {/* Disponibilidad — pre-cargada con datos de la pyme, editable por oferta */}
+            <DisponibilidadEditor
+              pyme={pymeProfile}
+              fechaEntrega={necesidad.fecha_limite_entrega}
+              localOverride={localOverride}
+              setLocalOverride={setLocalOverride}
+              envioOverride={envioOverride}
+              setEnvioOverride={setEnvioOverride}
+              horariosOverride={horariosOverride}
+              setHorariosOverride={setHorariosOverride}
+              notas={notasDisponibilidad}
+              setNotas={setNotasDisponibilidad}
+            />
 
             <label className="block">
               <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-1.5">
@@ -1729,6 +1755,232 @@ function VariantesEditor({
             >
               + Agregar otra variante
             </button>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── DisponibilidadEditor (form de oferta) ────────────────────────────────────
+
+const DIAS_KEYS: DiaSemana[] = ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab'];
+
+function diaDeFecha(iso: string | null): DiaSemana | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return DIAS_KEYS[d.getDay()] ?? null;
+}
+
+function fmtFechaDia(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('es-AR', {
+    weekday: 'long', day: '2-digit', month: 'short',
+  });
+}
+
+function rangosIguales(a: RangoHorario[], b: RangoHorario[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((r, i) => r.desde === b[i]?.desde && r.hasta === b[i]?.hasta);
+}
+
+function DisponibilidadEditor({
+  pyme,
+  fechaEntrega,
+  localOverride,
+  setLocalOverride,
+  envioOverride,
+  setEnvioOverride,
+  horariosOverride,
+  setHorariosOverride,
+  notas,
+  setNotas,
+}: {
+  pyme: import('@/lib/database.types').PymeRow | null | undefined;
+  fechaEntrega: string | null;
+  localOverride: boolean | null;
+  setLocalOverride: (v: boolean | null) => void;
+  envioOverride: boolean | null;
+  setEnvioOverride: (v: boolean | null) => void;
+  horariosOverride: RangoHorario[] | null;
+  setHorariosOverride: (v: RangoHorario[] | null) => void;
+  notas: string;
+  setNotas: (v: string) => void;
+}) {
+  const localPyme = pyme?.local_a_la_calle ?? false;
+  const envioPyme = pyme?.hace_envios ?? false;
+  const dia = diaDeFecha(fechaEntrega);
+  const horariosPyme = (dia && pyme?.horarios?.[dia]?.rangos) ?? [];
+
+  const localEf = localOverride ?? localPyme;
+  const envioEf = envioOverride ?? envioPyme;
+  const horariosEf = horariosOverride ?? horariosPyme;
+  const cerradoEseDia = horariosEf.length === 0;
+
+  // Toggles que setean override solo si difiere de la config pyme
+  const onChangeLocal = (v: boolean) => {
+    setLocalOverride(v === localPyme ? null : v);
+  };
+  const onChangeEnvio = (v: boolean) => {
+    setEnvioOverride(v === envioPyme ? null : v);
+  };
+  const onToggleCerrado = (cerrado: boolean) => {
+    if (cerrado) {
+      setHorariosOverride([]);
+    } else {
+      // Volver a horarios pyme (clear override) o un default si pyme no tiene
+      if (horariosPyme.length > 0) {
+        setHorariosOverride(null);
+      } else {
+        setHorariosOverride([{ desde: '10:00', hasta: '18:00' }]);
+      }
+    }
+  };
+  const updateRango = (i: number, patch: Partial<RangoHorario>) => {
+    const base = horariosOverride ?? horariosPyme;
+    const next = base.map((r, idx) => (idx === i ? { ...r, ...patch } : r));
+    setHorariosOverride(rangosIguales(next, horariosPyme) ? null : next);
+  };
+  const removeRango = (i: number) => {
+    const base = horariosOverride ?? horariosPyme;
+    const next = base.filter((_, idx) => idx !== i);
+    setHorariosOverride(rangosIguales(next, horariosPyme) ? null : next);
+  };
+  const addRango = () => {
+    const base = horariosOverride ?? horariosPyme;
+    if (base.length >= 4) return;
+    const next = [...base, { desde: '14:00', hasta: '20:00' }];
+    setHorariosOverride(rangosIguales(next, horariosPyme) ? null : next);
+  };
+
+  const hayOverride =
+    localOverride !== null || envioOverride !== null || horariosOverride !== null;
+
+  return (
+    <div className="rounded-xl border-[1.5px] border-ink/15 bg-mist/20 p-3 space-y-3">
+      <div className="flex items-baseline justify-between gap-2">
+        <div className="text-[10px] font-bold uppercase tracking-wider text-ink/60">
+          Disponibilidad para este pedido
+        </div>
+        {hayOverride && (
+          <span className="text-[9px] font-bold uppercase tracking-wider text-coral">
+            ✏️ con cambios
+          </span>
+        )}
+      </div>
+
+      {!pyme && (
+        <p className="text-[11px] text-ink/55 italic">
+          Cargando datos de tu pyme…
+        </p>
+      )}
+
+      {pyme && (
+        <>
+          {/* Local + envío */}
+          <div className="grid grid-cols-2 gap-2">
+            <label className="flex items-center gap-2 cursor-pointer rounded-lg bg-white border border-ink/15 px-3 py-2">
+              <input
+                type="checkbox"
+                checked={localEf}
+                onChange={(e) => { onChangeLocal(e.target.checked); }}
+                className="w-4 h-4 accent-ink"
+              />
+              <span className="text-xs font-bold">🏪 Retiro por local</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer rounded-lg bg-white border border-ink/15 px-3 py-2">
+              <input
+                type="checkbox"
+                checked={envioEf}
+                onChange={(e) => { onChangeEnvio(e.target.checked); }}
+                className="w-4 h-4 accent-ink"
+              />
+              <span className="text-xs font-bold">📦 Hago envío</span>
+            </label>
+          </div>
+
+          {/* Horarios del día de entrega */}
+          {fechaEntrega && (
+            <div>
+              <div className="flex items-baseline justify-between mb-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-ink/60">
+                  Horarios del {fmtFechaDia(fechaEntrega)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => { onToggleCerrado(!cerradoEseDia); }}
+                  className="text-[10px] font-bold uppercase tracking-wider text-coral hover:underline"
+                >
+                  {cerradoEseDia ? '+ marcar abierto' : 'cerrado ese día'}
+                </button>
+              </div>
+              {cerradoEseDia ? (
+                <div className="text-[11px] text-ink/55 italic">
+                  ⊘ Cerrado el día de entrega — la familia lo va a ver así.
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {horariosEf.map((r, i) => (
+                    <div key={i} className="flex items-center gap-1.5">
+                      <input
+                        type="time"
+                        value={r.desde}
+                        onChange={(e) => { updateRango(i, { desde: e.target.value }); }}
+                        className="px-2 py-1 rounded-md border border-ink/30 text-xs font-mono"
+                      />
+                      <span className="text-ink/45 text-xs">–</span>
+                      <input
+                        type="time"
+                        value={r.hasta}
+                        onChange={(e) => { updateRango(i, { hasta: e.target.value }); }}
+                        className="px-2 py-1 rounded-md border border-ink/30 text-xs font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => { removeRango(i); }}
+                        className="text-ink/40 hover:text-coral text-sm px-1"
+                        aria-label="Quitar rango"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                  {horariosEf.length < 4 && (
+                    <button
+                      type="button"
+                      onClick={addRango}
+                      className="text-[10px] font-bold uppercase tracking-wider text-coral hover:underline"
+                    >
+                      + agregar rango
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Notas */}
+          <label className="block">
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-1">
+              Aclaración (opcional)
+            </span>
+            <input
+              type="text"
+              maxLength={140}
+              placeholder="Ej. cerrado mar 1 por feriado · sin envío esa semana"
+              value={notas}
+              onChange={(e) => { setNotas(e.target.value); }}
+              className="w-full px-3 py-2 rounded-lg border-[1.5px] border-ink/20 text-xs focus:outline-none focus:border-ink"
+            />
+          </label>
+
+          {hayOverride && (
+            <p className="text-[10px] text-ink/55 italic">
+              Estos datos se guardan solo para esta oferta y no afectan tu config general.
+            </p>
           )}
         </>
       )}
