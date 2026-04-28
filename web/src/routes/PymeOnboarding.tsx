@@ -122,7 +122,7 @@ export function PymeOnboarding() {
     setDireccion(pyme.direccion ?? '');
     setLocalALaCalle(Boolean(pyme.local_a_la_calle));
     setHaceEnvios(Boolean(pyme.hace_envios));
-    setHorarios((pyme.horarios as HorariosSemana | null) ?? {});
+    setHorarios(pyme.horarios ?? {});
   }, [pyme]);
   /* eslint-enable react-hooks/set-state-in-effect */
 

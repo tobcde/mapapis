@@ -28,6 +28,7 @@ import type {
   ComposicionItem,
   RangoHorario,
   DiaSemana,
+  PymeRow,
 } from '@/lib/database.types';
 import { uploadFotoToStorage } from '@/lib/storage/uploadFoto';
 import type { AlumnoConTutores } from '@/lib/queries/useAlumnosByGrupo';
@@ -1799,7 +1800,7 @@ function DisponibilidadEditor({
   notas,
   setNotas,
 }: {
-  pyme: import('@/lib/database.types').PymeRow | null | undefined;
+  pyme: PymeRow | null | undefined;
   fechaEntrega: string | null;
   localOverride: boolean | null;
   setLocalOverride: (v: boolean | null) => void;

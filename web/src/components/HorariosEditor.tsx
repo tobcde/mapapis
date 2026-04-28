@@ -65,7 +65,7 @@ export function HorariosEditor({ value, onChange }: Props) {
   };
 
   const igualALunes = (dia: DiaSemana) => {
-    if (!lun || !lun.abierto) return;
+    if (!lun?.abierto) return;
     setDia(dia, { abierto: true, rangos: [...lun.rangos] });
   };
 
