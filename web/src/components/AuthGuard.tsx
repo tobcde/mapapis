@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useSessionStore } from '@/stores/session';
+import { LoadingScreen } from '@/components/LoadingScreen';
 
 interface Props {
   children: ReactNode;
@@ -17,11 +18,7 @@ export function AuthGuard({ children }: Props) {
   const location = useLocation();
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center text-sm text-ink/60">
-        Cargando...
-      </div>
-    );
+    return <LoadingScreen message="Comprobando tu sesión…" />;
   }
 
   if (!session) {

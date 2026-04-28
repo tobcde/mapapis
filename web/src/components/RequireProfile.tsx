@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useProfile } from '@/lib/queries/useProfile';
+import { LoadingScreen } from '@/components/LoadingScreen';
 
 interface Props {
   children: ReactNode;
@@ -14,11 +15,7 @@ export function RequireProfile({ children }: Props) {
   const { data: profile, isLoading, error } = useProfile();
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center text-sm text-ink/60">
-        Cargando perfil...
-      </div>
-    );
+    return <LoadingScreen message="Preparando tu perfil…" />;
   }
 
   if (error) {
