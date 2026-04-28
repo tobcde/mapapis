@@ -729,6 +729,8 @@ function PanelOfertaPyme({
   pymeId: string;
 }) {
   const crearOferta = useCrearOferta();
+  const progreso = useNecesidadProgreso(necesidad.id);
+  const inscriptos = progreso.data?.inscriptos ?? 0;
   const { showAlert } = useDialog();
   const miOferta = ofertas.find((o) => o.pyme_id === pymeId);
   const [showForm, setShowForm] = useState(!miOferta);
@@ -916,13 +918,16 @@ function PanelOfertaPyme({
               <ItemsDelPedido
                 composicion={necesidad.composicion}
                 variantes={variantes}
-                onCotizarItem={(nombreItem) => {
+                modalidad={necesidad.modalidad}
+                inscriptos={inscriptos}
+                onCotizarItem={(nombreItem, totalItem) => {
                   setVariantes([
                     ...variantes,
                     {
                       ...emptyVariante(),
                       nombre: nombreItem,
                       item_ref: nombreItem,
+                      cantidad: String(totalItem),
                     },
                   ]);
                 }}
@@ -1349,18 +1354,24 @@ function VariantesGallery({ variantes }: { variantes: OfertaVariante[] }) {
 function ItemsDelPedido({
   composicion,
   variantes,
+  modalidad,
+  inscriptos,
   onCotizarItem,
 }: {
   composicion: ComposicionItem[];
   variantes: VarianteRow[];
-  onCotizarItem: (nombre: string) => void;
+  modalidad: NecesidadModalidad;
+  inscriptos: number;
+  onCotizarItem: (nombre: string, totalItem: number) => void;
 }) {
-  // Match exacto por item_ref (case-insensitive trim).
   const cuentaPorItem = (nombreItem: string) =>
     variantes.filter(
       (v) =>
         v.item_ref.trim().toLowerCase() === nombreItem.trim().toLowerCase(),
     ).length;
+
+  const totalDe = (cantidadPorAlumno: number) =>
+    modalidad === 'individual' ? cantidadPorAlumno * Math.max(inscriptos, 0) : cantidadPorAlumno;
 
   return (
     <div className="rounded-2xl border-[1.5px] border-ink/15 bg-mist/30 p-3 space-y-2">
@@ -1370,6 +1381,7 @@ function ItemsDelPedido({
       <ul className="space-y-1.5">
         {composicion.map((it, i) => {
           const cotizado = cuentaPorItem(it.nombre);
+          const total = totalDe(it.cantidad);
           return (
             <li
               key={i}
@@ -1377,8 +1389,13 @@ function ItemsDelPedido({
             >
               <div className="flex-1 min-w-0">
                 <div className="font-bold text-sm truncate">{it.nombre}</div>
-                <div className="text-[10px] text-ink/55 font-mono">
-                  {it.cantidad} × alumno
+                <div className="text-[11px] text-ink/65 font-mono">
+                  <span className="font-bold">{total}</span> {total === 1 ? 'unidad' : 'unidades'}
+                  {modalidad === 'individual' && (
+                    <span className="text-ink/45 font-sans">
+                      {' '}({it.cantidad} × {inscriptos} alumno{inscriptos === 1 ? '' : 's'})
+                    </span>
+                  )}
                 </div>
               </div>
               {cotizado > 0 && (
@@ -1388,8 +1405,9 @@ function ItemsDelPedido({
               )}
               <button
                 type="button"
-                onClick={() => { onCotizarItem(it.nombre); }}
-                className="shrink-0 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg bg-coral text-white hover:bg-coral/85 transition-colors"
+                onClick={() => { onCotizarItem(it.nombre, total); }}
+                disabled={total === 0}
+                className="shrink-0 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg bg-coral text-white hover:bg-coral/85 transition-colors disabled:opacity-40"
               >
                 + Cotizar
               </button>
@@ -1398,7 +1416,7 @@ function ItemsDelPedido({
         })}
       </ul>
       <p className="text-[10px] text-ink/55 italic">
-        Tocá &ldquo;+ Cotizar&rdquo; para ofrecer una variante para ese item. Podés cargar varias para el mismo (distintas marcas/modelos).
+        Tocá &ldquo;+ Cotizar&rdquo; para ofrecer una variante para ese item. La cantidad ya viene precargada con el total del pedido. Podés cargar varias para el mismo item (distintas marcas/modelos).
       </p>
     </div>
   );
