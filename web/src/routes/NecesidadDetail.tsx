@@ -1470,7 +1470,10 @@ function VariantesEditor({
     update(i, { foto_uploading: true });
     onUploadingChange(true);
     try {
-      const url = await uploadFotoToStorage(file, `ofertas/${necesidadId}/${pyomeId}`);
+      // Path convention: el segundo segmento debe ser auth.uid() para pasar
+      // la RLS del bucket "necesidad-fotos" (ver 007_necesidad_foto_y_campos).
+      // Ponemos pymeId primero, luego necesidadId, dentro del namespace "ofertas".
+      const url = await uploadFotoToStorage(file, `ofertas/${pyomeId}/${necesidadId}`);
       update(i, { foto_url: url, foto_uploading: false });
     } catch (e) {
       update(i, { foto_uploading: false });
