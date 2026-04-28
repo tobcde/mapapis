@@ -221,13 +221,18 @@ export type ModoEntrega = 'retiro' | 'envio' | 'ambos';
 /**
  * Variante de producto dentro de una oferta. La pyme puede ofrecer varias
  * versiones del mismo producto (ej. "cuaderno tapa dura" + "cuaderno tapa
- * flexible") con su propio precio, foto y descripción. La familia ve todas
- * y compara.
+ * flexible") con su propio precio, foto y descripción.
+ *
+ * `item_ref` opcional matchea con un item de la composición de la necesidad
+ * (por nombre). Variantes con el MISMO item_ref son ALTERNATIVAS — la
+ * familia elige una al adjudicar y solo esa cuenta para el total final.
+ * Variantes sin item_ref (o cada una con item_ref único) suman al total.
  */
 export interface OfertaVariante {
   nombre: string;
   precio_centavos: number;
   cantidad?: number;
+  item_ref?: string | null;
   descripcion?: string | null;
   foto_url?: string | null;
   link_url?: string | null;
@@ -245,6 +250,10 @@ export type OfertaRow = {
   estado: OfertaEstado;
   modo_entrega: ModoEntrega | null;
   variantes: OfertaVariante[];
+  local_a_la_calle_override: boolean | null;
+  hace_envio_override: boolean | null;
+  horarios_dia_entrega_override: RangoHorario[] | null;
+  notas_disponibilidad: string | null;
   created_at: string | null;
 };
 
@@ -328,6 +337,22 @@ export type VotoOfertaRow = {
 export type PymeTier = 0 | 1 | 2 | 3;
 export type PymeEstado = 'activa' | 'suspendida' | 'pendiente';
 
+/** Rango horario [desde, hasta] en formato HH:MM. */
+export interface RangoHorario {
+  desde: string;
+  hasta: string;
+}
+
+/** Horarios de atención por día. Las claves son lun..dom. */
+export interface HorarioDia {
+  abierto: boolean;
+  rangos: RangoHorario[];
+}
+
+export type DiaSemana = 'lun' | 'mar' | 'mie' | 'jue' | 'vie' | 'sab' | 'dom';
+
+export type HorariosSemana = Partial<Record<DiaSemana, HorarioDia>>;
+
 export type PymeRow = {
   id: string;
   profile_id: string;
@@ -345,6 +370,10 @@ export type PymeRow = {
   anios_rubro: number | null;
   cbu: string | null;
   alias_cbu: string | null;
+  direccion: string | null;
+  local_a_la_calle: boolean;
+  hace_envios: boolean;
+  horarios: HorariosSemana;
   tier: PymeTier | null;
   estado: PymeEstado | null;
   created_at: string | null;
@@ -504,6 +533,10 @@ export type Database = {
           p_precio_envio_centavos?: number;
           p_retiro_inmediato?: boolean;
           p_variantes?: OfertaVariante[];
+          p_local_a_la_calle_override?: boolean | null;
+          p_hace_envio_override?: boolean | null;
+          p_horarios_dia_entrega_override?: RangoHorario[] | null;
+          p_notas_disponibilidad?: string | null;
         };
         Returns: void;
       };
@@ -523,6 +556,10 @@ export type Database = {
           p_anios_rubro?: number | null;
           p_cbu?: string | null;
           p_alias_cbu?: string | null;
+          p_direccion?: string | null;
+          p_local_a_la_calle?: boolean | null;
+          p_hace_envios?: boolean | null;
+          p_horarios?: HorariosSemana | null;
         };
         Returns: void;
       };

@@ -3,6 +3,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import { Shell } from '@/components/Shell';
 import { Button, useDialog } from '@/components/ui';
 import { useProfile } from '@/lib/queries/useProfile';
+import { usePymeProfile } from '@/lib/queries/usePymeProfile';
 import { useMisGrupos } from '@/lib/queries/useMisGrupos';
 import { useNecesidad } from '@/lib/queries/useNecesidad';
 import { useOfertasByNecesidad } from '@/lib/queries/useOfertasByNecesidad';
@@ -25,6 +26,9 @@ import type {
   OfertaVariante,
   ModoEntrega,
   ComposicionItem,
+  RangoHorario,
+  DiaSemana,
+  PymeRow,
 } from '@/lib/database.types';
 import { uploadFotoToStorage } from '@/lib/storage/uploadFoto';
 import type { AlumnoConTutores } from '@/lib/queries/useAlumnosByGrupo';
@@ -361,7 +365,7 @@ function DesgloseComposicion({
                   alt={it.nombre}
                   className="w-10 h-10 rounded-lg object-cover border-[1.5px] border-ink/20 shrink-0"
                   loading="lazy"
-                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
                 />
               ) : (
                 <div className="w-10 h-10 rounded-lg bg-mist/40 border-[1.5px] border-ink/10 shrink-0" />
@@ -729,6 +733,9 @@ function PanelOfertaPyme({
   pymeId: string;
 }) {
   const crearOferta = useCrearOferta();
+  const progreso = useNecesidadProgreso(necesidad.id);
+  const inscriptos = progreso.data?.inscriptos ?? 0;
+  const { data: pymeProfile } = usePymeProfile();
   const { showAlert } = useDialog();
   const miOferta = ofertas.find((o) => o.pyme_id === pymeId);
   const [showForm, setShowForm] = useState(!miOferta);
@@ -741,18 +748,42 @@ function PanelOfertaPyme({
   const [err, setErr] = useState<string | null>(null);
   const [variantes, setVariantes] = useState<VarianteRow[]>([]);
   const [uploadingFotos, setUploadingFotos] = useState(false);
+  // Disponibilidad — overrides (null = usar config pyme)
+  const [localOverride, setLocalOverride] = useState<boolean | null>(null);
+  const [envioOverride, setEnvioOverride] = useState<boolean | null>(null);
+  const [horariosOverride, setHorariosOverride] = useState<RangoHorario[] | null>(null);
+  const [notasDisponibilidad, setNotasDisponibilidad] = useState('');
 
   const tieneVariantes = variantes.some(
     (v) => v.nombre.trim().length > 0 && Number(v.precio) > 0,
   );
 
   // Si hay variantes, el "precio retiro" se calcula sumando variantes.
-  // Si no hay variantes, usa el input manual.
-  const subtotalVariantes = variantes.reduce((acc, v) => {
-    const precio = Number(v.precio) || 0;
-    const cant = Number(v.cantidad) || 1;
-    return acc + (precio > 0 ? precio * cant : 0);
-  }, 0);
+  // Variantes con el MISMO item_ref son alternativas → se cuenta solo la más
+  // cara (techo). Variantes sin item_ref o con item_refs únicos se suman.
+  const variantesValidas = variantes.filter(
+    (v) => v.nombre.trim().length > 0 && Number(v.precio) > 0,
+  );
+  const variantesPorSlot = new Map<string, VarianteRow[]>();
+  for (const v of variantesValidas) {
+    const slot = v.item_ref.trim().toLowerCase() || `__nop_${v.nombre.trim().toLowerCase()}_${variantesPorSlot.size}`;
+    const existing = variantesPorSlot.get(slot) ?? [];
+    existing.push(v);
+    variantesPorSlot.set(slot, existing);
+  }
+  const subtotalVariantes = Array.from(variantesPorSlot.values()).reduce(
+    (acc, alternativas) => {
+      const techoSlot = alternativas.reduce(
+        (max, v) => Math.max(max, (Number(v.precio) || 0) * (Number(v.cantidad) || 1)),
+        0,
+      );
+      return acc + techoSlot;
+    },
+    0,
+  );
+  const hayAlternativasMultiples = Array.from(variantesPorSlot.values()).some(
+    (arr) => arr.length > 1,
+  );
   const retiroNum = tieneVariantes ? subtotalVariantes : Number(precioRetiro) || 0;
   const envioNum = incluyeEnvio ? Number(precioEnvio) || 0 : 0;
   const totalNum = retiroNum + envioNum;
@@ -784,6 +815,8 @@ function PanelOfertaPyme({
         };
         const cantidad = Number(v.cantidad);
         if (Number.isFinite(cantidad) && cantidad > 1) item.cantidad = Math.round(cantidad);
+        const ref = v.item_ref.trim();
+        if (ref) item.item_ref = ref;
         const desc = v.descripcion.trim();
         if (desc) item.descripcion = desc;
         if (v.foto_url) item.foto_url = v.foto_url;
@@ -802,6 +835,10 @@ function PanelOfertaPyme({
         descripcion: descripcion.trim(),
         modoEntrega: modoEntregaCalculado,
         ...(variantesClean.length > 0 ? { variantes: variantesClean } : {}),
+        ...(localOverride !== null ? { localALaCalleOverride: localOverride } : {}),
+        ...(envioOverride !== null ? { haceEnvioOverride: envioOverride } : {}),
+        ...(horariosOverride !== null ? { horariosDiaEntregaOverride: horariosOverride } : {}),
+        ...(notasDisponibilidad.trim() ? { notasDisponibilidad: notasDisponibilidad.trim() } : {}),
       });
       setShowForm(false);
     } catch (error) {
@@ -895,12 +932,16 @@ function PanelOfertaPyme({
               <ItemsDelPedido
                 composicion={necesidad.composicion}
                 variantes={variantes}
-                onCotizarItem={(nombreItem) => {
+                modalidad={necesidad.modalidad}
+                inscriptos={inscriptos}
+                onCotizarItem={(nombreItem, totalItem) => {
                   setVariantes([
                     ...variantes,
                     {
                       ...emptyVariante(),
                       nombre: nombreItem,
+                      item_ref: nombreItem,
+                      cantidad: String(totalItem),
                     },
                   ]);
                 }}
@@ -926,8 +967,15 @@ function PanelOfertaPyme({
                 necesidadId={necesidad.id}
               />
               {tieneVariantes && (
-                <div className="mt-2 px-3 py-2 rounded-lg bg-sage/15 border border-sage/40 text-[11px] font-bold">
-                  ✓ Subtotal por variantes: ${subtotalVariantes.toLocaleString('es-AR')}
+                <div className="mt-2 px-3 py-2 rounded-lg bg-sage/15 border border-sage/40 text-[11px] font-bold space-y-1">
+                  <div>
+                    ✓ Subtotal: ${subtotalVariantes.toLocaleString('es-AR')}
+                  </div>
+                  {hayAlternativasMultiples && (
+                    <div className="font-normal text-[10px] text-ink/65">
+                      Variantes con mismo item se toman como alternativas: solo cuenta la más cara para el techo. La familia elige cuál al adjudicar.
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1028,6 +1076,20 @@ function PanelOfertaPyme({
               />
             </label>
 
+            {/* Disponibilidad — pre-cargada con datos de la pyme, editable por oferta */}
+            <DisponibilidadEditor
+              pyme={pymeProfile}
+              fechaEntrega={necesidad.fecha_limite_entrega}
+              localOverride={localOverride}
+              setLocalOverride={setLocalOverride}
+              envioOverride={envioOverride}
+              setEnvioOverride={setEnvioOverride}
+              horariosOverride={horariosOverride}
+              setHorariosOverride={setHorariosOverride}
+              notas={notasDisponibilidad}
+              setNotas={setNotasDisponibilidad}
+            />
+
             <label className="block">
               <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-1.5">
                 Detalle de la oferta *
@@ -1082,9 +1144,11 @@ export function NecesidadDetail() {
   const inscripcionesQ = useInscripciones(necesidadId);
   const alumnosQ = useAlumnosByGrupo(grupoId);
   const progreso = useNecesidadProgreso(necesidadId);
+  const pymeProfileQ = usePymeProfile();
 
   const isPyme = profile?.role === 'pyme';
   const userId = profile?.id ?? '';
+  const pymePerfilIncompleto = isPyme && !pymeProfileQ.isLoading && !pymeProfileQ.data;
 
   // Alumnos del usuario (filtrando por tutor)
   const misAlumnos = (alumnosQ.data ?? []).filter((a) =>
@@ -1135,6 +1199,45 @@ export function NecesidadDetail() {
           >
             {isPyme ? '← Volver al feed' : '← Volver al grupo'}
           </button>
+        </div>
+      </Shell>
+    );
+  }
+
+  // Pyme sin perfil de pyme cargado: bloquear acceso al detalle.
+  if (pymePerfilIncompleto) {
+    return (
+      <Shell>
+        <div className="space-y-4 anim-in max-w-md">
+          <h1 className="font-display font-extrabold text-2xl">
+            Completá tu perfil de pyme
+          </h1>
+          <div className="bg-sun/30 border-[1.5px] border-ink rounded-2xl p-4 space-y-2">
+            <p className="text-sm">
+              Para ver y ofertar en pedidos de las familias necesitás
+              completar tu perfil de pyme.
+            </p>
+            <p className="text-[11px] text-ink/65">
+              Es un paso rápido: cargás los datos del negocio, las zonas
+              donde operás y tu contacto.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => { void navigate('/pyme/onboarding'); }}
+              className="btn-pop bg-ink text-sun font-extrabold rounded-xl uppercase tracking-wider text-xs px-4 py-3 flex-1"
+            >
+              Completar perfil →
+            </button>
+            <button
+              type="button"
+              onClick={() => { void navigate('/feed'); }}
+              className="btn-pop bg-white text-ink font-extrabold rounded-xl border-[1.5px] border-ink uppercase tracking-wider text-xs px-4 py-3"
+            >
+              Volver
+            </button>
+          </div>
         </div>
       </Shell>
     );
@@ -1229,59 +1332,88 @@ export function NecesidadDetail() {
 // ─── VariantesGallery (display, lo ven familia y pyme) ──────────────────────
 
 function VariantesGallery({ variantes }: { variantes: OfertaVariante[] }) {
+  // Agrupar por item_ref. Si no tiene item_ref, va en su propio "slot".
+  const slots = new Map<string, OfertaVariante[]>();
+  variantes.forEach((v, idx) => {
+    const key = (v.item_ref ?? '').trim() || `__solo_${idx}`;
+    const lista = slots.get(key) ?? [];
+    lista.push(v);
+    slots.set(key, lista);
+  });
+
   return (
-    <div className="rounded-2xl border-[1.5px] border-ink/15 bg-cream/40 p-3 space-y-2">
+    <div className="rounded-2xl border-[1.5px] border-ink/15 bg-cream/40 p-3 space-y-3">
       <div className="text-[10px] font-bold uppercase tracking-wider text-ink/60">
         Variantes de la oferta
       </div>
-      <ul className="space-y-2">
-        {variantes.map((v, i) => (
-          <li key={i} className="flex items-center gap-3">
-            {v.foto_url ? (
-              <img
-                src={v.foto_url}
-                alt={v.nombre}
-                className="w-12 h-12 rounded-lg object-cover border-[1.5px] border-ink/20 shrink-0"
-                loading="lazy"
-                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-              />
-            ) : (
-              <div className="w-12 h-12 rounded-lg bg-mist/40 border-[1.5px] border-ink/10 shrink-0" />
-            )}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-baseline gap-2 flex-wrap">
-                <span className="font-bold text-sm">{v.nombre}</span>
-                {v.link_url && (
-                  <a
-                    href={v.link_url}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="text-[11px] text-coral hover:underline shrink-0"
-                    title="Ver link"
-                  >
-                    ↗
-                  </a>
+      {Array.from(slots.entries()).map(([slotKey, lista]) => {
+        const itemRef = slotKey.startsWith('__solo_') ? null : slotKey;
+        const esAlternativa = lista.length > 1;
+        return (
+          <div key={slotKey} className="space-y-1.5">
+            {itemRef && (
+              <div className="flex items-baseline gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-coral">
+                  Para: {itemRef}
+                </span>
+                {esAlternativa && (
+                  <span className="text-[10px] text-ink/55 italic">
+                    (elegí una)
+                  </span>
                 )}
               </div>
-              {v.descripcion && (
-                <div className="text-[11px] text-ink/65 mt-0.5 leading-snug">
-                  {v.descripcion}
-                </div>
-              )}
-            </div>
-            <div className="text-right shrink-0">
-              <div className="font-mono font-bold text-sm">
-                {fmtMoney(v.precio_centavos)}
-              </div>
-              {(v.cantidad ?? 1) > 1 && (
-                <div className="text-[10px] text-ink/55 font-mono">
-                  × {v.cantidad}
-                </div>
-              )}
-            </div>
-          </li>
-        ))}
-      </ul>
+            )}
+            <ul className="space-y-2">
+              {lista.map((v, i) => (
+                <li key={i} className="flex items-center gap-3">
+                  {v.foto_url ? (
+                    <img
+                      src={v.foto_url}
+                      alt={v.nombre}
+                      className="w-12 h-12 rounded-lg object-cover border-[1.5px] border-ink/20 shrink-0"
+                      loading="lazy"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-lg bg-mist/40 border-[1.5px] border-ink/10 shrink-0" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-2 flex-wrap">
+                      <span className="font-bold text-sm">{v.nombre}</span>
+                      {v.link_url && (
+                        <a
+                          href={v.link_url}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className="text-[11px] text-coral hover:underline shrink-0"
+                          title="Ver link"
+                        >
+                          ↗
+                        </a>
+                      )}
+                    </div>
+                    {v.descripcion && (
+                      <div className="text-[11px] text-ink/65 mt-0.5 leading-snug">
+                        {v.descripcion}
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="font-mono font-bold text-sm">
+                      {fmtMoney(v.precio_centavos)}
+                    </div>
+                    {(v.cantidad ?? 1) > 1 && (
+                      <div className="text-[10px] text-ink/55 font-mono">
+                        × {v.cantidad}
+                      </div>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1291,18 +1423,24 @@ function VariantesGallery({ variantes }: { variantes: OfertaVariante[] }) {
 function ItemsDelPedido({
   composicion,
   variantes,
+  modalidad,
+  inscriptos,
   onCotizarItem,
 }: {
   composicion: ComposicionItem[];
   variantes: VarianteRow[];
-  onCotizarItem: (nombre: string) => void;
+  modalidad: NecesidadModalidad;
+  inscriptos: number;
+  onCotizarItem: (nombre: string, totalItem: number) => void;
 }) {
-  // Match aproximado: cuántas variantes ya cargadas tienen el nombre del item
-  // como prefijo (case-insensitive). Best-effort, la pyme puede renombrar.
   const cuentaPorItem = (nombreItem: string) =>
-    variantes.filter((v) =>
-      v.nombre.trim().toLowerCase().startsWith(nombreItem.trim().toLowerCase()),
+    variantes.filter(
+      (v) =>
+        v.item_ref.trim().toLowerCase() === nombreItem.trim().toLowerCase(),
     ).length;
+
+  const totalDe = (cantidadPorAlumno: number) =>
+    modalidad === 'individual' ? cantidadPorAlumno * Math.max(inscriptos, 0) : cantidadPorAlumno;
 
   return (
     <div className="rounded-2xl border-[1.5px] border-ink/15 bg-mist/30 p-3 space-y-2">
@@ -1312,6 +1450,7 @@ function ItemsDelPedido({
       <ul className="space-y-1.5">
         {composicion.map((it, i) => {
           const cotizado = cuentaPorItem(it.nombre);
+          const total = totalDe(it.cantidad);
           return (
             <li
               key={i}
@@ -1319,8 +1458,13 @@ function ItemsDelPedido({
             >
               <div className="flex-1 min-w-0">
                 <div className="font-bold text-sm truncate">{it.nombre}</div>
-                <div className="text-[10px] text-ink/55 font-mono">
-                  {it.cantidad} × alumno
+                <div className="text-[11px] text-ink/65 font-mono">
+                  <span className="font-bold">{total}</span> {total === 1 ? 'unidad' : 'unidades'}
+                  {modalidad === 'individual' && (
+                    <span className="text-ink/45 font-sans">
+                      {' '}({it.cantidad} × {inscriptos} alumno{inscriptos === 1 ? '' : 's'})
+                    </span>
+                  )}
                 </div>
               </div>
               {cotizado > 0 && (
@@ -1330,8 +1474,9 @@ function ItemsDelPedido({
               )}
               <button
                 type="button"
-                onClick={() => { onCotizarItem(it.nombre); }}
-                className="shrink-0 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg bg-coral text-white hover:bg-coral/85 transition-colors"
+                onClick={() => { onCotizarItem(it.nombre, total); }}
+                disabled={total === 0}
+                className="shrink-0 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg bg-coral text-white hover:bg-coral/85 transition-colors disabled:opacity-40"
               >
                 + Cotizar
               </button>
@@ -1340,7 +1485,7 @@ function ItemsDelPedido({
         })}
       </ul>
       <p className="text-[10px] text-ink/55 italic">
-        Tocá &ldquo;+ Cotizar&rdquo; para ofrecer una variante para ese item. Podés cargar varias para el mismo (distintas marcas/modelos).
+        Tocá &ldquo;+ Cotizar&rdquo; para ofrecer una variante para ese item. La cantidad ya viene precargada con el total del pedido. Podés cargar varias para el mismo item (distintas marcas/modelos).
       </p>
     </div>
   );
@@ -1352,6 +1497,7 @@ interface VarianteRow {
   nombre: string;
   precio: string;
   cantidad: string;
+  item_ref: string;       // nombre del item de la necesidad al que pertenece
   descripcion: string;
   foto_url: string;       // URL pública post-upload
   foto_uploading: boolean;
@@ -1363,6 +1509,7 @@ function emptyVariante(): VarianteRow {
     nombre: '',
     precio: '',
     cantidad: '1',
+    item_ref: '',
     descripcion: '',
     foto_url: '',
     foto_uploading: false,
@@ -1410,7 +1557,10 @@ function VariantesEditor({
     update(i, { foto_uploading: true });
     onUploadingChange(true);
     try {
-      const url = await uploadFotoToStorage(file, `ofertas/${necesidadId}/${pyomeId}`);
+      // Path convention: el segundo segmento debe ser auth.uid() para pasar
+      // la RLS del bucket "necesidad-fotos" (ver 007_necesidad_foto_y_campos).
+      // Ponemos pymeId primero, luego necesidadId, dentro del namespace "ofertas".
+      const url = await uploadFotoToStorage(file, `ofertas/${pyomeId}/${necesidadId}`);
       update(i, { foto_url: url, foto_uploading: false });
     } catch (e) {
       update(i, { foto_uploading: false });
@@ -1441,27 +1591,29 @@ function VariantesEditor({
               it.foto_url.length > 0 ||
               it.link_url.trim().length > 0 ||
               it.foto_uploading;
+            const cantidadNum = Number(it.cantidad) || 1;
+            const precioNum = Number(it.precio) || 0;
+            const totalCalc = precioNum * cantidadNum;
             return (
               <div
                 key={i}
-                className="rounded-xl border-[1.5px] border-ink/20 bg-white/60 p-2 space-y-2"
+                className="rounded-xl border-[1.5px] border-ink/20 bg-white/60 p-3 space-y-2"
               >
                 <div className="flex gap-2 items-start">
-                  <input
-                    type="text"
-                    placeholder="Ej: Cuaderno tapa dura"
-                    value={it.nombre}
-                    onChange={(e) => { update(i, { nombre: e.target.value }); }}
-                    className="flex-1 px-3 py-2 rounded-lg border-[1.5px] border-ink/30 text-sm focus:outline-none focus:border-ink"
-                  />
-                  <input
-                    type="number"
-                    min={0}
-                    placeholder="$"
-                    value={it.precio}
-                    onChange={(e) => { update(i, { precio: e.target.value }); }}
-                    className="w-24 px-2 py-2 rounded-lg border-[1.5px] border-ink/30 text-sm font-mono text-right focus:outline-none focus:border-ink"
-                  />
+                  <div className="flex-1 min-w-0">
+                    {it.item_ref && (
+                      <span className="block text-[9px] font-bold uppercase tracking-wider text-coral/85 mb-0.5">
+                        Para: {it.item_ref}
+                      </span>
+                    )}
+                    <input
+                      type="text"
+                      placeholder="Ej: Faber Castell HB"
+                      value={it.nombre}
+                      onChange={(e) => { update(i, { nombre: e.target.value }); }}
+                      className="w-full px-3 py-2 rounded-lg border-[1.5px] border-ink/30 text-sm focus:outline-none focus:border-ink"
+                    />
+                  </div>
                   <button
                     type="button"
                     onClick={() => { setExpanded(isOpen ? null : i); }}
@@ -1482,6 +1634,48 @@ function VariantesEditor({
                     ✕
                   </button>
                 </div>
+
+                {/* Precio unitario + Total (bidireccional) */}
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="block">
+                    <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/55 mb-1">
+                      Precio /unidad ($)
+                    </span>
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      placeholder="0"
+                      value={it.precio}
+                      onChange={(e) => { update(i, { precio: e.target.value }); }}
+                      className="w-full px-3 py-2 rounded-lg border-[1.5px] border-ink/30 text-sm font-mono text-right focus:outline-none focus:border-ink"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/55 mb-1">
+                      Total ({cantidadNum} u)
+                    </span>
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      placeholder="0"
+                      value={precioNum > 0 ? totalCalc.toString() : ''}
+                      onChange={(e) => {
+                        const t = Number(e.target.value);
+                        if (cantidadNum > 0 && Number.isFinite(t)) {
+                          // Round a 2 decimales para evitar deriva en floats
+                          const nuevoUnit = Math.round((t / cantidadNum) * 100) / 100;
+                          update(i, { precio: String(nuevoUnit) });
+                        } else {
+                          update(i, { precio: '' });
+                        }
+                      }}
+                      className="w-full px-3 py-2 rounded-lg border-[1.5px] border-coral/40 text-sm font-mono text-right focus:outline-none focus:border-coral bg-coral/5"
+                    />
+                  </label>
+                </div>
+
                 {isOpen && (
                   <div className="grid gap-2 px-1 pb-1">
                     <label className="block">
@@ -1562,6 +1756,232 @@ function VariantesEditor({
             >
               + Agregar otra variante
             </button>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── DisponibilidadEditor (form de oferta) ────────────────────────────────────
+
+const DIAS_KEYS: DiaSemana[] = ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab'];
+
+function diaDeFecha(iso: string | null): DiaSemana | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return DIAS_KEYS[d.getDay()] ?? null;
+}
+
+function fmtFechaDia(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('es-AR', {
+    weekday: 'long', day: '2-digit', month: 'short',
+  });
+}
+
+function rangosIguales(a: RangoHorario[], b: RangoHorario[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((r, i) => r.desde === b[i]?.desde && r.hasta === b[i]?.hasta);
+}
+
+function DisponibilidadEditor({
+  pyme,
+  fechaEntrega,
+  localOverride,
+  setLocalOverride,
+  envioOverride,
+  setEnvioOverride,
+  horariosOverride,
+  setHorariosOverride,
+  notas,
+  setNotas,
+}: {
+  pyme: PymeRow | null | undefined;
+  fechaEntrega: string | null;
+  localOverride: boolean | null;
+  setLocalOverride: (v: boolean | null) => void;
+  envioOverride: boolean | null;
+  setEnvioOverride: (v: boolean | null) => void;
+  horariosOverride: RangoHorario[] | null;
+  setHorariosOverride: (v: RangoHorario[] | null) => void;
+  notas: string;
+  setNotas: (v: string) => void;
+}) {
+  const localPyme = pyme?.local_a_la_calle ?? false;
+  const envioPyme = pyme?.hace_envios ?? false;
+  const dia = diaDeFecha(fechaEntrega);
+  const horariosPyme = (dia && pyme?.horarios?.[dia]?.rangos) ?? [];
+
+  const localEf = localOverride ?? localPyme;
+  const envioEf = envioOverride ?? envioPyme;
+  const horariosEf = horariosOverride ?? horariosPyme;
+  const cerradoEseDia = horariosEf.length === 0;
+
+  // Toggles que setean override solo si difiere de la config pyme
+  const onChangeLocal = (v: boolean) => {
+    setLocalOverride(v === localPyme ? null : v);
+  };
+  const onChangeEnvio = (v: boolean) => {
+    setEnvioOverride(v === envioPyme ? null : v);
+  };
+  const onToggleCerrado = (cerrado: boolean) => {
+    if (cerrado) {
+      setHorariosOverride([]);
+    } else {
+      // Volver a horarios pyme (clear override) o un default si pyme no tiene
+      if (horariosPyme.length > 0) {
+        setHorariosOverride(null);
+      } else {
+        setHorariosOverride([{ desde: '10:00', hasta: '18:00' }]);
+      }
+    }
+  };
+  const updateRango = (i: number, patch: Partial<RangoHorario>) => {
+    const base = horariosOverride ?? horariosPyme;
+    const next = base.map((r, idx) => (idx === i ? { ...r, ...patch } : r));
+    setHorariosOverride(rangosIguales(next, horariosPyme) ? null : next);
+  };
+  const removeRango = (i: number) => {
+    const base = horariosOverride ?? horariosPyme;
+    const next = base.filter((_, idx) => idx !== i);
+    setHorariosOverride(rangosIguales(next, horariosPyme) ? null : next);
+  };
+  const addRango = () => {
+    const base = horariosOverride ?? horariosPyme;
+    if (base.length >= 4) return;
+    const next = [...base, { desde: '14:00', hasta: '20:00' }];
+    setHorariosOverride(rangosIguales(next, horariosPyme) ? null : next);
+  };
+
+  const hayOverride =
+    localOverride !== null || envioOverride !== null || horariosOverride !== null;
+
+  return (
+    <div className="rounded-xl border-[1.5px] border-ink/15 bg-mist/20 p-3 space-y-3">
+      <div className="flex items-baseline justify-between gap-2">
+        <div className="text-[10px] font-bold uppercase tracking-wider text-ink/60">
+          Disponibilidad para este pedido
+        </div>
+        {hayOverride && (
+          <span className="text-[9px] font-bold uppercase tracking-wider text-coral">
+            ✏️ con cambios
+          </span>
+        )}
+      </div>
+
+      {!pyme && (
+        <p className="text-[11px] text-ink/55 italic">
+          Cargando datos de tu pyme…
+        </p>
+      )}
+
+      {pyme && (
+        <>
+          {/* Local + envío */}
+          <div className="grid grid-cols-2 gap-2">
+            <label className="flex items-center gap-2 cursor-pointer rounded-lg bg-white border border-ink/15 px-3 py-2">
+              <input
+                type="checkbox"
+                checked={localEf}
+                onChange={(e) => { onChangeLocal(e.target.checked); }}
+                className="w-4 h-4 accent-ink"
+              />
+              <span className="text-xs font-bold">🏪 Retiro por local</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer rounded-lg bg-white border border-ink/15 px-3 py-2">
+              <input
+                type="checkbox"
+                checked={envioEf}
+                onChange={(e) => { onChangeEnvio(e.target.checked); }}
+                className="w-4 h-4 accent-ink"
+              />
+              <span className="text-xs font-bold">📦 Hago envío</span>
+            </label>
+          </div>
+
+          {/* Horarios del día de entrega */}
+          {fechaEntrega && (
+            <div>
+              <div className="flex items-baseline justify-between mb-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-ink/60">
+                  Horarios del {fmtFechaDia(fechaEntrega)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => { onToggleCerrado(!cerradoEseDia); }}
+                  className="text-[10px] font-bold uppercase tracking-wider text-coral hover:underline"
+                >
+                  {cerradoEseDia ? '+ marcar abierto' : 'cerrado ese día'}
+                </button>
+              </div>
+              {cerradoEseDia ? (
+                <div className="text-[11px] text-ink/55 italic">
+                  ⊘ Cerrado el día de entrega — la familia lo va a ver así.
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {horariosEf.map((r, i) => (
+                    <div key={i} className="flex items-center gap-1.5">
+                      <input
+                        type="time"
+                        value={r.desde}
+                        onChange={(e) => { updateRango(i, { desde: e.target.value }); }}
+                        className="px-2 py-1 rounded-md border border-ink/30 text-xs font-mono"
+                      />
+                      <span className="text-ink/45 text-xs">–</span>
+                      <input
+                        type="time"
+                        value={r.hasta}
+                        onChange={(e) => { updateRango(i, { hasta: e.target.value }); }}
+                        className="px-2 py-1 rounded-md border border-ink/30 text-xs font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => { removeRango(i); }}
+                        className="text-ink/40 hover:text-coral text-sm px-1"
+                        aria-label="Quitar rango"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                  {horariosEf.length < 4 && (
+                    <button
+                      type="button"
+                      onClick={addRango}
+                      className="text-[10px] font-bold uppercase tracking-wider text-coral hover:underline"
+                    >
+                      + agregar rango
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Notas */}
+          <label className="block">
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-1">
+              Aclaración (opcional)
+            </span>
+            <input
+              type="text"
+              maxLength={140}
+              placeholder="Ej. cerrado mar 1 por feriado · sin envío esa semana"
+              value={notas}
+              onChange={(e) => { setNotas(e.target.value); }}
+              className="w-full px-3 py-2 rounded-lg border-[1.5px] border-ink/20 text-xs focus:outline-none focus:border-ink"
+            />
+          </label>
+
+          {hayOverride && (
+            <p className="text-[10px] text-ink/55 italic">
+              Estos datos se guardan solo para esta oferta y no afectan tu config general.
+            </p>
           )}
         </>
       )}

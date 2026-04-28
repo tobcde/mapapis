@@ -4,6 +4,8 @@ import { Button } from '@/components/ui';
 import { useCategorias } from '@/lib/queries/useCategorias';
 import { usePymeProfile } from '@/lib/queries/usePymeProfile';
 import { useActualizarPyme } from '@/lib/mutations/useActualizarPyme';
+import { HorariosEditor } from '@/components/HorariosEditor';
+import type { HorariosSemana } from '@/lib/database.types';
 // ─── Constantes ───────────────────────────────────────────────────────────────
 
 const ZONAS_BY_REGION: Record<string, string[]> = {
@@ -97,6 +99,10 @@ export function PymeOnboarding() {
   const [facebook, setFacebook] = useState('');
   const [zonasSel, setZonasSel] = useState<string[]>([]);
   const [catsSel, setCatsSel] = useState<string[]>([]);
+  const [direccion, setDireccion] = useState('');
+  const [localALaCalle, setLocalALaCalle] = useState(false);
+  const [haceEnvios, setHaceEnvios] = useState(false);
+  const [horarios, setHorarios] = useState<HorariosSemana>({});
   const [err, setErr] = useState<string | null>(null);
 
   /* eslint-disable react-hooks/set-state-in-effect -- hidratar formulario desde row de pyme al editar */
@@ -113,6 +119,10 @@ export function PymeOnboarding() {
     setFacebook(pyme.facebook ?? '');
     setZonasSel(Array.isArray(pyme.zonas) ? pyme.zonas : []);
     setCatsSel(Array.isArray(pyme.categorias_ids) ? pyme.categorias_ids : []);
+    setDireccion(pyme.direccion ?? '');
+    setLocalALaCalle(Boolean(pyme.local_a_la_calle));
+    setHaceEnvios(Boolean(pyme.hace_envios));
+    setHorarios(pyme.horarios ?? {});
   }, [pyme]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -143,13 +153,26 @@ export function PymeOnboarding() {
       setErr('Sumá al menos un link (web, Instagram o Facebook) para que las familias puedan verificar tu negocio.');
       return;
     }
+    if (telefono.trim().length < 6) {
+      setErr('El teléfono / WhatsApp es obligatorio (mínimo 6 dígitos).');
+      return;
+    }
     if (catsSel.length === 0) {
       setErr('Elegí al menos una categoría que cubrís.');
       return;
     }
-    if (zonasSel.length === 0) {
-      setErr('Elegí al menos una zona donde operás.');
-      return;
+    // Zonas: si hace envíos, necesita 1+ zonas de cobertura.
+    // Si NO hace envíos, alcanza con la zona del local (1 sola).
+    if (haceEnvios) {
+      if (zonasSel.length === 0) {
+        setErr('Elegí al menos una zona donde hacés envíos.');
+        return;
+      }
+    } else {
+      if (zonasSel.length === 0) {
+        setErr('Indicá la zona donde está el local.');
+        return;
+      }
     }
 
     try {
@@ -167,6 +190,10 @@ export function PymeOnboarding() {
         aniosRubro: aniosRubro ? Number(aniosRubro) : null,
         cbu: null,
         aliasCbu: null,
+        direccion: direccion.trim() || null,
+        localALaCalle,
+        haceEnvios,
+        horarios,
       });
       void navigate(isEdit ? '/perfil' : '/feed', { replace: true });
     } catch (error) {
@@ -296,8 +323,13 @@ export function PymeOnboarding() {
             </div>
 
             <div>
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-2">
-                Zonas donde operás *
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-1">
+                {haceEnvios ? 'Zonas donde hacés envíos *' : 'Zona del local *'}
+              </span>
+              <span className="block text-[10px] text-ink/55 mb-2">
+                {haceEnvios
+                  ? 'Las familias en estas zonas verán tus ofertas. Podés elegir varias.'
+                  : 'Solo una zona donde está tu local. Activá "Hago envíos" arriba si cubrís otras zonas.'}
               </span>
               <div className="space-y-3">
                 {Object.entries(ZONAS_BY_REGION).map(([region, zonas]) => (
@@ -311,7 +343,14 @@ export function PymeOnboarding() {
                           key={z}
                           label={z}
                           active={zonasSel.includes(z)}
-                          onClick={() => { toggleZona(z); }}
+                          onClick={() => {
+                            if (haceEnvios) {
+                              toggleZona(z);
+                            } else {
+                              // Sin envíos: una sola zona seleccionada (radio).
+                              setZonasSel(zonasSel.includes(z) ? [] : [z]);
+                            }
+                          }}
                         />
                       ))}
                     </div>
@@ -403,22 +442,79 @@ export function PymeOnboarding() {
 
             <label className="block">
               <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-1.5">
-                Teléfono / WhatsApp (opcional)
+                Teléfono / WhatsApp *
               </span>
               <input
                 type="tel"
+                required
                 maxLength={30}
                 value={telefono}
                 onChange={(e) => { setTelefono(e.target.value); }}
                 placeholder="+54 9 11 ..."
                 className={INPUT_CLS + ' font-mono'}
               />
+              <span className="block mt-1 text-[10px] text-ink/55">
+                La familia ganadora va a contactarte por acá una vez adjudicada la oferta.
+              </span>
             </label>
           </div>
 
-          {/* 5 — Cobros */}
+          {/* 5 — Datos del local */}
           <div className="space-y-4">
-            <SectionLabel n={5} text="Cobros" />
+            <SectionLabel n={5} text="Datos del local" />
+
+            <label className="block">
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-1.5">
+                Dirección (opcional)
+              </span>
+              <input
+                type="text"
+                maxLength={200}
+                value={direccion}
+                onChange={(e) => { setDireccion(e.target.value); }}
+                placeholder="Av. Cabildo 1234, Belgrano"
+                className={INPUT_CLS}
+              />
+              <span className="block mt-1 text-[10px] text-ink/55">
+                🔒 Privada. Solo se muestra a la familia ganadora una vez adjudicada.
+              </span>
+            </label>
+
+            <div className="grid grid-cols-2 gap-3">
+              <label className="flex items-center gap-2 cursor-pointer rounded-xl border-[1.5px] border-ink/20 bg-white px-3 py-2.5">
+                <input
+                  type="checkbox"
+                  checked={localALaCalle}
+                  onChange={(e) => { setLocalALaCalle(e.target.checked); }}
+                  className="w-4 h-4 accent-ink"
+                />
+                <span className="text-xs font-bold">🏪 Local a la calle</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer rounded-xl border-[1.5px] border-ink/20 bg-white px-3 py-2.5">
+                <input
+                  type="checkbox"
+                  checked={haceEnvios}
+                  onChange={(e) => { setHaceEnvios(e.target.checked); }}
+                  className="w-4 h-4 accent-ink"
+                />
+                <span className="text-xs font-bold">📦 Hago envíos</span>
+              </label>
+            </div>
+
+            <div>
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-2">
+                Horarios de atención
+              </span>
+              <HorariosEditor value={horarios} onChange={setHorarios} />
+              <span className="block mt-2 text-[10px] text-ink/55">
+                Las familias ven los horarios del día de entrega cuando ofertás.
+              </span>
+            </div>
+          </div>
+
+          {/* 6 — Cobros */}
+          <div className="space-y-4">
+            <SectionLabel n={6} text="Cobros" />
             <div className="rounded-xl border-[1.5px] border-dashed border-ink/30 bg-cream p-4 text-[12px] text-ink/75 leading-relaxed">
               Las familias pagan dentro de MaPaPis con{' '}
               <span className="font-bold">Mercado Pago</span>. La plata se
