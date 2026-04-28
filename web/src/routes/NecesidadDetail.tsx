@@ -364,7 +364,7 @@ function DesgloseComposicion({
                   alt={it.nombre}
                   className="w-10 h-10 rounded-lg object-cover border-[1.5px] border-ink/20 shrink-0"
                   loading="lazy"
-                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
                 />
               ) : (
                 <div className="w-10 h-10 rounded-lg bg-mist/40 border-[1.5px] border-ink/10 shrink-0" />
@@ -1371,7 +1371,7 @@ function VariantesGallery({ variantes }: { variantes: OfertaVariante[] }) {
                       alt={v.nombre}
                       className="w-12 h-12 rounded-lg object-cover border-[1.5px] border-ink/20 shrink-0"
                       loading="lazy"
-                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
                     />
                   ) : (
                     <div className="w-12 h-12 rounded-lg bg-mist/40 border-[1.5px] border-ink/10 shrink-0" />

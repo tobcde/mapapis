@@ -22,7 +22,7 @@ export function useProximosCumples(grupoId: string | undefined) {
         .eq('grupo_id', grupoId)
         .order('proximo_cumple', { ascending: true });
       if (error) throw error;
-      return (data ?? []) as ProximoCumple[];
+      return data ?? [];
     },
   });
 }

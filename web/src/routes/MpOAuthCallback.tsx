@@ -26,6 +26,9 @@ export function MpOAuthCallback() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    // Este effect es un handler de un solo disparo (OAuth callback); el patron
+    // de setState sincrono dentro del body es intencional aqui.
     if (sessionLoading) return;
     if (!session) return; // el guard externo se encarga de mandar a login
     if (phase !== 'verifying') return;
@@ -56,17 +59,22 @@ export function MpOAuthCallback() {
     }
 
     setPhase('exchanging');
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     void (async () => {
       try {
-        const { data, error } = await supabase.functions.invoke<{
+        // functions-js types `error` as `any` in FunctionsResponseFailure;
+        // avoid destructuring it to prevent no-unsafe-assignment/member-access.
+        const invokeResp = await supabase.functions.invoke<{
           ok?: boolean;
           error?: string;
         }>('mp_oauth_callback', {
           body: { code, redirect_uri: buildMpRedirectUri() },
         });
-        if (error || !data?.ok) {
-          throw new Error(error?.message ?? data?.error ?? 'Error desconocido');
+        const { data } = invokeResp;
+        const fnError = invokeResp.error instanceof Error ? invokeResp.error : null;
+        if (fnError || !data?.ok) {
+          throw new Error(fnError?.message ?? data?.error ?? 'Error desconocido');
         }
         setPhase('success');
         void queryClient.invalidateQueries({ queryKey: mpLinkedQueryKey(userId) });
