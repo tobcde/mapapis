@@ -22,6 +22,7 @@ import { estadoBadgeClass, estadoLabel, modoEntregaLabel, pymeAlias } from '@/ut
 import type {
   NecesidadRow,
   NecesidadModalidad,
+  NecesidadInscripcionRow,
   OfertaRow,
   OfertaVariante,
   ModoEntrega,
@@ -502,6 +503,7 @@ function OfertaCardFamilia({
   necesidad,
   misAlumnos,
   misVotos,
+  alumnosInscriptos,
   esAdmin,
   adjudicada,
 }: {
@@ -510,6 +512,7 @@ function OfertaCardFamilia({
   necesidad: NecesidadRow;
   misAlumnos: AlumnoConTutores[];
   misVotos: Record<string, string>;
+  alumnosInscriptos: Set<string>;
   esAdmin: boolean;
   adjudicada: boolean;
 }) {
@@ -628,32 +631,76 @@ function OfertaCardFamilia({
         {oferta.descripcion}
       </p>
 
-      {/* Votos de alumnos */}
+      {/* Votos de alumnos — fila por hijo con acción explícita */}
       {!adjudicada && misAlumnos.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-ink/10">
-          <div className="text-[10px] uppercase tracking-wider font-bold text-ink/55 mb-2">
-            Tu voto
+        <div
+          id={`oferta-${oferta.id}-votos`}
+          className="mt-3 pt-3 border-t border-ink/10 space-y-2"
+        >
+          <div className="text-[10px] uppercase tracking-wider font-bold text-ink/55">
+            Elegir esta oferta para
           </div>
-          <div className="flex flex-wrap gap-2">
-            {misAlumnos.map((a) => {
-              const yaVoto = misVotos[a.id] === oferta.id;
-              return (
-                <button
-                  key={a.id}
-                  type="button"
-                  onClick={() => { void handleVote(a.id, yaVoto); }}
-                  disabled={vote.isPending || unvote.isPending}
-                  className={`px-3 py-1.5 rounded-full border-[1.5px] text-xs font-bold transition-colors disabled:opacity-60 ${
-                    yaVoto
-                      ? 'bg-coral text-white border-ink'
-                      : 'bg-white text-ink border-ink/30 hover:border-ink/60'
-                  }`}
-                >
-                  {yaVoto ? '✓ ' : ''}{a.nombre}
-                </button>
-              );
-            })}
-          </div>
+          {misAlumnos.map((a) => {
+            const votoActual = misVotos[a.id];
+            const yaVoto = votoActual === oferta.id;
+            const votoEnOtra = votoActual && !yaVoto;
+            const inscripto = alumnosInscriptos.has(a.id);
+            const disabled = vote.isPending || unvote.isPending || !inscripto;
+
+            return (
+              <div
+                key={a.id}
+                className="flex items-center gap-2 flex-wrap"
+              >
+                <span className="text-sm font-bold text-ink min-w-[80px]">{a.nombre}</span>
+
+                {!inscripto && (
+                  <span className="text-[11px] text-ink/55 italic">
+                    Anotalo arriba en "¿Quién participa?" para poder votar
+                  </span>
+                )}
+
+                {inscripto && yaVoto && (
+                  <>
+                    <span className="px-3 py-1.5 rounded-full border-[1.5px] border-ink bg-coral text-white text-xs font-bold inline-flex items-center gap-1">
+                      <CheckIcon className="w-3.5 h-3.5" />
+                      Elegida
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => { void handleVote(a.id, true); }}
+                      disabled={disabled}
+                      className="text-[11px] font-bold uppercase tracking-wider text-ink/50 hover:text-coral underline disabled:opacity-50"
+                    >
+                      Quitar voto
+                    </button>
+                  </>
+                )}
+
+                {inscripto && votoEnOtra && (
+                  <button
+                    type="button"
+                    onClick={() => { void handleVote(a.id, false); }}
+                    disabled={disabled}
+                    className="px-3 py-1.5 rounded-full border-[1.5px] border-coral bg-coral/10 text-coral text-xs font-bold hover:bg-coral/20 transition-colors disabled:opacity-60"
+                  >
+                    Cambiar voto a esta
+                  </button>
+                )}
+
+                {inscripto && !votoActual && (
+                  <button
+                    type="button"
+                    onClick={() => { void handleVote(a.id, false); }}
+                    disabled={disabled}
+                    className="px-3 py-1.5 rounded-full border-[1.5px] border-ink/30 bg-white text-ink text-xs font-bold hover:border-ink/60 transition-colors disabled:opacity-60"
+                  >
+                    Elegir esta
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -674,6 +721,65 @@ function OfertaCardFamilia({
   );
 }
 
+// ─── Resumen "Tu voto" ────────────────────────────────────────────────────────
+
+function ResumenMiVoto({
+  misAlumnos,
+  misVotos,
+  ofertas,
+}: {
+  misAlumnos: AlumnoConTutores[];
+  misVotos: Record<string, string>;
+  ofertas: OfertaRow[];
+}) {
+  const aliasPorOferta = new Map(ofertas.map((o, i) => [o.id, pymeAlias(i)]));
+
+  const scrollToOferta = (ofertaId: string) => {
+    const el = document.getElementById(`oferta-${ofertaId}-votos`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('ring-2', 'ring-coral', 'ring-offset-2');
+      setTimeout(() => {
+        el.classList.remove('ring-2', 'ring-coral', 'ring-offset-2');
+      }, 1500);
+    }
+  };
+
+  return (
+    <div className="bg-cream rounded-2xl border-[1.5px] border-ink p-4 shadow-pop">
+      <div className="text-[10px] uppercase tracking-wider font-bold text-ink/55 mb-2">
+        Tu voto
+      </div>
+      <div className="space-y-1.5">
+        {misAlumnos.map((a) => {
+          const ofertaId = misVotos[a.id];
+          const alias = ofertaId ? aliasPorOferta.get(ofertaId) ?? null : null;
+
+          return (
+            <div key={a.id} className="flex items-center justify-between gap-3 text-sm">
+              <span className="font-bold text-ink">{a.nombre}</span>
+              {ofertaId && alias ? (
+                <button
+                  type="button"
+                  onClick={() => { scrollToOferta(ofertaId); }}
+                  className="text-xs font-bold text-coral hover:underline inline-flex items-center gap-1"
+                >
+                  <span className="px-2 py-0.5 rounded-full bg-coral text-white text-[10px] uppercase tracking-wider">
+                    {alias}
+                  </span>
+                  <span className="text-ink/40 text-[10px] uppercase tracking-wider">cambiar ↓</span>
+                </button>
+              ) : (
+                <span className="text-xs text-ink/45 italic">Sin votar</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Panel de ofertas (familia) ───────────────────────────────────────────────
 
 function PanelOfertasFamilia({
@@ -681,15 +787,26 @@ function PanelOfertasFamilia({
   ofertas,
   misAlumnos,
   misVotos,
+  inscripciones,
   esAdmin,
 }: {
   necesidad: NecesidadRow;
   ofertas: OfertaRow[];
   misAlumnos: AlumnoConTutores[];
   misVotos: Record<string, string>;
+  inscripciones: NecesidadInscripcionRow[];
   esAdmin: boolean;
 }) {
   const adjudicada = necesidad.estado === 'adjudicada' || ofertas.some((o) => o.estado === 'ganadora');
+  const mostrarResumen = !adjudicada && misAlumnos.length > 0 && ofertas.length > 0;
+
+  // En modalidad individual hay que estar inscripto para poder votar.
+  // En grupal no hay tabla de inscripciones, todos los miembros pueden votar.
+  const requiereInscripcion = necesidad.modalidad === 'individual';
+  const inscriptosIds = new Set(inscripciones.map((i) => i.alumno_id));
+  const alumnosInscriptos = requiereInscripcion
+    ? new Set(misAlumnos.filter((a) => inscriptosIds.has(a.id)).map((a) => a.id))
+    : new Set(misAlumnos.map((a) => a.id));
 
   return (
     <section className="space-y-3">
@@ -697,6 +814,15 @@ function PanelOfertasFamilia({
         Ofertas recibidas{' '}
         <span className="text-ink/40">({ofertas.length}/{necesidad.cap_ofertas})</span>
       </h2>
+
+      {mostrarResumen && (
+        <ResumenMiVoto
+          misAlumnos={misAlumnos}
+          misVotos={misVotos}
+          ofertas={ofertas}
+        />
+      )}
+
       {ofertas.length === 0 ? (
         <div className="bg-mist/50 rounded-3xl p-5 text-center text-sm text-ink/70">
           Esperando ofertas. Las pymes de la zona verán el pedido.
@@ -711,6 +837,7 @@ function PanelOfertasFamilia({
               necesidad={necesidad}
               misAlumnos={misAlumnos}
               misVotos={misVotos}
+              alumnosInscriptos={alumnosInscriptos}
               esAdmin={esAdmin}
               adjudicada={adjudicada}
             />
@@ -1321,6 +1448,7 @@ export function NecesidadDetail() {
             ofertas={ofertas}
             misAlumnos={misAlumnos}
             misVotos={misVotos}
+            inscripciones={inscripciones}
             esAdmin={esAdmin}
           />
         )}
@@ -1986,5 +2114,25 @@ function DisponibilidadEditor({
         </>
       )}
     </div>
+  );
+}
+
+// ─── Iconos inline ────────────────────────────────────────────────────────────
+
+function CheckIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={3}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
   );
 }

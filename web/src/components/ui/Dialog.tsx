@@ -99,7 +99,7 @@ function CustomDialog({
           )}
         </div>
 
-        <p className="font-display font-semibold text-ink text-base leading-snug mb-6">
+        <p className="font-display font-semibold text-ink text-base leading-snug mb-6 whitespace-pre-line">
           {dialog.message}
         </p>
 

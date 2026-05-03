@@ -4,7 +4,7 @@ import { useSessionStore } from '@/stores/session';
 import { useProfile } from '@/lib/queries/useProfile';
 import { useJoinGrupoByCode } from '@/lib/mutations/useJoinGrupoByCode';
 import { setPendingJoinCode, clearPendingJoinCode } from '@/lib/pendingJoin';
-import { useDialog } from '@/components/ui';
+import { useDialog, useToast } from '@/components/ui';
 
 /**
  * Ruta /unirse?c=CODE — punto de entrada de los links de invitación.
@@ -23,6 +23,7 @@ export function Unirse() {
   const { data: profile, isLoading: profileLoading } = useProfile();
   const join = useJoinGrupoByCode();
   const { showAlert } = useDialog();
+  const { showToast } = useToast();
 
   const code = searchParams.get('c')?.trim().toUpperCase() ?? null;
 
@@ -60,7 +61,19 @@ export function Unirse() {
     // Familia/admin/institucion: ejecutar join directamente
     join.mutateAsync(code)
       .then((result) => {
-        void navigate(`/grupos/${result.grupo_id}`, { replace: true });
+        if (result.ya_era_miembro) {
+          showToast(`Ya pertenecés a "${result.nombre}"`);
+          void navigate(`/grupos/${result.grupo_id}`, { replace: true });
+        } else {
+          void navigate(`/grupos/${result.grupo_id}`, {
+            replace: true,
+            state: {
+              bienvenida: {
+                grupoNombre: result.nombre,
+              },
+            },
+          });
+        }
       })
       .catch(async (err) => {
         await showAlert(err instanceof Error ? err.message : 'No pudimos unirte al grupo');

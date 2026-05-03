@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Shell } from '@/components/Shell';
 import { useDialog, useToast } from '@/components/ui';
 import { useProfile } from '@/lib/queries/useProfile';
@@ -9,10 +9,65 @@ import { useNecesidadesByGrupo } from '@/lib/queries/useNecesidadesByGrupo';
 import { useMiembros } from '@/lib/queries/useMiembros';
 import { useAlumnosByGrupo } from '@/lib/queries/useAlumnosByGrupo';
 import { useGrupoAdmin } from '@/lib/mutations/useGrupoAdmin';
+import { usePreviewLeaveGrupo, type AlumnoLeavePreview } from '@/lib/queries/usePreviewLeaveGrupo';
 import { CalendarioCumples } from '@/components/CalendarioCumples';
+import { BienvenidaGrupoDialog } from '@/components/BienvenidaGrupoDialog';
 import { fmtMoney } from '@/utils/fmt';
 import { estadoBadgeClass, estadoLabel } from '@/utils/necesidad';
 import type { NecesidadRow, RolEnGrupo, GrupoRow } from '@/lib/database.types';
+
+interface BienvenidaPayload {
+  grupoNombre: string;
+}
+
+function extractBienvenida(state: unknown): BienvenidaPayload | null {
+  if (typeof state !== 'object' || state === null) return null;
+  const wrapper = (state as { bienvenida?: unknown }).bienvenida;
+  if (typeof wrapper !== 'object' || wrapper === null) return null;
+  const nombre = (wrapper as { grupoNombre?: unknown }).grupoNombre;
+  return typeof nombre === 'string' ? { grupoNombre: nombre } : null;
+}
+
+/**
+ * Arma el mensaje de confirmación de salida según los alumnos del usuario:
+ * - Sin alumnos en el grupo → confirm simple.
+ * - Alumnos con otro tutor → se quedan, se aclara con quién.
+ * - Alumnos sin otro tutor → se eliminan del grupo (advertencia fuerte).
+ */
+function construirMensajeSalida(
+  nombreGrupo: string,
+  preview: AlumnoLeavePreview[],
+): string {
+  if (preview.length === 0) {
+    return `¿Salir de "${nombreGrupo}"?`;
+  }
+
+  const seQuedan = preview.filter((p) => !p.se_elimina);
+  const seEliminan = preview.filter((p) => p.se_elimina);
+
+  const partes = [`Vas a salir de "${nombreGrupo}".`, ''];
+
+  if (seQuedan.length > 0) {
+    partes.push('Se quedan en el grupo:');
+    for (const a of seQuedan) {
+      const otros = a.otros_tutores_nombres.join(', ');
+      partes.push(`• ${a.alumno_nombre} (sigue ${otros} como tutor)`);
+    }
+    partes.push('');
+  }
+
+  if (seEliminan.length > 0) {
+    partes.push('Se eliminan del grupo (sos su único tutor):');
+    for (const a of seEliminan) {
+      partes.push(`• ${a.alumno_nombre}`);
+    }
+    partes.push('');
+    partes.push('Esta acción no se puede deshacer.');
+  }
+
+  partes.push('¿Continuar?');
+  return partes.join('\n');
+}
 
 // ─── InviteCard ───────────────────────────────────────────────────────────────
 
@@ -192,6 +247,7 @@ function RolBadge({ rol }: { rol: RolEnGrupo }) {
 export function GrupoDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { data: profile } = useProfile();
   const { data: misGrupos = [] } = useMisGrupos();
   const grupoQ = useGrupo(id);
@@ -199,9 +255,21 @@ export function GrupoDetail() {
   const miembrosQ = useMiembros(id);
   const alumnosQ = useAlumnosByGrupo(id);
   const { leave } = useGrupoAdmin();
+  const previewLeave = usePreviewLeaveGrupo();
   const { showConfirm, showAlert } = useDialog();
 
   const userId = profile?.id ?? '';
+
+  // Bienvenida post-join: el flag viene de Unirse.tsx via navigate state.
+  // Lo capturamos al montar y limpiamos el state para que un refresh no lo re-abra.
+  const bienvenida = extractBienvenida(location.state);
+  const [showBienvenida, setShowBienvenida] = useState(bienvenida !== null);
+
+  useEffect(() => {
+    if (bienvenida) {
+      window.history.replaceState({}, '');
+    }
+  }, [bienvenida]);
 
   // Mi rol en este grupo
   const miGrupo = misGrupos.find((g) => g.id === id);
@@ -211,8 +279,20 @@ export function GrupoDetail() {
 
   const handleLeave = async () => {
     if (!id) return;
-    const ok = await showConfirm(`¿Salir de "${grupoQ.data?.nombre ?? 'este grupo'}"?`);
+    const nombreGrupo = grupoQ.data?.nombre ?? 'este grupo';
+
+    let preview: AlumnoLeavePreview[];
+    try {
+      preview = await previewLeave.mutateAsync(id);
+    } catch (err) {
+      await showAlert(err instanceof Error ? err.message : 'Error al validar la salida');
+      return;
+    }
+
+    const mensaje = construirMensajeSalida(nombreGrupo, preview);
+    const ok = await showConfirm(mensaje);
     if (!ok) return;
+
     try {
       await leave.mutateAsync({ grupoId: id });
       void navigate('/grupos');
@@ -369,20 +449,30 @@ export function GrupoDetail() {
           )}
         </section>
 
-        {/* Acciones bottom */}
-        <div className="space-y-2 pt-2">
-          {!soyCreador && (
+        {/* Acciones bottom — botón compacto y centrado para evitar taps accidentales */}
+        {!soyCreador && (
+          <div className="flex justify-center pt-4">
             <button
               type="button"
               onClick={() => { void handleLeave(); }}
               disabled={leave.isPending}
-              className="w-full py-2.5 text-xs font-bold uppercase tracking-wider text-rose-700 hover:text-rose-900 transition-colors disabled:opacity-50"
+              className="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-rose-700 rounded-lg border border-rose-200 hover:bg-rose-50 hover:border-rose-300 transition-colors disabled:opacity-50"
             >
               {leave.isPending ? '…' : 'Salir del grupo'}
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
+
+      {showBienvenida && bienvenida && (
+        <BienvenidaGrupoDialog
+          grupoId={grupo.id}
+          grupoNombre={bienvenida.grupoNombre}
+          yoSoyPyme={profile?.role === 'pyme'}
+          yoTengoAlumnos={yoTengoAlumnos}
+          onClose={() => { setShowBienvenida(false); }}
+        />
+      )}
     </Shell>
   );
 }
