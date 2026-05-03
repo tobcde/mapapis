@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { necesidadProgresoKey } from '@/lib/queries/useNecesidadProgreso';
 import { inscripcionesQueryKey } from '@/lib/queries/useInscripciones';
+import { necesidadQueryKey } from '@/lib/queries/useNecesidad';
 
 interface InscripcionArgs {
   necesidadId: string;
@@ -15,6 +16,7 @@ export function useCerrarInscripcion() {
   const queryClient = useQueryClient();
 
   const invalidar = (necesidadId: string) => {
+    void queryClient.invalidateQueries({ queryKey: necesidadQueryKey(necesidadId) });
     void queryClient.invalidateQueries({ queryKey: necesidadProgresoKey(necesidadId) });
     void queryClient.invalidateQueries({ queryKey: inscripcionesQueryKey(necesidadId) });
   };

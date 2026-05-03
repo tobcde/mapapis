@@ -33,6 +33,7 @@ import type {
 } from '@/lib/database.types';
 import { uploadFotoToStorage } from '@/lib/storage/uploadFoto';
 import type { AlumnoConTutores } from '@/lib/queries/useAlumnosByGrupo';
+import { PanelCobranzas } from '@/components/cobranzas/PanelCobranzas';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -177,8 +178,8 @@ function ProgresoChip({
 
   const inscriptosCount = progreso.data?.inscriptos ?? 0;
   const totalAlumnos = progreso.data?.total_alumnos ?? null;
-  const cerradaAt = progreso.data?.inscripcion_cerrada_at ?? null;
-  const isCerrada = Boolean(cerradaAt);
+  const isCerrada =
+    Boolean(n.inscripcion_cerrada_at) || Boolean(progreso.data?.inscripcion_cerrada_at);
 
   const handleCerrar = async () => {
     const ok = await showConfirm(
@@ -417,12 +418,14 @@ function InscripcionPanel({
   necesidad,
   misAlumnos,
   inscripciones,
-  isCerrada,
+  puedeAnotar,
+  subtituloInscripcion,
 }: {
   necesidad: NecesidadRow;
   misAlumnos: AlumnoConTutores[];
   inscripciones: { alumno_id: string }[];
-  isCerrada: boolean;
+  puedeAnotar: boolean;
+  subtituloInscripcion: string;
 }) {
   const { inscribir, desinscribir } = useInscribirAlumno();
   const { showAlert } = useDialog();
@@ -430,7 +433,7 @@ function InscripcionPanel({
   const inscriptosSet = new Set(inscripciones.map((i) => i.alumno_id));
 
   const toggle = async (alumnoId: string, yaInscripto: boolean) => {
-    if (isCerrada) return;
+    if (!puedeAnotar) return;
     setBusyId(alumnoId);
     try {
       if (yaInscripto) {
@@ -449,19 +452,13 @@ function InscripcionPanel({
     <section className="space-y-3">
       <div>
         <h2 className="font-display font-bold text-xl">Anotar a tus hijos/as</h2>
-        <p className="text-xs text-ink/65 mt-1">
-          {isCerrada
-            ? 'Las inscripciones están cerradas. La cantidad final quedó firme.'
-            : `Cada alumno anotado suma ${necesidad.cantidad_por_alumno ?? 1} unidad${
-                Number(necesidad.cantidad_por_alumno) === 1 ? '' : 'es'
-              } al total del pedido.`}
-        </p>
+        <p className="text-xs text-ink/65 mt-1">{subtituloInscripcion}</p>
       </div>
       <div className="space-y-2">
         {misAlumnos.map((a) => {
           const yaInscripto = inscriptosSet.has(a.id);
           const isBusy = busyId === a.id;
-          const disabled = isBusy || isCerrada;
+          const disabled = isBusy || !puedeAnotar;
           return (
             <button
               key={a.id}
@@ -485,7 +482,13 @@ function InscripcionPanel({
                 <span className="font-semibold text-sm">{a.nombre}</span>
               </div>
               <span className="text-[10px] uppercase tracking-wider font-bold text-ink/60">
-                {isBusy ? '…' : isCerrada ? (yaInscripto ? 'Anotado' : '—') : yaInscripto ? 'Anotado' : 'Anotar'}
+                {isBusy
+                  ? '…'
+                  : !puedeAnotar
+                    ? (yaInscripto ? 'Anotado' : '—')
+                    : yaInscripto
+                      ? 'Anotado'
+                      : 'Anotar'}
               </span>
             </button>
           );
@@ -1292,8 +1295,6 @@ export function NecesidadDetail() {
   const esAdmin =
     miGrupo?.rol_en_grupo === 'admin' || miGrupo?.rol_en_grupo === 'creador';
 
-  const isCerrada = Boolean(progreso.data?.inscripcion_cerrada_at);
-
   // ── Loading / error ──────────────────────────────────────────────────────
 
   if (necesidadQ.isLoading) {
@@ -1375,6 +1376,19 @@ export function NecesidadDetail() {
   const inscripciones = inscripcionesQ.data ?? [];
   const misVotos = misVotosQ.data ?? {};
 
+  const cerradaInscripcion =
+    Boolean(n.inscripcion_cerrada_at) || Boolean(progreso.data?.inscripcion_cerrada_at);
+  const estadoPermiteInscripcion =
+    n.estado === 'recibiendo_ofertas' || n.estado === 'en_votacion';
+  const puedeAnotar = !cerradaInscripcion && estadoPermiteInscripcion;
+  const subtituloInscripcion = cerradaInscripcion
+    ? 'Las inscripciones están cerradas. La cantidad final quedó firme.'
+    : !estadoPermiteInscripcion
+      ? `En esta etapa (${estadoLabel(n.estado)}) no se pueden anotar ni quitar participantes.`
+      : `Cada alumno anotado suma ${n.cantidad_por_alumno ?? 1} unidad${
+          Number(n.cantidad_por_alumno) === 1 ? '' : 'es'
+        } al total del pedido.`;
+
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
@@ -1431,7 +1445,8 @@ export function NecesidadDetail() {
             necesidad={n}
             misAlumnos={misAlumnos}
             inscripciones={inscripciones}
-            isCerrada={isCerrada}
+            puedeAnotar={puedeAnotar}
+            subtituloInscripcion={subtituloInscripcion}
           />
         )}
 
@@ -1443,14 +1458,25 @@ export function NecesidadDetail() {
             pymeId={userId}
           />
         ) : (
-          <PanelOfertasFamilia
-            necesidad={n}
-            ofertas={ofertas}
-            misAlumnos={misAlumnos}
-            misVotos={misVotos}
-            inscripciones={inscripciones}
-            esAdmin={esAdmin}
-          />
+          <>
+            <PanelOfertasFamilia
+              necesidad={n}
+              ofertas={ofertas}
+              misAlumnos={misAlumnos}
+              misVotos={misVotos}
+              inscripciones={inscripciones}
+              esAdmin={esAdmin}
+            />
+
+            <PanelCobranzas
+              necesidad={n}
+              ofertas={ofertas}
+              alumnosDelGrupo={alumnosQ.data ?? []}
+              inscripciones={inscripciones}
+              userId={userId}
+              esAdmin={esAdmin}
+            />
+          </>
         )}
       </div>
     </Shell>
