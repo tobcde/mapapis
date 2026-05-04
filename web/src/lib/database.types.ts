@@ -171,6 +171,7 @@ export type NecesidadRow = {
   cap_ofertas: number;
   ofertas_count: number;
   foto_url: string | null;
+  inscripcion_cerrada_at: string | null;
   created_at: string | null;
   updated_at: string | null;
 };
