@@ -23,9 +23,16 @@ interface MergeAlumnoArgs {
   mergeId: string;
 }
 
-interface TutorArgs {
+interface TutorLeaveArgs {
   grupoId: string;
   alumnoId: string;
+}
+
+interface TutorJoinArgs {
+  grupoId: string;
+  alumnoId: string;
+  /** DNI del menor (7–8 dígitos); debe coincidir con el cargado en la ficha. */
+  dni: string;
   relacion?: RelacionTutor;
 }
 
@@ -88,11 +95,12 @@ export function useAlumnoActions() {
     onSuccess: (_data, { grupoId }) => { invalidar(grupoId); },
   });
 
-  /** El usuario actual se registra como tutor del alumno. */
-  const joinAsTutor = useMutation<void, Error, TutorArgs>({
-    mutationFn: async ({ alumnoId, relacion }) => {
+  /** El usuario actual se registra como tutor del alumno (solo si el DNI coincide). */
+  const joinAsTutor = useMutation<void, Error, TutorJoinArgs>({
+    mutationFn: async ({ alumnoId, dni, relacion }) => {
       const { error } = await supabase.rpc('alumno_join_as_tutor', {
         p_alumno: alumnoId,
+        p_dni: dni,
         ...(relacion ? { p_relacion: relacion } : {}),
       });
       if (error) throw error;
@@ -101,7 +109,7 @@ export function useAlumnoActions() {
   });
 
   /** El usuario actual se desregistra como tutor del alumno. */
-  const leaveAsTutor = useMutation<void, Error, TutorArgs>({
+  const leaveAsTutor = useMutation<void, Error, TutorLeaveArgs>({
     mutationFn: async ({ alumnoId }) => {
       const { error } = await supabase.rpc('alumno_leave_as_tutor', { p_alumno: alumnoId });
       if (error) throw error;

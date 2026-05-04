@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { inscripcionesQueryKey } from '@/lib/queries/useInscripciones';
 import { necesidadProgresoKey } from '@/lib/queries/useNecesidadProgreso';
+import { necesidadQueryKey } from '@/lib/queries/useNecesidad';
 
 interface InscribirArgs {
   necesidadId: string;
@@ -10,12 +11,13 @@ interface InscribirArgs {
 
 /**
  * Inscribe o desinscribe a un alumno de una necesidad.
- * Invalida inscripciones y progreso al completar.
+ * Invalida la fila de necesidad, inscripciones y progreso al completar.
  */
 export function useInscribirAlumno() {
   const queryClient = useQueryClient();
 
   const invalidar = (necesidadId: string) => {
+    void queryClient.invalidateQueries({ queryKey: necesidadQueryKey(necesidadId) });
     void queryClient.invalidateQueries({ queryKey: inscripcionesQueryKey(necesidadId) });
     void queryClient.invalidateQueries({ queryKey: necesidadProgresoKey(necesidadId) });
   };

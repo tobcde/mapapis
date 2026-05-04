@@ -1,5 +1,6 @@
 import { useParams, Link } from 'react-router-dom';
 import { Shell } from '@/components/Shell';
+import { parseError } from '@/lib/parseError';
 import { useDialog, useToast } from '@/components/ui';
 import { useProfile } from '@/lib/queries/useProfile';
 import { useMisGrupos } from '@/lib/queries/useMisGrupos';
@@ -71,7 +72,7 @@ function MiembroItem({
       await promote.mutateAsync({ grupoId, targetId: profile_id });
       showToast(`¡${nombre} es admin!`);
     } catch (err) {
-      await showAlert(err instanceof Error ? err.message : 'Error al promover');
+      await showAlert(parseError(err));
     }
   };
 
@@ -80,7 +81,7 @@ function MiembroItem({
       await demote.mutateAsync({ grupoId, targetId: profile_id });
       showToast(`${nombre} ya no es admin`, 'info');
     } catch (err) {
-      await showAlert(err instanceof Error ? err.message : 'Error al degradar');
+      await showAlert(parseError(err));
     }
   };
 
@@ -91,7 +92,7 @@ function MiembroItem({
       await kick.mutateAsync({ grupoId, targetId: profile_id });
       showToast(`${nombre} fue eliminado del grupo`, 'info');
     } catch (err) {
-      await showAlert(err instanceof Error ? err.message : 'Error al expulsar');
+      await showAlert(parseError(err));
     }
   };
 

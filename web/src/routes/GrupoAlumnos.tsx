@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Shell } from '@/components/Shell';
+import { parseError } from '@/lib/parseError';
 import { Button } from '@/components/ui';
 import { useDialog, useToast } from '@/components/ui';
 import { useProfile } from '@/lib/queries/useProfile';
@@ -63,7 +64,7 @@ function AgregarAlumnoForm({
       showToast(`¡${nombreTrim} agregado!`);
       onDone();
     } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Error al crear alumno';
+      const msg = parseError(error);
       setErr(msg);
       await showAlert(msg);
     }
@@ -179,6 +180,7 @@ function AlumnoItem({
   const { showConfirm, showAlert } = useDialog();
   const { showToast } = useToast();
   const [showJoinPicker, setShowJoinPicker] = useState(false);
+  const [joinDni, setJoinDni] = useState('');
   const [showEditPicker, setShowEditPicker] = useState(false);
   const [editFecha, setEditFecha] = useState(false);
   const [fechaInput, setFechaInput] = useState(alumno.fecha_nacimiento ?? '');
@@ -197,17 +199,28 @@ function AlumnoItem({
       });
       setEditFecha(false);
     } catch (err) {
-      await showAlert(err instanceof Error ? err.message : 'Error al guardar fecha');
+      await showAlert(parseError(err));
     }
   };
 
   const handleJoin = async (relacion: RelacionTutor) => {
+    const dniNorm = joinDni.replace(/\D/g, '');
+    if (dniNorm.length < 7 || dniNorm.length > 8) {
+      await showAlert('Ingresá el DNI del menor (7 u 8 dígitos) para verificar que sos tutor.');
+      return;
+    }
     setShowJoinPicker(false);
+    setJoinDni('');
     try {
-      await joinAsTutor.mutateAsync({ grupoId, alumnoId: alumno.id, relacion });
+      await joinAsTutor.mutateAsync({
+        grupoId,
+        alumnoId: alumno.id,
+        dni: dniNorm,
+        relacion,
+      });
       showToast(`¡Ahora sos ${relacionLabel(relacion).toLowerCase()} de ${alumno.nombre}!`);
     } catch (err) {
-      await showAlert(err instanceof Error ? err.message : 'Error al unirse como tutor');
+      await showAlert(parseError(err));
     }
   };
 
@@ -217,7 +230,7 @@ function AlumnoItem({
     try {
       await setMiRelacion.mutateAsync({ grupoId, alumnoId: alumno.id, relacion });
     } catch (err) {
-      await showAlert(err instanceof Error ? err.message : 'Error al cambiar relación');
+      await showAlert(parseError(err));
     }
   };
 
@@ -228,9 +241,11 @@ function AlumnoItem({
     try {
       await leaveAsTutor.mutateAsync({ grupoId, alumnoId: alumno.id });
     } catch (err) {
-      await showAlert(err instanceof Error ? err.message : 'Error al salir como tutor');
+      await showAlert(parseError(err));
     }
   };
+
+  const tieneDniEnFicha = Boolean(alumno.dni?.replace(/\D/g, '').length);
 
   return (
     <div className="bg-white rounded-2xl border-[1.5px] border-ink p-3 shadow-pop">
@@ -249,16 +264,28 @@ function AlumnoItem({
           </div>
         </div>
 
-        {/* Acción tutor */}
+        {/* Acción tutor: solo con DNI cargado en la ficha se puede sumar co-tutor */}
         {!yoSoyTutor ? (
-          <button
-            type="button"
-            onClick={() => { setShowJoinPicker((v) => !v); }}
-            disabled={joinAsTutor.isPending}
-            className="text-[10px] font-bold uppercase tracking-wider px-2 py-1.5 rounded-lg bg-mist hover:bg-ink/10 transition-colors disabled:opacity-50"
-          >
-            Soy tutor
-          </button>
+          tieneDniEnFicha ? (
+            <button
+              type="button"
+              onClick={() => {
+                setShowJoinPicker((v) => !v);
+                if (showJoinPicker) setJoinDni('');
+              }}
+              disabled={joinAsTutor.isPending}
+              className="text-[10px] font-bold uppercase tracking-wider px-2 py-1.5 rounded-lg bg-mist hover:bg-ink/10 transition-colors disabled:opacity-50"
+            >
+              Soy tutor
+            </button>
+          ) : (
+            <span
+              className="text-[9px] font-bold uppercase tracking-wider text-ink/40 text-right max-w-[7rem] leading-tight"
+              title="Hace falta que quien dio de alta al menor cargue el DNI en la ficha (o que lo den de alta de nuevo con DNI) para poder sumarte."
+            >
+              Sin DNI en ficha
+            </span>
+          )
         ) : (
           <button
             type="button"
@@ -271,10 +298,23 @@ function AlumnoItem({
         )}
       </div>
 
-      {/* Picker de relación al unirse */}
-      {showJoinPicker && !yoSoyTutor && (
-        <div className="mt-3 pl-12">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-ink/60 mb-1.5">
+      {/* Picker: DNI + relación (el backend exige que el DNI coincida con el del alumno) */}
+      {showJoinPicker && !yoSoyTutor && tieneDniEnFicha && (
+        <div className="mt-3 pl-12 space-y-3">
+          <p className="text-[11px] text-ink/70 leading-snug">
+            Ingresá el <span className="font-bold text-ink">DNI del menor</span> (el mismo que cargó quien lo dio de alta).
+            No se muestra a nadie: solo sirve para verificar que sos tutor.
+          </p>
+          <input
+            type="text"
+            inputMode="numeric"
+            value={joinDni}
+            onChange={(e) => { setJoinDni(e.target.value); }}
+            placeholder="DNI del menor"
+            className={INPUT_CLS + ' font-mono text-sm py-2.5'}
+            autoComplete="off"
+          />
+          <div className="text-[10px] font-bold uppercase tracking-wider text-ink/60">
             ¿Qué relación tenés con {alumno.nombre}?
           </div>
           <div className="grid grid-cols-4 gap-1.5">
@@ -289,6 +329,13 @@ function AlumnoItem({
               </button>
             ))}
           </div>
+          <button
+            type="button"
+            onClick={() => { setShowJoinPicker(false); setJoinDni(''); }}
+            className="text-[10px] font-bold uppercase tracking-wider text-ink/50 hover:text-ink"
+          >
+            Cancelar
+          </button>
         </div>
       )}
 
@@ -446,7 +493,7 @@ export function GrupoAlumnos() {
     try {
       await merge.mutateAsync({ grupoId: id ?? '', keepId, mergeId });
     } catch (err) {
-      await showAlert(err instanceof Error ? err.message : 'Error al fusionar');
+      await showAlert(parseError(err));
     }
   };
 

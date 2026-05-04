@@ -1,5 +1,6 @@
 import { useState, type ReactElement } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { parseError } from '@/lib/parseError';
 import { Shell } from '@/components/Shell';
 import { useDialog, useToast } from '@/components/ui';
 import { useProfile } from '@/lib/queries/useProfile';
@@ -123,7 +124,7 @@ export function Perfil() {
       .eq('id', profile.id);
     setSaving(false);
     if (error) {
-      await showAlert('No se pudo guardar el nombre: ' + error.message);
+      await showAlert(parseError(error));
       return;
     }
     setEditing(false);
@@ -146,7 +147,7 @@ export function Perfil() {
       .eq('id', profile.id);
     setSavingAlias(false);
     if (error) {
-      await showAlert('No se pudo guardar el alias: ' + error.message);
+      await showAlert(parseError(error));
       return;
     }
     setEditAlias(false);
@@ -162,7 +163,7 @@ export function Perfil() {
       .update({ role: null })
       .eq('id', profile.id);
     if (error) {
-      await showAlert('No se pudo cambiar el rol: ' + error.message);
+      await showAlert(parseError(error));
       return;
     }
     void queryClient.invalidateQueries({ queryKey: profileQueryKey(profile.id) });
@@ -425,7 +426,7 @@ function MpLinkCard() {
       const url = buildMpAuthorizeUrl();
       window.location.assign(url);
     } catch (e) {
-      void showAlert(e instanceof Error ? e.message : 'No se pudo iniciar la vinculación');
+      void showAlert(parseError(e));
     }
   };
 
@@ -435,7 +436,7 @@ function MpLinkCard() {
     try {
       await unlink.mutateAsync();
     } catch (e) {
-      await showAlert(e instanceof Error ? e.message : 'Error al desvincular');
+      await showAlert(parseError(e));
     }
   };
 

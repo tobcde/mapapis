@@ -590,7 +590,7 @@ export type Database = {
         Returns: void;
       };
       alumno_join_as_tutor: {
-        Args: { p_alumno: string; p_relacion?: RelacionTutor };
+        Args: { p_alumno: string; p_dni: string; p_relacion?: RelacionTutor };
         Returns: void;
       };
       alumno_set_mi_relacion: {
