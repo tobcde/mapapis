@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { parseError } from '@/lib/parseError';
 import { useSessionStore } from '@/stores/session';
 import { useProfile } from '@/lib/queries/useProfile';
 import { useJoinGrupoByCode } from '@/lib/mutations/useJoinGrupoByCode';
@@ -76,7 +77,7 @@ export function Unirse() {
         }
       })
       .catch(async (err) => {
-        await showAlert(err instanceof Error ? err.message : 'No pudimos unirte al grupo');
+        await showAlert(parseError(err));
         void navigate('/grupos', { replace: true });
       });
     // Flujo explícito por flags de carga; no añadir join/showAlert (riesgo de doble join)

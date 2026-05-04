@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { parseError } from '@/lib/parseError';
 import { useQuery } from '@tanstack/react-query';
 import { useDialog, useToast } from '@/components/ui';
 import { useCobranzas, useCobranzasResumen } from '@/lib/queries/useCobranzas';
@@ -400,7 +401,7 @@ function TuParteCard({
       showToast('Comprobante subido', 'success');
     } catch (err) {
       await showAlert(
-        err instanceof Error ? err.message : 'Error al subir el comprobante',
+        parseError(err),
       );
     } finally {
       setUploading(false);
@@ -424,7 +425,7 @@ function TuParteCard({
       showToast('Marcado como transferido', 'success');
     } catch (err) {
       await showAlert(
-        err instanceof Error ? err.message : 'Error al marcar la transferencia',
+        parseError(err),
       );
     }
   };
@@ -597,7 +598,7 @@ function FilaCobranza({
       });
       showToast('Pago confirmado', 'success');
     } catch (err) {
-      await showAlert(err instanceof Error ? err.message : 'Error al confirmar');
+      await showAlert(parseError(err));
     }
   };
 
@@ -614,7 +615,7 @@ function FilaCobranza({
       });
       showToast('Confirmación revertida', 'success');
     } catch (err) {
-      await showAlert(err instanceof Error ? err.message : 'Error al revertir');
+      await showAlert(parseError(err));
     }
   };
 
@@ -715,7 +716,7 @@ function CierreCobranzaCobrador({
       await cerrar.mutateAsync({ necesidadId, grupoId });
       showToast('¡Listo! Marcado como pagado', 'success');
     } catch (err) {
-      await showAlert(err instanceof Error ? err.message : 'Error al cerrar');
+      await showAlert(parseError(err));
     }
   };
 

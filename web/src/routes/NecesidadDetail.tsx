@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
+import { parseError } from '@/lib/parseError';
 import { Shell } from '@/components/Shell';
 import { Button, useDialog } from '@/components/ui';
 import { useProfile } from '@/lib/queries/useProfile';
@@ -189,7 +190,7 @@ function ProgresoChip({
     try {
       await cerrar.mutateAsync({ necesidadId: n.id });
     } catch (err) {
-      await showAlert(err instanceof Error ? err.message : 'Error al cerrar');
+      await showAlert(parseError(err));
     }
   };
 
@@ -199,7 +200,7 @@ function ProgresoChip({
     try {
       await reabrir.mutateAsync({ necesidadId: n.id });
     } catch (err) {
-      await showAlert(err instanceof Error ? err.message : 'Error al reabrir');
+      await showAlert(parseError(err));
     }
   };
 
@@ -442,7 +443,7 @@ function InscripcionPanel({
         await inscribir.mutateAsync({ necesidadId: necesidad.id, alumnoId });
       }
     } catch (err) {
-      await showAlert(err instanceof Error ? err.message : 'Error al actualizar inscripción');
+      await showAlert(parseError(err));
     } finally {
       setBusyId(null);
     }
@@ -541,7 +542,7 @@ function OfertaCardFamilia({
         await vote.mutateAsync({ alumnoId, ofertaId: oferta.id, necesidadId: necesidad.id });
       }
     } catch (err) {
-      await showAlert(err instanceof Error ? err.message : 'Error al votar');
+      await showAlert(parseError(err));
     }
   };
 
@@ -558,7 +559,7 @@ function OfertaCardFamilia({
         grupoId: necesidad.grupo_id,
       });
     } catch (err) {
-      await showAlert(err instanceof Error ? err.message : 'Error al adjudicar');
+      await showAlert(parseError(err));
     }
   };
 
@@ -972,7 +973,7 @@ function PanelOfertaPyme({
       });
       setShowForm(false);
     } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Error al enviar la oferta';
+      const msg = parseError(error);
       setErr(msg);
       await showAlert(msg);
     }
@@ -1718,7 +1719,7 @@ function VariantesEditor({
       update(i, { foto_url: url, foto_uploading: false });
     } catch (e) {
       update(i, { foto_uploading: false });
-      alert(e instanceof Error ? e.message : 'Error al subir la foto');
+      alert(parseError(e));
     } finally {
       // Determinar si quedan otras subiendo
       const stillUploading = items.some((it, idx) => idx !== i && it.foto_uploading);

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Shell } from '@/components/Shell';
+import { parseError } from '@/lib/parseError';
 import { Button } from '@/components/ui';
 import { useDialog, useToast } from '@/components/ui';
 import { useProfile } from '@/lib/queries/useProfile';
@@ -63,7 +64,7 @@ function AgregarAlumnoForm({
       showToast(`¡${nombreTrim} agregado!`);
       onDone();
     } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Error al crear alumno';
+      const msg = parseError(error);
       setErr(msg);
       await showAlert(msg);
     }
@@ -198,7 +199,7 @@ function AlumnoItem({
       });
       setEditFecha(false);
     } catch (err) {
-      await showAlert(err instanceof Error ? err.message : 'Error al guardar fecha');
+      await showAlert(parseError(err));
     }
   };
 
@@ -219,7 +220,7 @@ function AlumnoItem({
       });
       showToast(`¡Ahora sos ${relacionLabel(relacion).toLowerCase()} de ${alumno.nombre}!`);
     } catch (err) {
-      await showAlert(err instanceof Error ? err.message : 'Error al unirse como tutor');
+      await showAlert(parseError(err));
     }
   };
 
@@ -229,7 +230,7 @@ function AlumnoItem({
     try {
       await setMiRelacion.mutateAsync({ grupoId, alumnoId: alumno.id, relacion });
     } catch (err) {
-      await showAlert(err instanceof Error ? err.message : 'Error al cambiar relación');
+      await showAlert(parseError(err));
     }
   };
 
@@ -240,7 +241,7 @@ function AlumnoItem({
     try {
       await leaveAsTutor.mutateAsync({ grupoId, alumnoId: alumno.id });
     } catch (err) {
-      await showAlert(err instanceof Error ? err.message : 'Error al salir como tutor');
+      await showAlert(parseError(err));
     }
   };
 
@@ -492,7 +493,7 @@ export function GrupoAlumnos() {
     try {
       await merge.mutateAsync({ grupoId: id ?? '', keepId, mergeId });
     } catch (err) {
-      await showAlert(err instanceof Error ? err.message : 'Error al fusionar');
+      await showAlert(parseError(err));
     }
   };
 

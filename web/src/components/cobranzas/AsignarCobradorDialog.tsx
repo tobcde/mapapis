@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { parseError } from '@/lib/parseError';
 import { supabase } from '@/lib/supabase';
 import { useAsignarCobrador } from '@/lib/mutations/useCobranzasActions';
 import { useProfile } from '@/lib/queries/useProfile';
@@ -228,7 +229,7 @@ function FormularioConfirmar({
       });
       onSuccess();
     } catch (err) {
-      onError(err instanceof Error ? err.message : 'Error al asignar el cobrador');
+      onError(parseError(err));
     }
   };
 

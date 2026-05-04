@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Shell } from '@/components/Shell';
+import { parseError } from '@/lib/parseError';
 import { useDialog, useToast } from '@/components/ui';
 import { useProfile } from '@/lib/queries/useProfile';
 import { useMisGrupos } from '@/lib/queries/useMisGrupos';
@@ -107,7 +108,7 @@ function InviteCard({
     try {
       await regenerarCodigo.mutateAsync({ grupoId: grupo.id });
     } catch (err) {
-      await showAlert(err instanceof Error ? err.message : 'Error al regenerar');
+      await showAlert(parseError(err));
     }
   };
 
@@ -285,7 +286,7 @@ export function GrupoDetail() {
     try {
       preview = await previewLeave.mutateAsync(id);
     } catch (err) {
-      await showAlert(err instanceof Error ? err.message : 'Error al validar la salida');
+      await showAlert(parseError(err));
       return;
     }
 
@@ -297,7 +298,7 @@ export function GrupoDetail() {
       await leave.mutateAsync({ grupoId: id });
       void navigate('/grupos');
     } catch (err) {
-      await showAlert(err instanceof Error ? err.message : 'Error al salir del grupo');
+      await showAlert(parseError(err));
     }
   };
 
