@@ -36,8 +36,10 @@ export function parseError(err: unknown, fallback = 'Algo salió mal, intentá d
     // P0001 = RAISE EXCEPTION de nuestras RPCs: el mensaje ya está en español
     if (err.code === 'P0001') return err.message;
 
-    if (PG_CODES[err.code]) return PG_CODES[err.code];
-    if (PGRST_CODES[err.code]) return PGRST_CODES[err.code];
+    const pgMsg = PG_CODES[err.code];
+    if (pgMsg) return pgMsg;
+    const pgrstMsg = PGRST_CODES[err.code];
+    if (pgrstMsg) return pgrstMsg;
 
     // Cualquier otro error de DB: devolver message como fallback informativo
     return err.message || fallback;
