@@ -125,7 +125,6 @@ export function Publicar() {
   const tieneDesglose = composicion.some(
     (c) => c.nombre.trim().length > 0 && Number(c.cantidad) > 0,
   );
-  const [presupuestoMax, setPresupuestoMax] = useState('');
   const [fechaInscripcion, setFechaInscripcion] = useState('');
   const [fechaEntrega, setFechaEntrega] = useState('');
   const [foto, setFoto] = useState<File | null>(null);
@@ -174,13 +173,10 @@ export function Publicar() {
       return 'El título debe tener entre 8 y 140 caracteres.';
 
     const descTrim = descripcion.trim();
-    if (tieneDesglose) {
-      // Con desglose, la descripción es una observación general opcional.
-      if (descTrim.length > 1200)
-        return 'La observación general no puede tener más de 1200 caracteres.';
-    } else {
-      if (descTrim.length < 10 || descTrim.length > 1200)
-        return 'La descripción debe tener entre 10 y 1200 caracteres.';
+    if (descTrim.length < 10 || descTrim.length > 1200) {
+      return tieneDesglose
+        ? 'Las observaciones generales deben tener entre 10 y 1200 caracteres.'
+        : 'La descripción debe tener entre 10 y 1200 caracteres.';
     }
 
     // Fechas obligatorias para que la pyme y la familia tengan deadlines firmes.
@@ -254,7 +250,7 @@ export function Publicar() {
         cantidadPorAlumno: cantidadPorAlumnoFinal,
         composicion: composicionClean.length > 0 ? composicionClean : null,
         presupuestoMinCentavos: null,
-        presupuestoMaxCentavos: presupuestoMax ? Math.round(Number(presupuestoMax) * 100) : null,
+        presupuestoMaxCentavos: null,
         fechaLimiteInscripcion: fechaInscripcion ? new Date(fechaInscripcion).toISOString() : null,
         fechaLimiteEntrega: fechaEntrega ? new Date(fechaEntrega).toISOString() : null,
         linkReferencia: null,
@@ -463,36 +459,13 @@ export function Publicar() {
             </Field>
           )}
 
-          {/* Presupuesto */}
-          <Field
-            label={
-              modalidad === 'individual'
-                ? 'Presupuesto máximo por alumno ($)'
-                : 'Presupuesto máximo total ($)'
-            }
-            hint={
-              modalidad === 'individual'
-                ? 'Tope por alumno. El total sube automáticamente con cada inscripción (ej. $5000 × 3 alumnos = $15000).'
-                : 'Tope total que estás dispuesto a pagar por todo el pedido del grupo.'
-            }
-          >
-            <input
-              type="number"
-              min={0}
-              placeholder={modalidad === 'individual' ? '5000' : '50000'}
-              value={presupuestoMax}
-              onChange={(e) => { setPresupuestoMax(e.target.value); }}
-              className={INPUT_CLS + ' font-mono'}
-            />
-          </Field>
-
           {/* Fechas */}
           <Field
             label="Cierre de inscripción *"
             hint="Hasta cuándo las familias del grupo pueden anotarse."
           >
             <input
-              type="datetime-local"
+              type="date"
               required
               value={fechaInscripcion}
               onChange={(e) => { setFechaInscripcion(e.target.value); }}
@@ -514,9 +487,9 @@ export function Publicar() {
           </Field>
 
 
-          {/* Descripción / Observación general según si hay desglose */}
+          {/* Descripción / Observaciones generales */}
           <Field
-            label={tieneDesglose ? 'Observaciones generales (opcional)' : 'Descripción *'}
+            label={tieneDesglose ? 'Observaciones generales *' : 'Descripción *'}
             hint={
               tieneDesglose
                 ? 'Aclaraciones que aplican a todo el pedido (ej: para el acto del 25 de mayo, entregar en horario de salida).'
@@ -524,13 +497,13 @@ export function Publicar() {
             }
           >
             <textarea
-              required={!tieneDesglose}
-              minLength={tieneDesglose ? undefined : 10}
+              required
+              minLength={10}
               maxLength={1200}
               rows={tieneDesglose ? 3 : 4}
               placeholder={
                 tieneDesglose
-                  ? 'Algo que la pyme tenga que saber del pedido en general (opcional).'
+                  ? 'Algo que la pyme tenga que saber del pedido en general.'
                   : 'Detalle del pedido. Sin nombres de institución ni datos de contacto.'
               }
               value={descripcion}
